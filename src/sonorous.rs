@@ -73,6 +73,7 @@ pub mod ext {
     pub mod win32;
 }
 pub mod format {
+    pub mod obj;
     pub mod bms;
 }
 #[macro_escape] pub mod ui {

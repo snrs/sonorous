@@ -1051,7 +1051,7 @@ impl Clone for Pointer {
     }
 }
 
-impl ObjQueryOps for Pointer {
+impl ObjQueryOps<SoundRef,ImageRef> for Pointer {
     pub fn is_visible(self) -> bool { self.bms.objs[self.pos].is_visible() }
     pub fn is_invisible(self) -> bool { self.bms.objs[self.pos].is_invisible() }
     pub fn is_lnstart(self) -> bool { self.bms.objs[self.pos].is_lnstart() }
@@ -1081,7 +1081,7 @@ pub impl Pointer {
     fn time(&self) -> float { self.bms.objs[self.pos].time }
 
     /// Returns the associated game data of pointed object.
-    fn data(&self) -> ObjData { self.bms.objs[self.pos].data }
+    fn data(&self) -> ObjData<SoundRef,ImageRef> { self.bms.objs[self.pos].data }
 
     /// Seeks to the first object which time is past the limit, if any.
     fn seek_until(&mut self, limit: float) {
@@ -1095,7 +1095,7 @@ pub impl Pointer {
 
     /// Iterates over objects starting from the current object, until the first object which
     /// time is past the limit is reached.
-    fn iter_until(&mut self, limit: float, f: &fn(&Obj) -> bool) -> iter::Ret {
+    fn iter_until(&mut self, limit: float, f: &fn(&BmsObj) -> bool) -> iter::Ret {
         let bms = &*self.bms;
         let nobjs = bms.objs.len();
         while self.pos < nobjs {
@@ -1117,7 +1117,7 @@ pub impl Pointer {
 
     /// Iterates over objects starting from the current object, until the object pointed by
     /// the other pointer is reached.
-    fn iter_to(&mut self, limit: Pointer, f: &fn(&Obj) -> bool) -> iter::Ret {
+    fn iter_to(&mut self, limit: Pointer, f: &fn(&BmsObj) -> bool) -> iter::Ret {
         assert!(has_same_bms(self, &limit));
         let bms = &*self.bms;
         assert!(limit.pos <= bms.objs.len());
@@ -1136,7 +1136,7 @@ pub impl Pointer {
     }
 
     /// Iterates over objects starting from the current object.
-    fn iter_to_end(&mut self, f: &fn(&Obj) -> bool) -> iter::Ret {
+    fn iter_to_end(&mut self, f: &fn(&BmsObj) -> bool) -> iter::Ret {
         let bms = &*self.bms;
         let nobjs = bms.objs.len();
         while self.pos < nobjs {
@@ -1148,7 +1148,7 @@ pub impl Pointer {
     }
 
     /// Finds the next object that satisfies given condition if any, without updating itself.
-    fn find_next_of_type(&self, cond: &fn(&Obj) -> bool) -> Option<Pointer> {
+    fn find_next_of_type(&self, cond: &fn(&BmsObj) -> bool) -> Option<Pointer> {
         let bms = &*self.bms;
         let nobjs = bms.objs.len();
         let mut i = self.pos;
@@ -1164,7 +1164,7 @@ pub impl Pointer {
 
     /// Finds the previous object that satisfies given condition if any, without updating
     /// itself.
-    fn find_previous_of_type(&self, cond: &fn(&Obj) -> bool) -> Option<Pointer> {
+    fn find_previous_of_type(&self, cond: &fn(&BmsObj) -> bool) -> Option<Pointer> {
         let bms = &*self.bms;
         let mut i = self.pos;
         while i > 0 {
@@ -1180,7 +1180,7 @@ pub impl Pointer {
     /// Finds the closest object from the virtual time `base` that satisfies given condition
     /// if any. `base` should lie between the pointed object and the previous object.
     /// The proximity is measured in terms of virtual time, which can differ from actual time.
-    fn find_closest_of_type(&self, base: float, cond: &fn(&Obj) -> bool) -> Option<Pointer> {
+    fn find_closest_of_type(&self, base: float, cond: &fn(&BmsObj) -> bool) -> Option<Pointer> {
         let previous = self.find_previous_of_type(cond);
         let next = self.find_next_of_type(cond);
         match (previous, next) {

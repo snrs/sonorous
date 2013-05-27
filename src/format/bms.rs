@@ -34,6 +34,15 @@
 use compat::core::iter;
 use core::rand::*;
 
+pub use format::obj::{Lane, NLANES};
+pub use format::obj::{BGALayer, Layer1, Layer2, Layer3, PoorBGA, NLAYERS};
+pub use format::obj::{BPM};
+pub use format::obj::{Duration, Seconds, Measures};
+pub use format::obj::{Damage, GaugeDamage, InstantDeath};
+pub use format::obj::{ObjData, Deleted, Visible, Invisible, LNStart, LNDone, Bomb, BGM, SetBGA,
+                      SetBPM, Stop};
+pub use format::obj::{ObjQueryOps, ObjConvOps, Obj};
+
 //----------------------------------------------------------------------------------------------
 // alphanumeric key
 
@@ -58,6 +67,16 @@ pub impl Key {
         let sixteens = *self / 36, ones = *self % 36;
         if sixteens < 16 && ones < 16 {Some(sixteens * 16 + ones)} else {None}
     }
+
+    /// Converts the channel number to the lane number.
+    fn to_lane(self) -> Lane {
+        let player = match *self / 36 {
+            1 | 3 | 5 | 0xD => 0,
+            2 | 4 | 6 | 0xE => 1,
+            _ => fail!(~"non-object channel")
+        };
+        Lane(player * 36 + *self as uint % 36)
+    }
 }
 
 impl Ord for Key {
@@ -78,27 +97,7 @@ impl ToStr for Key {
 }
 
 //----------------------------------------------------------------------------------------------
-// lane and key kinds
-
-/// A game play element mapped to the single input element (for example, button) and the screen
-/// area (henceforth "lane").
-#[deriving(Eq)]
-pub struct Lane(uint);
-
-/// The maximum number of lanes. (C: `NNOTECHANS`)
-pub static NLANES: uint = 72;
-
-pub impl Lane {
-    /// Converts the channel number to the lane number.
-    fn from_channel(chan: Key) -> Lane {
-        let player = match *chan / 36 {
-            1 | 3 | 5 | 0xD => 0,
-            2 | 4 | 6 | 0xE => 1,
-            _ => fail!(~"non-object channel")
-        };
-        Lane(player * 36 + *chan as uint % 36)
-    }
-}
+// key kinds
 
 /**
  * Key kinds. They define an appearance of particular lane, but otherwise ignored for the game
@@ -201,7 +200,7 @@ pub impl KeyKind {
 }
 
 //----------------------------------------------------------------------------------------------
-// object parameters
+// BMS data
 
 /// Sound reference.
 #[deriving(Eq)]
@@ -211,409 +210,8 @@ pub struct SoundRef(Key);
 #[deriving(Eq)]
 pub struct ImageRef(Key);
 
-/// BGA layers. (C: `enum BGA_type`)
-#[deriving(Eq)]
-pub enum BGALayer {
-    /// The lowest layer. BMS channel #04. (C: `BGA_LAYER`)
-    Layer1 = 0,
-    /// The middle layer. BMS channel #07. (C: `BGA2_LAYER`)
-    Layer2 = 1,
-    /// The highest layer. BMS channel #0A. (C: `BGA3_LAYER`)
-    Layer3 = 2,
-    /// The layer only displayed shortly after the MISS grade. It is technically not over
-    /// `Layer3`, but several extensions to BMS assumes it. BMS channel #06.
-    /// (C: `POORBGA_LAYER`)
-    PoorBGA = 3
-}
-
-/// The number of BGA layers.
-pub static NLAYERS: uint = 4;
-
-/// Beats per minute. Used as a conversion factor between the time position and actual time
-/// in BMS.
-#[deriving(Eq)]
-pub struct BPM(float);
-
-pub impl BPM {
-    /// Converts a measure to a millisecond. (C: `MEASURE_TO_MSEC`)
-    fn measure_to_msec(self, measure: float) -> float { measure * 240000.0 / *self }
-
-    /// Converts a millisecond to a measure. (C: `MSEC_TO_MEASURE`)
-    fn msec_to_measure(self, msec: float) -> float { msec * *self / 240000.0 }
-}
-
-/// A duration from the particular point. It may be specified in measures or seconds. Used in
-/// the `Stop` object.
-#[deriving(Eq)]
-pub enum Duration { Seconds(float), Measures(float) }
-
-pub impl Duration {
-    /// Calculates the actual milliseconds from the current BPM.
-    fn to_msec(&self, bpm: BPM) -> float {
-        match *self {
-            Seconds(secs) => secs * 1000.0,
-            Measures(measures) => bpm.measure_to_msec(measures)
-        }
-    }
-}
-
-/// A damage value upon the MISS grade. Normally it is specified in percents of the full gauge
-/// (as in `MAXGAUGE`), but sometimes it may cause an instant death. Used in the `Bomb` object
-/// (normal note objects have a fixed value).
-#[deriving(Eq)]
-pub enum Damage { GaugeDamage(float), InstantDeath }
-
-//----------------------------------------------------------------------------------------------
-// object
-
-/// A data for objects (or object-like effects). Does not include the time information.
-#[deriving(Eq)]
-pub enum ObjData {
-    /// Deleted object. Only used during various processing.
-    Deleted,
-    /// Visible object. Sound is played when the key is input inside the associated grading
-    /// area. (C: `NOTE`)
-    Visible(Lane, Option<SoundRef>),
-    /// Invisible object. Sound is played when the key is input inside the associated grading
-    /// area. No render nor grading performed. (C: `INVNOTE`)
-    Invisible(Lane, Option<SoundRef>),
-    /// Start of long note (LN). Sound is played when the key is down inside the associated
-    /// grading area. (C: `LNSTART`)
-    LNStart(Lane, Option<SoundRef>),
-    /// End of LN. Sound is played when the start of LN is graded, the key was down and now up
-    /// inside the associated grading area. (C: `LNDONE`)
-    LNDone(Lane, Option<SoundRef>),
-    /// Bomb. Pressing the key down at the moment that the object is on time causes
-    /// the specified damage; sound is played in this case. No associated grading area.
-    /// (C: `BOMB`)
-    Bomb(Lane, Option<SoundRef>, Damage),
-    /// Plays associated sound. (C: `BGM_CHANNEL`)
-    BGM(SoundRef),
-    /**
-     * Sets the virtual BGA layer to given image. The layer itself may not be displayed
-     * depending on the current game status. (C: `BGA_CHANNEL`)
-     *
-     * If the reference points to a movie, the movie starts playing; if the other layer had
-     * the same movie started, it rewinds to the beginning. The resulting image from the movie
-     * can be shared among multiple layers.
-     */
-    SetBGA(BGALayer, Option<ImageRef>),
-    /// Sets the BPM. Negative BPM causes the chart scrolls backwards (and implicitly signals
-    /// the end of the chart). (C: `BPM_CHANNEL`)
-    SetBPM(BPM),
-    /// Stops the scroll of the chart for given duration ("scroll stopper" hereafter).
-    /// (C: `STOP_CHANNEL`)
-    Stop(Duration)
-}
-
-/// Query operations for objects.
-pub trait ObjQueryOps {
-    /// Returns true if the object is a visible object (`Visible`). (C: `obj->type == NOTE`)
-    pub fn is_visible(self) -> bool;
-    /// Returns true if the object is an invisible object (`Invisible`).
-    /// (C: `obj->type == INVNOTE`)
-    pub fn is_invisible(self) -> bool;
-    /// Returns true if the object is a start of LN object (`LNStart`).
-    /// (C: `obj->type == LNSTART`)
-    pub fn is_lnstart(self) -> bool;
-    /// Returns true if the object is an end of LN object (`LNEnd`). (C: `obj->type == LNDONE`)
-    pub fn is_lndone(self) -> bool;
-    /// Returns true if the object is either a start or an end of LN object.
-    /// (C: `obj->type < NOTE`)
-    pub fn is_ln(self) -> bool;
-    /// Returns true if the object is a bomb (`Bomb`). (C: `obj->type == BOMB`)
-    pub fn is_bomb(self) -> bool;
-    /// Returns true if the object is soundable when it is the closest soundable object from
-    /// the current position and the player pressed the key. Named "soundable" since it may
-    /// choose not to play the associated sound. Note that not every object with sound is
-    /// soundable. (C: `obj->type <= INVNOTE`)
-    pub fn is_soundable(self) -> bool;
-    /// Returns true if the object is subject to grading. (C: `obj->type < INVNOTE`)
-    pub fn is_gradable(self) -> bool;
-    /// Returns true if the object has a visible representation. (C: `obj->type != INVNOTE`)
-    pub fn is_renderable(self) -> bool;
-    /// Returns true if the data is an object. (C: `IS_NOTE_CHANNEL(obj->chan)`)
-    pub fn is_object(self) -> bool;
-    /// Returns true if the data is a BGM. (C: `obj->chan == BGM_CHANNEL`)
-    pub fn is_bgm(self) -> bool;
-    /// Returns true if the data is a BGA. (C: `obj->chan == BGA_CHANNEL`)
-    pub fn is_setbga(self) -> bool;
-    /// Returns true if the data is a BPM change. (C: `obj->chan == BPM_CHANNEL`)
-    pub fn is_setbpm(self) -> bool;
-    /// Returns true if the data is a scroll stopper. (C: `obj->chan == STOP_CHANNEL`)
-    pub fn is_stop(self) -> bool;
-
-    /// Returns an associated lane if the data is an object.
-    pub fn object_lane(self) -> Option<Lane>;
-    /// Returns all sounds associated to the data.
-    pub fn sounds(self) -> ~[SoundRef];
-    /// Returns all sounds played when key is pressed.
-    pub fn keydown_sound(self) -> Option<SoundRef>;
-    /// Returns all sounds played when key is unpressed.
-    pub fn keyup_sound(self) -> Option<SoundRef>;
-    /// Returns all sounds played when the object is activated while the corresponding key is
-    /// currently pressed. Bombs are the only instance of this kind of sounds.
-    pub fn through_sound(self) -> Option<SoundRef>;
-    /// Returns all images associated to the data.
-    pub fn images(self) -> ~[ImageRef];
-    /// Returns an associated damage value when the object is activated.
-    pub fn through_damage(self) -> Option<Damage>;
-}
-
-/// Conversion operations for objects.
-pub trait ObjConvOps: ObjQueryOps {
-    /// Returns a visible object with the same time, lane and sound as given object.
-    pub fn to_visible(self) -> Self;
-    /// Returns an invisible object with the same time, lane and sound as given object.
-    pub fn to_invisible(self) -> Self;
-    /// Returns a start of LN object with the same time, lane and sound as given object.
-    pub fn to_lnstart(self) -> Self;
-    /// Returns an end of LN object with the same time, lane and sound as given object.
-    pub fn to_lndone(self) -> Self;
-}
-
-impl ObjQueryOps for ObjData {
-    pub fn is_visible(self) -> bool {
-        match self { Visible(*) => true, _ => false }
-    }
-
-    pub fn is_invisible(self) -> bool {
-        match self { Invisible(*) => true, _ => false }
-    }
-
-    pub fn is_lnstart(self) -> bool {
-        match self { LNStart(*) => true, _ => false }
-    }
-
-    pub fn is_lndone(self) -> bool {
-        match self { LNDone(*) => true, _ => false }
-    }
-
-    pub fn is_ln(self) -> bool {
-        match self { LNStart(*) | LNDone(*) => true, _ => false }
-    }
-
-    pub fn is_bomb(self) -> bool {
-        match self { Bomb(*) => true, _ => false }
-    }
-
-    pub fn is_soundable(self) -> bool {
-        match self { Visible(*) | Invisible(*) | LNStart(*) | LNDone(*) => true, _ => false }
-    }
-
-    pub fn is_gradable(self) -> bool {
-        match self { Visible(*) | LNStart(*) | LNDone(*) => true, _ => false }
-    }
-
-    pub fn is_renderable(self) -> bool {
-        match self { Visible(*) | LNStart(*) | LNDone(*) | Bomb(*) => true, _ => false }
-    }
-
-    pub fn is_object(self) -> bool {
-        match self { Visible(*) | Invisible(*) | LNStart(*) | LNDone(*) | Bomb(*) => true,
-                     _ => false }
-    }
-
-    pub fn is_bgm(self) -> bool {
-        match self { BGM(*) => true, _ => false }
-    }
-
-    pub fn is_setbga(self) -> bool {
-        match self { SetBGA(*) => true, _ => false }
-    }
-
-    pub fn is_setbpm(self) -> bool {
-        match self { SetBPM(*) => true, _ => false }
-    }
-
-    pub fn is_stop(self) -> bool {
-        match self { Stop(*) => true, _ => false }
-    }
-
-    pub fn object_lane(self) -> Option<Lane> {
-        match self {
-            Visible(lane,_) | Invisible(lane,_) | LNStart(lane,_) |
-            LNDone(lane,_) | Bomb(lane,_,_) => Some(lane),
-            _ => None
-        }
-    }
-
-    pub fn sounds(self) -> ~[SoundRef] {
-        match self {
-            Visible(_,Some(sref)) => ~[sref],
-            Invisible(_,Some(sref)) => ~[sref],
-            LNStart(_,Some(sref)) => ~[sref],
-            LNDone(_,Some(sref)) => ~[sref],
-            Bomb(_,Some(sref),_) => ~[sref],
-            BGM(sref) => ~[sref],
-            _ => ~[]
-        }
-    }
-
-    pub fn keydown_sound(self) -> Option<SoundRef> {
-        match self { Visible(_,sref) | Invisible(_,sref) | LNStart(_,sref) => sref, _ => None }
-    }
-
-    pub fn keyup_sound(self) -> Option<SoundRef> {
-        match self { LNDone(_,sref) => sref, _ => None }
-    }
-
-    pub fn through_sound(self) -> Option<SoundRef> {
-        match self { Bomb(_,sref,_) => sref, _ => None }
-    }
-
-    pub fn images(self) -> ~[ImageRef] {
-        match self { SetBGA(_,Some(iref)) => ~[iref], _ => ~[] }
-    }
-
-    pub fn through_damage(self) -> Option<Damage> {
-        match self { Bomb(_,_,damage) => Some(damage), _ => None }
-    }
-}
-
-impl ObjConvOps for ObjData {
-    pub fn to_visible(self) -> ObjData {
-        match self {
-            Visible(lane,snd) | Invisible(lane,snd) |
-            LNStart(lane,snd) | LNDone(lane,snd) => Visible(lane,snd),
-            _ => fail!(~"to_visible for non-object")
-        }
-    }
-
-    pub fn to_invisible(self) -> ObjData {
-        match self {
-            Visible(lane,snd) | Invisible(lane,snd) |
-            LNStart(lane,snd) | LNDone(lane,snd) => Invisible(lane,snd),
-            _ => fail!(~"to_invisible for non-object")
-        }
-    }
-
-    pub fn to_lnstart(self) -> ObjData {
-        match self {
-            Visible(lane,snd) | Invisible(lane,snd) |
-            LNStart(lane,snd) | LNDone(lane,snd) => LNStart(lane,snd),
-            _ => fail!(~"to_lnstart for non-object")
-        }
-    }
-
-    pub fn to_lndone(self) -> ObjData {
-        match self {
-            Visible(lane,snd) | Invisible(lane,snd) |
-            LNStart(lane,snd) | LNDone(lane,snd) => LNDone(lane,snd),
-            _ => fail!(~"to_lndone for non-object")
-        }
-    }
-}
-
-/// Game play data associated to the time axis. It contains both objects (which are also
-/// associated to lanes) and object-like effects.
-#[deriving(Eq)]
-pub struct Obj {
-    /// Time position in measures.
-    time: float,
-    /// Actual data.
-    data: ObjData
-}
-
-pub impl Obj {
-    /// Creates a `Visible` object.
-    fn Visible(time: float, lane: Lane, sref: Option<Key>) -> Obj {
-        // Rust: `SoundRef` itself cannot be used as a function (#5315)
-        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
-        Obj { time: time, data: Visible(lane, sref) }
-    }
-
-    /// Creates an `Invisible` object.
-    fn Invisible(time: float, lane: Lane, sref: Option<Key>) -> Obj {
-        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
-        Obj { time: time, data: Invisible(lane, sref) }
-    }
-
-    /// Creates an `LNStart` object.
-    fn LNStart(time: float, lane: Lane, sref: Option<Key>) -> Obj {
-        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
-        Obj { time: time, data: LNStart(lane, sref) }
-    }
-
-    /// Creates an `LNDone` object.
-    fn LNDone(time: float, lane: Lane, sref: Option<Key>) -> Obj {
-        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
-        Obj { time: time, data: LNDone(lane, sref) }
-    }
-
-    /// Creates a `Bomb` object.
-    fn Bomb(time: float, lane: Lane, sref: Option<Key>,
-            damage: Damage) -> Obj {
-        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
-        Obj { time: time, data: Bomb(lane, sref, damage) }
-    }
-
-    /// Creates a `BGM` object.
-    fn BGM(time: float, sref: Key) -> Obj {
-        Obj { time: time, data: BGM(SoundRef(sref)) }
-    }
-
-    /// Creates a `SetBGA` object.
-    fn SetBGA(time: float, layer: BGALayer, iref: Option<Key>) -> Obj {
-        let iref = iref.map_consume(|i| ImageRef(i)); // XXX #5315
-        Obj { time: time, data: SetBGA(layer, iref) }
-    }
-
-    /// Creates a `SetBPM` object.
-    fn SetBPM(time: float, bpm: BPM) -> Obj {
-        Obj { time: time, data: SetBPM(bpm) }
-    }
-
-    /// Creates a `Stop` object.
-    fn Stop(time: float, duration: Duration) -> Obj {
-        Obj { time: time, data: Stop(duration) }
-    }
-
-    /// Returns the number of a measure containing this object.
-    fn measure(&self) -> int { self.time.floor() as int }
-}
-
-impl Ord for Obj {
-    fn lt(&self, other: &Obj) -> bool { self.time < other.time }
-    fn le(&self, other: &Obj) -> bool { self.time <= other.time }
-    fn ge(&self, other: &Obj) -> bool { self.time >= other.time }
-    fn gt(&self, other: &Obj) -> bool { self.time > other.time }
-}
-
-impl ObjQueryOps for Obj {
-    pub fn is_visible(self) -> bool { self.data.is_visible() }
-    pub fn is_invisible(self) -> bool { self.data.is_invisible() }
-    pub fn is_lnstart(self) -> bool { self.data.is_lnstart() }
-    pub fn is_lndone(self) -> bool { self.data.is_lndone() }
-    pub fn is_ln(self) -> bool { self.data.is_ln() }
-    pub fn is_bomb(self) -> bool { self.data.is_bomb() }
-    pub fn is_soundable(self) -> bool { self.data.is_soundable() }
-    pub fn is_gradable(self) -> bool { self.data.is_gradable() }
-    pub fn is_renderable(self) -> bool { self.data.is_renderable() }
-    pub fn is_object(self) -> bool { self.data.is_object() }
-    pub fn is_bgm(self) -> bool { self.data.is_bgm() }
-    pub fn is_setbga(self) -> bool { self.data.is_setbga() }
-    pub fn is_setbpm(self) -> bool { self.data.is_setbpm() }
-    pub fn is_stop(self) -> bool { self.data.is_stop() }
-
-    pub fn object_lane(self) -> Option<Lane> { self.data.object_lane() }
-    pub fn sounds(self) -> ~[SoundRef] { self.data.sounds() }
-    pub fn keydown_sound(self) -> Option<SoundRef> { self.data.keydown_sound() }
-    pub fn keyup_sound(self) -> Option<SoundRef> { self.data.keyup_sound() }
-    pub fn through_sound(self) -> Option<SoundRef> { self.data.through_sound() }
-    pub fn images(self) -> ~[ImageRef] { self.data.images() }
-    pub fn through_damage(self) -> Option<Damage> { self.data.through_damage() }
-}
-
-impl ObjConvOps for Obj {
-    pub fn to_visible(self) -> Obj { Obj { time: self.time, data: self.data.to_visible() } }
-    pub fn to_invisible(self) -> Obj { Obj { time: self.time, data: self.data.to_invisible() } }
-    pub fn to_lnstart(self) -> Obj { Obj { time: self.time, data: self.data.to_lnstart() } }
-    pub fn to_lndone(self) -> Obj { Obj { time: self.time, data: self.data.to_lndone() } }
-}
-
-//----------------------------------------------------------------------------------------------
-// BMS data
+/// BMS-specific object. Both the sound and the image are referenced in the alphanumeric keys.
+pub type BmsObj = Obj<SoundRef,ImageRef>;
 
 /// Default BPM. This value comes from the original BMS specification.
 pub static DefaultBPM: BPM = BPM(130.0);
@@ -681,7 +279,7 @@ pub struct Bms {
     blitcmd: ~[BlitCmd],
 
     /// List of objects sorted by the position. (C: `objs`)
-    objs: ~[Obj],
+    objs: ~[BmsObj],
     /// The scaling factor of measures. Defaults to 1.0. (C: `shortens`)
     shortens: ~[float],
     /// The number of measures after the origin, i.e. the length of the BMS file. The play stops
@@ -1118,10 +716,10 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
     // an alphanumeric key designates an area rather than a point.
     let handle_key = |chan: Key, t: float, t2: float, v: Key| {
         // Adds an object. Objects are sorted by its position later.
-        let add = |obj: Obj| { bms.objs.push(obj); };
+        let add = |obj: BmsObj| { bms.objs.push(obj); };
         // Adds an object and returns its position. LN parsing generally mutates the existing
         // object for simplicity.
-        let mark = |obj: Obj| -> Option<uint> {
+        let mark = |obj: BmsObj| -> Option<uint> {
             let marked = bms.objs.len();
             bms.objs.push(obj);
             Some(marked)
@@ -1129,7 +727,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
 
         match *chan {
             // channel #01: BGM
-            1 => { add(Obj::BGM(t, v)); }
+            1 => { add(Obj::BGM(t, SoundRef(v))); }
 
             // channel #03: BPM as an hexadecimal key
             3 => {
@@ -1139,16 +737,16 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
             }
 
             // channel #04: BGA layer 1
-            4 => { add(Obj::SetBGA(t, Layer1, Some(v))); }
+            4 => { add(Obj::SetBGA(t, Layer1, Some(ImageRef(v)))); }
 
             // channel #06: POOR BGA
             6 => {
-                add(Obj::SetBGA(t, PoorBGA, Some(v)));
+                add(Obj::SetBGA(t, PoorBGA, Some(ImageRef(v))));
                 poorbgafix = false; // we don't add artificial BGA
             }
 
             // channel #07: BGA layer 2
-            7 => { add(Obj::SetBGA(t, Layer2, Some(v))); }
+            7 => { add(Obj::SetBGA(t, Layer2, Some(ImageRef(v)))); }
 
             // channel #08: BPM defined by #BPMxx
             8 => { add(Obj::SetBPM(t, bpmtab[*v])); } // TODO bpmtab validity check
@@ -1157,47 +755,47 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
             9 => { add(Obj::Stop(t, stoptab[*v])); } // TODO stoptab validity check
 
             // channel #0A: BGA layer 3
-            10 => { add(Obj::SetBGA(t, Layer3, Some(v))); }
+            10 => { add(Obj::SetBGA(t, Layer3, Some(ImageRef(v)))); }
 
             // channels #1x/2x: visible object, possibly LNs when #LNOBJ is in active
             36/*1*36*/..107/*3*36-1*/ => {
-                let lane = Lane::from_channel(chan);
+                let lane = chan.to_lane();
                 if lnobj.is_some() && lnobj == Some(v) {
                     // change the last inserted visible object to the start of LN if any.
                     for {lastvis[*lane]}.each |&pos| { // XXX #4666
                         assert!(bms.objs[pos].is_visible());
                         bms.objs[pos] = bms.objs[pos].to_lnstart();
-                        add(Obj::LNDone(t, lane, Some(v)));
+                        add(Obj::LNDone(t, lane, Some(SoundRef(v))));
                         lastvis[*lane] = None;
                     }
                 } else {
-                    lastvis[*lane] = mark(Obj::Visible(t, lane, Some(v)));
+                    lastvis[*lane] = mark(Obj::Visible(t, lane, Some(SoundRef(v))));
                 }
             }
 
             // channels #3x/4x: invisible object
             108/*3*36*/..179/*5*36-1*/ => {
-                let lane = Lane::from_channel(chan);
-                add(Obj::Invisible(t, lane, Some(v)));
+                let lane = chan.to_lane();
+                add(Obj::Invisible(t, lane, Some(SoundRef(v))));
             }
 
             // channels #5x/6x, #LNTYPE 1: LN endpoints
             180/*5*36*/..251/*7*36-1*/ if !consecutiveln => {
-                let lane = Lane::from_channel(chan);
+                let lane = chan.to_lane();
 
                 // a pair of non-00 alphanumeric keys designate one LN. if there are an odd
                 // number of them, the last LN is implicitly closed later.
                 if lastln[*lane].is_some() {
                     lastln[*lane] = None;
-                    add(Obj::LNDone(t, lane, Some(v)));
+                    add(Obj::LNDone(t, lane, Some(SoundRef(v))));
                 } else {
-                    lastln[*lane] = mark(Obj::LNStart(t, lane, Some(v)));
+                    lastln[*lane] = mark(Obj::LNStart(t, lane, Some(SoundRef(v))));
                 }
             }
 
             // channels #5x/6x, #LNTYPE 2: LN areas
             180/*5*36*/..251/*7*36-1*/ if consecutiveln => {
-                let lane = Lane::from_channel(chan);
+                let lane = chan.to_lane();
 
                 // one non-00 alphanumeric key, in the absence of other information, inserts one
                 // complete LN starting at `t` and ending at `t2`.
@@ -1212,8 +810,8 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
                         bms.objs[pos].time = t2;
                     }
                     _ => {
-                        add(Obj::LNStart(t, lane, Some(v)));
-                        lastln[*lane] = mark(Obj::LNDone(t2, lane, Some(v)));
+                        add(Obj::LNStart(t, lane, Some(SoundRef(v))));
+                        lastln[*lane] = mark(Obj::LNDone(t2, lane, Some(SoundRef(v))));
                     }
                 }
             }
@@ -1221,14 +819,14 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
             // channels #Dx/Ex: bombs, base-36 damage value (unit of 0.5% of the full gauge) or
             // instant death (ZZ)
             468/*0xD*36*/..539/*0xF*36-1*/ => {
-                let lane = Lane::from_channel(chan);
+                let lane = chan.to_lane();
                 let damage = match *v {
                     1..200 => Some(GaugeDamage(*v as float / 200.0)),
                     1295 => Some(InstantDeath), // XXX 1295=MAXKEY-1
                     _ => None
                 };
                 for damage.each |&damage| {
-                    add(Obj::Bomb(t, lane, Some(Key(0)), damage));
+                    add(Obj::Bomb(t, lane, Some(SoundRef(Key(0))), damage));
                 }
             }
 
@@ -1268,7 +866,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
     }
 
     if poorbgafix {
-        bms.objs.push(Obj::SetBGA(0.0, PoorBGA, Some(Key(0))));
+        bms.objs.push(Obj::SetBGA(0.0, PoorBGA, Some(ImageRef(Key(0)))));
     }
 
     // fix the unterminated longnote
@@ -1418,7 +1016,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
 // post-processing
 
 /// Updates the object in place to BGM or placeholder. (C: `remove_or_replace_note`)
-fn remove_or_replace_note(obj: &mut Obj) {
+fn remove_or_replace_note(obj: &mut BmsObj) {
     obj.data = match obj.data {
         Visible(_,Some(sref)) | Invisible(_,Some(sref)) |
         LNStart(_,Some(sref)) | LNDone(_,Some(sref)) => BGM(sref),
@@ -1430,7 +1028,7 @@ fn remove_or_replace_note(obj: &mut Obj) {
 pub fn sanitize_bms(bms: &mut Bms) {
     ::extra::sort::tim_sort(bms.objs);
 
-    fn sanitize(objs: &mut [Obj], to_type: &fn(&Obj) -> Option<uint>,
+    fn sanitize(objs: &mut [BmsObj], to_type: &fn(&BmsObj) -> Option<uint>,
                 merge_types: &fn(uint) -> uint) {
         let len = objs.len();
         let mut i = 0;
@@ -1473,7 +1071,7 @@ pub fn sanitize_bms(bms: &mut Bms) {
         static VISIBLE: uint = 2;
         static INVISIBLE: uint = 3;
         static BOMB: uint = 4;
-        let to_type = |obj: &Obj| -> Option<uint> {
+        let to_type = |obj: &BmsObj| -> Option<uint> {
             match obj.data {
                 Visible(lane,_) if lane == lane0 => Some(VISIBLE),
                 Invisible(lane,_) if lane == lane0 => Some(INVISIBLE),
@@ -1643,7 +1241,7 @@ pub fn bms_duration(bms: &Bms, originoffset: float,
 
 /// Applies a function to the object lane if any. This is used to shuffle the lanes without
 /// modifying the relative time position.
-fn update_object_lane(obj: &mut Obj, f: &fn(Lane) -> Lane) {
+fn update_object_lane(obj: &mut BmsObj, f: &fn(Lane) -> Lane) {
     obj.data = match obj.data {
         Visible(lane,sref) => Visible(f(lane),sref),
         Invisible(lane,sref) => Invisible(f(lane),sref),
