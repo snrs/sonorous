@@ -1,9 +1,8 @@
-SRC = angolmois.rs
-BIN = angolmois
+SRC = src/sonorous.rs
+BIN = sonorous
 RUSTC = rustc
 RUSTDOC = rustdoc
-RUSTSDL = rust-sdl
-RUSTFLAGS = -O -L $(RUSTSDL)
+RUSTFLAGS = -O -L rust-sdl
 
 
 .PHONY: all clean
@@ -12,9 +11,6 @@ all: $(BIN)
 
 $(BIN): $(SRC)
 	$(RUSTC) $(RUSTFLAGS) $(SRC) -o $(BIN)
-
-doc:
-	$(RUSTDOC) $(SRC) --output-dir . --output-style doc-per-crate
 
 clean:
 	rm -rf $(BIN)

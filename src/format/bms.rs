@@ -1,0 +1,1717 @@
+// This is a part of Sonorous.
+// Copyright (c) 2005, 2007, 2009, 2012, 2013, Kang Seonghoon.
+// See README.md and LICENSE.txt for details.
+
+/*!
+ * BMS parser module.
+ *
+ * # Structure
+ *
+ * The BMS format is a plain text format with most directives start with optional whitespace
+ * followed by `#`. Besides the metadata (title, artist etc.), a BMS file is a map from the time
+ * position to various game play elements (henceforth "objects") and other object-like effects
+ * including BGM and BGA changes. It also contains preprocessor directives used to randomize some or
+ * all parts of the BMS file, which would only make sense in the loading time.
+ *
+ * The time position is a virtual time divided by an unit of (musical) measure. It is related to
+ * the actual time by the current Beats Per Minute (BPM) value which can, well, also change during
+ * the game play. Consequently it is convenient to refer the position in terms of measures, which
+ * the BMS format does: the lines `#xxxyy:AABBCC...` indicates that the measure number `xxx`
+ * contains objects or object-like effects (of the type specified by `yy`, henceforth "channels"),
+ * evenly spaced throughout the measure and which data values are `AA`, `BB`, `CC` respectively.
+ *
+ * An alphanumeric identifier (henceforth "alphanumeric key") like `AA` or `BB` may mean that
+ * the actual numeric value interpreted as base 16 or 36 (depending on the channel), or a reference
+ * to other assets (e.g. `#BMPAA foo.png`) or complex values specified by other commands (e.g.
+ * `#BPMBB 192.0`). In most cases, an identifier `00` indicates an absence of objects or object-like
+ * effects at that position.
+ *
+ * More detailed information about BMS format, including surveys about how different implementations
+ * (so called BMS players) react to underspecified features or edge cases, can be found at [BMS
+ * command memo](http://hitkey.nekokan.dyndns.info/cmds.htm).
+ */
+
+use compat::core::iter;
+use core::rand::*;
+
+//----------------------------------------------------------------------------------------------
+// alphanumeric key
+
+/// Two-letter alphanumeric identifier used for virtually everything, including resource
+/// management, variable BPM and chart specification.
+#[deriving(Eq)]
+pub struct Key(int);
+
+/// The number of all possible alphanumeric keys. (C: `MAXKEY`)
+pub static MAXKEY: int = 36*36;
+
+pub impl Key {
+    /// Returns if the alphanumeric key is in the proper range. Angolmois supports the full
+    /// range of 00-ZZ (0-1295) for every case.
+    fn is_valid(self) -> bool {
+        0 <= *self && *self < MAXKEY
+    }
+
+    /// Re-reads the alphanumeric key as a hexadecimal number if possible. This is required
+    /// due to handling of channel #03 (BPM is expected to be in hexadecimal).
+    fn to_hex(self) -> Option<int> {
+        let sixteens = *self / 36, ones = *self % 36;
+        if sixteens < 16 && ones < 16 {Some(sixteens * 16 + ones)} else {None}
+    }
+}
+
+impl Ord for Key {
+    // Rust: it is very easy to make an infinite recursion here.
+    fn lt(&self, other: &Key) -> bool { **self < **other }
+    fn le(&self, other: &Key) -> bool { **self <= **other }
+    fn ge(&self, other: &Key) -> bool { **self >= **other }
+    fn gt(&self, other: &Key) -> bool { **self > **other }
+}
+
+impl ToStr for Key {
+    /// Returns a two-letter representation of alphanumeric key. (C: `TO_KEY`)
+    fn to_str(&self) -> ~str {
+        assert!(self.is_valid());
+        let map = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        fmt!("%c%c", map[**self / 36] as char, map[**self % 36] as char)
+    }
+}
+
+//----------------------------------------------------------------------------------------------
+// lane and key kinds
+
+/// A game play element mapped to the single input element (for example, button) and the screen
+/// area (henceforth "lane").
+#[deriving(Eq)]
+pub struct Lane(uint);
+
+/// The maximum number of lanes. (C: `NNOTECHANS`)
+pub static NLANES: uint = 72;
+
+pub impl Lane {
+    /// Converts the channel number to the lane number.
+    fn from_channel(chan: Key) -> Lane {
+        let player = match *chan / 36 {
+            1 | 3 | 5 | 0xD => 0,
+            2 | 4 | 6 | 0xE => 1,
+            _ => fail!(~"non-object channel")
+        };
+        Lane(player * 36 + *chan as uint % 36)
+    }
+}
+
+/**
+ * Key kinds. They define an appearance of particular lane, but otherwise ignored for the game
+ * play. Angolmois supports several key kinds in order to cover many potential uses.
+ * (C: `KEYKIND_MNEMONICS`)
+ *
+ * # Defaults
+ *
+ * For BMS/BME, channels #11/13/15/19 and #21/23/25/29 use `WhiteKey`, #12/14/18 and #22/24/28
+ * use `BlackKey`, #16 and #26 use `Scratch`, #17 and #27 use `FootPedal`.
+ *
+ * For PMS, channels #11/17/25 use `Button1`, #12/16/24 use `Button2`, #13/19/23 use `Button3`,
+ * #14/18/22 use `Button4`, #15 uses `Button5`.
+ */
+#[deriving(Eq)]
+pub enum KeyKind {
+    /// White key, which mimics a real white key in the musical keyboard.
+    WhiteKey,
+    /// White key, but rendered yellow. This is used for simulating the O2Jam interface which
+    /// has one yellow lane (mapped to spacebar) in middle of six other lanes (mapped to normal
+    /// keys).
+    WhiteKeyAlt,
+    /// Black key, which mimics a real black key in the keyboard but rendered light blue as in
+    /// Beatmania and other games.
+    BlackKey,
+    /// Scratch, rendered red. Scratch lane is wider than other "keys" and normally doesn't
+    /// count as a key.
+    Scratch,
+    /// Foot pedal, rendered green. Otherwise has the same properties as scratch. The choice of
+    /// color follows that of EZ2DJ, one of the first games that used this game element.
+    FootPedal,
+    /// White button. This and following "buttons" come from Pop'n Music, which has nine colored
+    /// buttons. (White buttons constitute 1st and 9th of Pop'n Music buttons.) The "buttons"
+    /// are wider than aforementioned "keys" but narrower than scratch and foot pedal.
+    Button1,
+    /// Yellow button (2nd and 8th of Pop'n Music buttons).
+    Button2,
+    /// Green button (3rd and 7th of Pop'n Music buttons).
+    Button3,
+    /// Navy button (4th and 6th of Pop'n Music buttons).
+    Button4,
+    /// Red button (5th of Pop'n Music buttons).
+    Button5,
+}
+
+pub impl KeyKind {
+    /// Returns a list of all supported key kinds.
+    //
+    // Rust: can this method be generated on the fly?
+    fn all() -> &'static [KeyKind] {
+        &[WhiteKey, WhiteKeyAlt, BlackKey, Scratch, FootPedal,
+          Button1, Button2, Button3, Button4, Button5]
+    }
+
+    /// Converts a mnemonic character to an appropriate key kind. Used for parsing a key
+    /// specification (see also `KeySpec`).
+    fn from_char(c: char) -> Option<KeyKind> {
+        match c {
+            'a' => Some(WhiteKey),
+            'y' => Some(WhiteKeyAlt),
+            'b' => Some(BlackKey),
+            's' => Some(Scratch),
+            'p' => Some(FootPedal),
+            'q' => Some(Button1),
+            'w' => Some(Button2),
+            'e' => Some(Button3),
+            'r' => Some(Button4),
+            't' => Some(Button5),
+            _   => None
+        }
+    }
+
+    /// Converts an appropriate key kind to a mnemonic character. Used for environment variables
+    /// (see also `read_keymap`).
+    fn to_char(self) -> char {
+        match self {
+            WhiteKey    => 'a',
+            WhiteKeyAlt => 'y',
+            BlackKey    => 'b',
+            Scratch     => 's',
+            FootPedal   => 'p',
+            Button1     => 'w',
+            Button2     => 'e',
+            Button3     => 'r',
+            Button4     => 't',
+            Button5     => 's'
+        }
+    }
+
+    /**
+     * Returns true if a kind counts as a "key". (C: `KEYKIND_IS_KEY`)
+     *
+     * This affects the number of keys displayed in the loading screen, and reflects a common
+     * practice of counting "keys" in many games (e.g. Beatmania IIDX has 8 lanes including one
+     * scratch but commonly said to have 7 "keys").
+     */
+    fn counts_as_key(self) -> bool {
+        self != Scratch && self != FootPedal
+    }
+}
+
+//----------------------------------------------------------------------------------------------
+// object parameters
+
+/// Sound reference.
+#[deriving(Eq)]
+pub struct SoundRef(Key);
+
+/// Image reference.
+#[deriving(Eq)]
+pub struct ImageRef(Key);
+
+/// BGA layers. (C: `enum BGA_type`)
+#[deriving(Eq)]
+pub enum BGALayer {
+    /// The lowest layer. BMS channel #04. (C: `BGA_LAYER`)
+    Layer1 = 0,
+    /// The middle layer. BMS channel #07. (C: `BGA2_LAYER`)
+    Layer2 = 1,
+    /// The highest layer. BMS channel #0A. (C: `BGA3_LAYER`)
+    Layer3 = 2,
+    /// The layer only displayed shortly after the MISS grade. It is technically not over
+    /// `Layer3`, but several extensions to BMS assumes it. BMS channel #06.
+    /// (C: `POORBGA_LAYER`)
+    PoorBGA = 3
+}
+
+/// The number of BGA layers.
+pub static NLAYERS: uint = 4;
+
+/// Beats per minute. Used as a conversion factor between the time position and actual time
+/// in BMS.
+#[deriving(Eq)]
+pub struct BPM(float);
+
+pub impl BPM {
+    /// Converts a measure to a millisecond. (C: `MEASURE_TO_MSEC`)
+    fn measure_to_msec(self, measure: float) -> float { measure * 240000.0 / *self }
+
+    /// Converts a millisecond to a measure. (C: `MSEC_TO_MEASURE`)
+    fn msec_to_measure(self, msec: float) -> float { msec * *self / 240000.0 }
+}
+
+/// A duration from the particular point. It may be specified in measures or seconds. Used in
+/// the `Stop` object.
+#[deriving(Eq)]
+pub enum Duration { Seconds(float), Measures(float) }
+
+pub impl Duration {
+    /// Calculates the actual milliseconds from the current BPM.
+    fn to_msec(&self, bpm: BPM) -> float {
+        match *self {
+            Seconds(secs) => secs * 1000.0,
+            Measures(measures) => bpm.measure_to_msec(measures)
+        }
+    }
+}
+
+/// A damage value upon the MISS grade. Normally it is specified in percents of the full gauge
+/// (as in `MAXGAUGE`), but sometimes it may cause an instant death. Used in the `Bomb` object
+/// (normal note objects have a fixed value).
+#[deriving(Eq)]
+pub enum Damage { GaugeDamage(float), InstantDeath }
+
+//----------------------------------------------------------------------------------------------
+// object
+
+/// A data for objects (or object-like effects). Does not include the time information.
+#[deriving(Eq)]
+pub enum ObjData {
+    /// Deleted object. Only used during various processing.
+    Deleted,
+    /// Visible object. Sound is played when the key is input inside the associated grading
+    /// area. (C: `NOTE`)
+    Visible(Lane, Option<SoundRef>),
+    /// Invisible object. Sound is played when the key is input inside the associated grading
+    /// area. No render nor grading performed. (C: `INVNOTE`)
+    Invisible(Lane, Option<SoundRef>),
+    /// Start of long note (LN). Sound is played when the key is down inside the associated
+    /// grading area. (C: `LNSTART`)
+    LNStart(Lane, Option<SoundRef>),
+    /// End of LN. Sound is played when the start of LN is graded, the key was down and now up
+    /// inside the associated grading area. (C: `LNDONE`)
+    LNDone(Lane, Option<SoundRef>),
+    /// Bomb. Pressing the key down at the moment that the object is on time causes
+    /// the specified damage; sound is played in this case. No associated grading area.
+    /// (C: `BOMB`)
+    Bomb(Lane, Option<SoundRef>, Damage),
+    /// Plays associated sound. (C: `BGM_CHANNEL`)
+    BGM(SoundRef),
+    /**
+     * Sets the virtual BGA layer to given image. The layer itself may not be displayed
+     * depending on the current game status. (C: `BGA_CHANNEL`)
+     *
+     * If the reference points to a movie, the movie starts playing; if the other layer had
+     * the same movie started, it rewinds to the beginning. The resulting image from the movie
+     * can be shared among multiple layers.
+     */
+    SetBGA(BGALayer, Option<ImageRef>),
+    /// Sets the BPM. Negative BPM causes the chart scrolls backwards (and implicitly signals
+    /// the end of the chart). (C: `BPM_CHANNEL`)
+    SetBPM(BPM),
+    /// Stops the scroll of the chart for given duration ("scroll stopper" hereafter).
+    /// (C: `STOP_CHANNEL`)
+    Stop(Duration)
+}
+
+/// Query operations for objects.
+pub trait ObjQueryOps {
+    /// Returns true if the object is a visible object (`Visible`). (C: `obj->type == NOTE`)
+    pub fn is_visible(self) -> bool;
+    /// Returns true if the object is an invisible object (`Invisible`).
+    /// (C: `obj->type == INVNOTE`)
+    pub fn is_invisible(self) -> bool;
+    /// Returns true if the object is a start of LN object (`LNStart`).
+    /// (C: `obj->type == LNSTART`)
+    pub fn is_lnstart(self) -> bool;
+    /// Returns true if the object is an end of LN object (`LNEnd`). (C: `obj->type == LNDONE`)
+    pub fn is_lndone(self) -> bool;
+    /// Returns true if the object is either a start or an end of LN object.
+    /// (C: `obj->type < NOTE`)
+    pub fn is_ln(self) -> bool;
+    /// Returns true if the object is a bomb (`Bomb`). (C: `obj->type == BOMB`)
+    pub fn is_bomb(self) -> bool;
+    /// Returns true if the object is soundable when it is the closest soundable object from
+    /// the current position and the player pressed the key. Named "soundable" since it may
+    /// choose not to play the associated sound. Note that not every object with sound is
+    /// soundable. (C: `obj->type <= INVNOTE`)
+    pub fn is_soundable(self) -> bool;
+    /// Returns true if the object is subject to grading. (C: `obj->type < INVNOTE`)
+    pub fn is_gradable(self) -> bool;
+    /// Returns true if the object has a visible representation. (C: `obj->type != INVNOTE`)
+    pub fn is_renderable(self) -> bool;
+    /// Returns true if the data is an object. (C: `IS_NOTE_CHANNEL(obj->chan)`)
+    pub fn is_object(self) -> bool;
+    /// Returns true if the data is a BGM. (C: `obj->chan == BGM_CHANNEL`)
+    pub fn is_bgm(self) -> bool;
+    /// Returns true if the data is a BGA. (C: `obj->chan == BGA_CHANNEL`)
+    pub fn is_setbga(self) -> bool;
+    /// Returns true if the data is a BPM change. (C: `obj->chan == BPM_CHANNEL`)
+    pub fn is_setbpm(self) -> bool;
+    /// Returns true if the data is a scroll stopper. (C: `obj->chan == STOP_CHANNEL`)
+    pub fn is_stop(self) -> bool;
+
+    /// Returns an associated lane if the data is an object.
+    pub fn object_lane(self) -> Option<Lane>;
+    /// Returns all sounds associated to the data.
+    pub fn sounds(self) -> ~[SoundRef];
+    /// Returns all sounds played when key is pressed.
+    pub fn keydown_sound(self) -> Option<SoundRef>;
+    /// Returns all sounds played when key is unpressed.
+    pub fn keyup_sound(self) -> Option<SoundRef>;
+    /// Returns all sounds played when the object is activated while the corresponding key is
+    /// currently pressed. Bombs are the only instance of this kind of sounds.
+    pub fn through_sound(self) -> Option<SoundRef>;
+    /// Returns all images associated to the data.
+    pub fn images(self) -> ~[ImageRef];
+    /// Returns an associated damage value when the object is activated.
+    pub fn through_damage(self) -> Option<Damage>;
+}
+
+/// Conversion operations for objects.
+pub trait ObjConvOps: ObjQueryOps {
+    /// Returns a visible object with the same time, lane and sound as given object.
+    pub fn to_visible(self) -> Self;
+    /// Returns an invisible object with the same time, lane and sound as given object.
+    pub fn to_invisible(self) -> Self;
+    /// Returns a start of LN object with the same time, lane and sound as given object.
+    pub fn to_lnstart(self) -> Self;
+    /// Returns an end of LN object with the same time, lane and sound as given object.
+    pub fn to_lndone(self) -> Self;
+}
+
+impl ObjQueryOps for ObjData {
+    pub fn is_visible(self) -> bool {
+        match self { Visible(*) => true, _ => false }
+    }
+
+    pub fn is_invisible(self) -> bool {
+        match self { Invisible(*) => true, _ => false }
+    }
+
+    pub fn is_lnstart(self) -> bool {
+        match self { LNStart(*) => true, _ => false }
+    }
+
+    pub fn is_lndone(self) -> bool {
+        match self { LNDone(*) => true, _ => false }
+    }
+
+    pub fn is_ln(self) -> bool {
+        match self { LNStart(*) | LNDone(*) => true, _ => false }
+    }
+
+    pub fn is_bomb(self) -> bool {
+        match self { Bomb(*) => true, _ => false }
+    }
+
+    pub fn is_soundable(self) -> bool {
+        match self { Visible(*) | Invisible(*) | LNStart(*) | LNDone(*) => true, _ => false }
+    }
+
+    pub fn is_gradable(self) -> bool {
+        match self { Visible(*) | LNStart(*) | LNDone(*) => true, _ => false }
+    }
+
+    pub fn is_renderable(self) -> bool {
+        match self { Visible(*) | LNStart(*) | LNDone(*) | Bomb(*) => true, _ => false }
+    }
+
+    pub fn is_object(self) -> bool {
+        match self { Visible(*) | Invisible(*) | LNStart(*) | LNDone(*) | Bomb(*) => true,
+                     _ => false }
+    }
+
+    pub fn is_bgm(self) -> bool {
+        match self { BGM(*) => true, _ => false }
+    }
+
+    pub fn is_setbga(self) -> bool {
+        match self { SetBGA(*) => true, _ => false }
+    }
+
+    pub fn is_setbpm(self) -> bool {
+        match self { SetBPM(*) => true, _ => false }
+    }
+
+    pub fn is_stop(self) -> bool {
+        match self { Stop(*) => true, _ => false }
+    }
+
+    pub fn object_lane(self) -> Option<Lane> {
+        match self {
+            Visible(lane,_) | Invisible(lane,_) | LNStart(lane,_) |
+            LNDone(lane,_) | Bomb(lane,_,_) => Some(lane),
+            _ => None
+        }
+    }
+
+    pub fn sounds(self) -> ~[SoundRef] {
+        match self {
+            Visible(_,Some(sref)) => ~[sref],
+            Invisible(_,Some(sref)) => ~[sref],
+            LNStart(_,Some(sref)) => ~[sref],
+            LNDone(_,Some(sref)) => ~[sref],
+            Bomb(_,Some(sref),_) => ~[sref],
+            BGM(sref) => ~[sref],
+            _ => ~[]
+        }
+    }
+
+    pub fn keydown_sound(self) -> Option<SoundRef> {
+        match self { Visible(_,sref) | Invisible(_,sref) | LNStart(_,sref) => sref, _ => None }
+    }
+
+    pub fn keyup_sound(self) -> Option<SoundRef> {
+        match self { LNDone(_,sref) => sref, _ => None }
+    }
+
+    pub fn through_sound(self) -> Option<SoundRef> {
+        match self { Bomb(_,sref,_) => sref, _ => None }
+    }
+
+    pub fn images(self) -> ~[ImageRef] {
+        match self { SetBGA(_,Some(iref)) => ~[iref], _ => ~[] }
+    }
+
+    pub fn through_damage(self) -> Option<Damage> {
+        match self { Bomb(_,_,damage) => Some(damage), _ => None }
+    }
+}
+
+impl ObjConvOps for ObjData {
+    pub fn to_visible(self) -> ObjData {
+        match self {
+            Visible(lane,snd) | Invisible(lane,snd) |
+            LNStart(lane,snd) | LNDone(lane,snd) => Visible(lane,snd),
+            _ => fail!(~"to_visible for non-object")
+        }
+    }
+
+    pub fn to_invisible(self) -> ObjData {
+        match self {
+            Visible(lane,snd) | Invisible(lane,snd) |
+            LNStart(lane,snd) | LNDone(lane,snd) => Invisible(lane,snd),
+            _ => fail!(~"to_invisible for non-object")
+        }
+    }
+
+    pub fn to_lnstart(self) -> ObjData {
+        match self {
+            Visible(lane,snd) | Invisible(lane,snd) |
+            LNStart(lane,snd) | LNDone(lane,snd) => LNStart(lane,snd),
+            _ => fail!(~"to_lnstart for non-object")
+        }
+    }
+
+    pub fn to_lndone(self) -> ObjData {
+        match self {
+            Visible(lane,snd) | Invisible(lane,snd) |
+            LNStart(lane,snd) | LNDone(lane,snd) => LNDone(lane,snd),
+            _ => fail!(~"to_lndone for non-object")
+        }
+    }
+}
+
+/// Game play data associated to the time axis. It contains both objects (which are also
+/// associated to lanes) and object-like effects.
+#[deriving(Eq)]
+pub struct Obj {
+    /// Time position in measures.
+    time: float,
+    /// Actual data.
+    data: ObjData
+}
+
+pub impl Obj {
+    /// Creates a `Visible` object.
+    fn Visible(time: float, lane: Lane, sref: Option<Key>) -> Obj {
+        // Rust: `SoundRef` itself cannot be used as a function (#5315)
+        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
+        Obj { time: time, data: Visible(lane, sref) }
+    }
+
+    /// Creates an `Invisible` object.
+    fn Invisible(time: float, lane: Lane, sref: Option<Key>) -> Obj {
+        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
+        Obj { time: time, data: Invisible(lane, sref) }
+    }
+
+    /// Creates an `LNStart` object.
+    fn LNStart(time: float, lane: Lane, sref: Option<Key>) -> Obj {
+        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
+        Obj { time: time, data: LNStart(lane, sref) }
+    }
+
+    /// Creates an `LNDone` object.
+    fn LNDone(time: float, lane: Lane, sref: Option<Key>) -> Obj {
+        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
+        Obj { time: time, data: LNDone(lane, sref) }
+    }
+
+    /// Creates a `Bomb` object.
+    fn Bomb(time: float, lane: Lane, sref: Option<Key>,
+            damage: Damage) -> Obj {
+        let sref = sref.map_consume(|s| SoundRef(s)); // XXX #5315
+        Obj { time: time, data: Bomb(lane, sref, damage) }
+    }
+
+    /// Creates a `BGM` object.
+    fn BGM(time: float, sref: Key) -> Obj {
+        Obj { time: time, data: BGM(SoundRef(sref)) }
+    }
+
+    /// Creates a `SetBGA` object.
+    fn SetBGA(time: float, layer: BGALayer, iref: Option<Key>) -> Obj {
+        let iref = iref.map_consume(|i| ImageRef(i)); // XXX #5315
+        Obj { time: time, data: SetBGA(layer, iref) }
+    }
+
+    /// Creates a `SetBPM` object.
+    fn SetBPM(time: float, bpm: BPM) -> Obj {
+        Obj { time: time, data: SetBPM(bpm) }
+    }
+
+    /// Creates a `Stop` object.
+    fn Stop(time: float, duration: Duration) -> Obj {
+        Obj { time: time, data: Stop(duration) }
+    }
+
+    /// Returns the number of a measure containing this object.
+    fn measure(&self) -> int { self.time.floor() as int }
+}
+
+impl Ord for Obj {
+    fn lt(&self, other: &Obj) -> bool { self.time < other.time }
+    fn le(&self, other: &Obj) -> bool { self.time <= other.time }
+    fn ge(&self, other: &Obj) -> bool { self.time >= other.time }
+    fn gt(&self, other: &Obj) -> bool { self.time > other.time }
+}
+
+impl ObjQueryOps for Obj {
+    pub fn is_visible(self) -> bool { self.data.is_visible() }
+    pub fn is_invisible(self) -> bool { self.data.is_invisible() }
+    pub fn is_lnstart(self) -> bool { self.data.is_lnstart() }
+    pub fn is_lndone(self) -> bool { self.data.is_lndone() }
+    pub fn is_ln(self) -> bool { self.data.is_ln() }
+    pub fn is_bomb(self) -> bool { self.data.is_bomb() }
+    pub fn is_soundable(self) -> bool { self.data.is_soundable() }
+    pub fn is_gradable(self) -> bool { self.data.is_gradable() }
+    pub fn is_renderable(self) -> bool { self.data.is_renderable() }
+    pub fn is_object(self) -> bool { self.data.is_object() }
+    pub fn is_bgm(self) -> bool { self.data.is_bgm() }
+    pub fn is_setbga(self) -> bool { self.data.is_setbga() }
+    pub fn is_setbpm(self) -> bool { self.data.is_setbpm() }
+    pub fn is_stop(self) -> bool { self.data.is_stop() }
+
+    pub fn object_lane(self) -> Option<Lane> { self.data.object_lane() }
+    pub fn sounds(self) -> ~[SoundRef] { self.data.sounds() }
+    pub fn keydown_sound(self) -> Option<SoundRef> { self.data.keydown_sound() }
+    pub fn keyup_sound(self) -> Option<SoundRef> { self.data.keyup_sound() }
+    pub fn through_sound(self) -> Option<SoundRef> { self.data.through_sound() }
+    pub fn images(self) -> ~[ImageRef] { self.data.images() }
+    pub fn through_damage(self) -> Option<Damage> { self.data.through_damage() }
+}
+
+impl ObjConvOps for Obj {
+    pub fn to_visible(self) -> Obj { Obj { time: self.time, data: self.data.to_visible() } }
+    pub fn to_invisible(self) -> Obj { Obj { time: self.time, data: self.data.to_invisible() } }
+    pub fn to_lnstart(self) -> Obj { Obj { time: self.time, data: self.data.to_lnstart() } }
+    pub fn to_lndone(self) -> Obj { Obj { time: self.time, data: self.data.to_lndone() } }
+}
+
+//----------------------------------------------------------------------------------------------
+// BMS data
+
+/// Default BPM. This value comes from the original BMS specification.
+pub static DefaultBPM: BPM = BPM(130.0);
+
+/**
+ * Blit commands, which manipulate the image after the image had been loaded. This maps to BMS
+ * #BGA command. (C: `struct blitcmd`)
+ *
+ * Blitting occurs from the region `(x1,y1)-(x2,y2)` in the source surface to the region
+ * `(dx,dy)-(dx+(x2-x1),dy+(y2-y1))` in the destination surface. The rectangular region contains
+ * the upper-left corner but not the lower-right corner. The region is clipped to make
+ * the upper-left corner has non-negative coordinates and the size of the region doesn't exceed
+ * 256 by 256 pixels.
+ */
+pub struct BlitCmd {
+    dst: ImageRef, src: ImageRef,
+    x1: int, y1: int, x2: int, y2: int, dx: int, dy: int
+}
+
+/// A value of BMS #PLAYER command signifying Single Play (SP), where only channels #1x are used
+/// for the game play.
+pub static SinglePlay: int = 1;
+/// A value of BMS #PLAYER command signifying Couple Play, where channels #1x and #2x renders to
+/// the different panels. They are originally meant to be played by different players with
+/// separate gauges and scores, but this mode of game play is increasingly unsupported by modern
+/// implementations. Angolmois has only a limited support for Couple Play.
+pub static CouplePlay: int = 2;
+/// A value of BMS #PLAYER command signifying Double Play (DP), where both channels #1x and #2x
+/// renders to a single wide panel. The chart is still meant to be played by one person.
+pub static DoublePlay: int = 3;
+
+/// Loaded BMS data. It is not a global state unlike C.
+pub struct Bms {
+    /// Title. Maps to BMS #TITLE command. (C: `string[S_TITLE]`)
+    title: Option<~str>,
+    /// Genre. Maps to BMS #GENRE command. (C: `string[S_GENRE]`)
+    genre: Option<~str>,
+    /// Artist. Maps to BMS #ARTIST command. (C: `string[S_ARTIST]`)
+    artist: Option<~str>,
+    /// Path to an image for loading screen. Maps to BMS #STAGEFILE command.
+    /// (C: `string[S_STAGEFILE]`)
+    stagefile: Option<~str>,
+    /// A base path used for loading all other resources. Maps to BMS #PATH_WAV command.
+    /// (C: `string[S_BASEPATH]`)
+    basepath: Option<~str>,
+
+    /// Game mode. One of `SinglePlay`(1), `CouplePlay`(2) or `DoublePlay`(3). Maps to BMS
+    /// #PLAYER command. (C: `value[V_PLAYER]`)
+    player: int,
+    /// Game level. Does not affect the actual game play. Maps to BMS #PLAYLEVEL command.
+    /// (C: `value[V_PLAYLEVEL]`)
+    playlevel: int,
+    /// Gauge difficulty. Higher is easier. Maps to BMS #RANK command. (C: `value[V_RANK]`)
+    rank: int,
+
+    /// Initial BPM. (C: `initbpm`)
+    initbpm: BPM,
+    /// Paths to sound file relative to `basepath` or BMS file. (C: `sndpath`)
+    //
+    // Rust: constant expression in the array size is unsupported.
+    sndpath: [Option<~str>, ..MAXKEY],
+    /// Paths to image/movie file relative to `basepath` or BMS file. (C: `imgpath`)
+    imgpath: [Option<~str>, ..MAXKEY],
+    /// List of blit commands to be executed after `imgpath` is loaded. (C: `blitcmd`)
+    blitcmd: ~[BlitCmd],
+
+    /// List of objects sorted by the position. (C: `objs`)
+    objs: ~[Obj],
+    /// The scaling factor of measures. Defaults to 1.0. (C: `shortens`)
+    shortens: ~[float],
+    /// The number of measures after the origin, i.e. the length of the BMS file. The play stops
+    /// after the last measure. (C: `length`)
+    nmeasures: uint
+}
+
+/// Creates a default value of BMS data.
+pub fn Bms() -> Bms {
+    Bms { title: None, genre: None, artist: None, stagefile: None, basepath: None,
+          player: SinglePlay, playlevel: 0, rank: 2, initbpm: DefaultBPM,
+          sndpath: [None, ..MAXKEY], imgpath: [None, ..MAXKEY], blitcmd: ~[], objs: ~[],
+          shortens: ~[], nmeasures: 0 }
+}
+
+pub impl Bms {
+    /// Returns a scaling factor of given measure number. The default scaling factor is 1.0, and
+    /// that value applies to any out-of-bound measures. (C: `shorten`)
+    fn shorten(&self, measure: int) -> float {
+        if measure < 0 || measure as uint >= self.shortens.len() {
+            1.0
+        } else {
+            self.shortens[measure as uint]
+        }
+    }
+
+    /// Calculates the virtual time that is `offset` measures away from the virtual time `base`.
+    /// This takes account of the scaling factor, so if first four measures are scaled by 1/4,
+    /// then `adjust_object_time(0.0, 2.0)` results in `5.0`. (C: `adjust_object_time`)
+    fn adjust_object_time(&self, base: float, offset: float) -> float {
+        let basemeasure = base.floor() as int;
+        let baseshorten = self.shorten(basemeasure);
+        let basefrac = base - basemeasure as float;
+        let tonextmeasure = (1.0 - basefrac) * baseshorten;
+        if offset < tonextmeasure {
+            base + offset / baseshorten
+        } else {
+            let mut offset = offset - tonextmeasure;
+            let mut i = basemeasure + 1;
+            let mut curshorten = self.shorten(i);
+            while offset >= curshorten {
+                offset -= curshorten;
+                i += 1;
+                curshorten = self.shorten(i);
+            }
+            i as float + offset / curshorten
+        }
+    }
+
+    /// Calculates an adjusted offset between the virtual time `base` and `base + offset`.
+    /// This takes account of the measure scaling factor, so for example, the adjusted offset
+    /// between the virtual time 0.0 and 2.0 is, if the measure #000 is scaled by 1.2x,
+    /// 2.2 measures instead of 2.0 measures. (C: `adjust_object_position`)
+    pub fn adjust_object_position(&self, base: float, time: float) -> float {
+        let basemeasure = base.floor() as int;
+        let timemeasure = time.floor() as int;
+        let basefrac = base - basemeasure as float;
+        let timefrac = time - timemeasure as float;
+        let mut pos = timefrac * self.shorten(timemeasure) -
+                      basefrac * self.shorten(basemeasure);
+        for int::range(basemeasure, timemeasure) |i| {
+            pos += self.shorten(i);
+        }
+        pos
+    }
+}
+
+//----------------------------------------------------------------------------------------------
+// parsing
+
+/// Converts a single alphanumeric (base-36) letter to an integer. (C: `getdigit`)
+fn getdigit(n: char) -> Option<int> {
+    match n {
+        '0'..'9' => Some((n as int) - ('0' as int)),
+        'a'..'z' => Some((n as int) - ('a' as int) + 10),
+        'A'..'Z' => Some((n as int) - ('A' as int) + 10),
+        _ => None
+    }
+}
+
+/// Converts the first two letters of `s` to a `Key`. (C: `key2index`)
+pub fn key2index(s: &[char]) -> Option<int> {
+    if s.len() < 2 { return None; }
+    do getdigit(s[0]).chain |a| {
+        do getdigit(s[1]).map |&b| { a * 36 + b }
+    }
+}
+
+/// Converts the first two letters of `s` to a `Key`. (C: `key2index`)
+pub fn key2index_str(s: &str) -> Option<int> {
+    if s.len() < 2 { return None; }
+    let str::CharRange {ch:c1, next:p1} = str::char_range_at(s, 0);
+    do getdigit(c1).chain |a| {
+        let str::CharRange {ch:c2, next:p2} = str::char_range_at(s, p1);
+        do getdigit(c2).map |&b| {
+            assert!(p2 == 2); // both characters should be in ASCII
+            a * 36 + b
+        }
+    }
+}
+
+/// Reads and parses the BMS file with given RNG from given reader.
+pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms,~str> {
+    /// The list of recognized prefixes of directives. The longest prefix should come first.
+    /// Also note that not all recognized prefixes are processed (counterexample being `ENDSW`).
+    /// (C: `bmsheader`)
+    static bmsheader: &'static [&'static str] = &[
+        "TITLE", "GENRE", "ARTIST", "STAGEFILE", "PATH_WAV", "BPM",
+        "PLAYER", "PLAYLEVEL", "RANK", "LNTYPE", "LNOBJ", "WAV", "BMP",
+        "BGA", "STOP", "STP", "RANDOM", "SETRANDOM", "ENDRANDOM", "IF",
+        "ELSEIF", "ELSE", "ENDSW", "END"];
+
+    let mut bms = Bms();
+
+    /// The state of the block, for determining which lines should be processed.
+    enum BlockState {
+        /// Not contained in the #IF block. (C: `state == -1`)
+        Outside,
+        /// Active. (C: `state == 0`)
+        Process,
+        /// Inactive, but (for the purpose of #IF/#ELSEIF/#ELSE/#ENDIF structure) can move to
+        /// `Process` state when matching clause appears. (C: `state == 1`)
+        Ignore,
+        /// Inactive and won't be processed until the end of block. (C: `state == 2`)
+        NoFurther
+    }
+
+    impl BlockState {
+        /// Returns true if lines should be ignored in the current block given that the parent
+        /// block was active. (C: `state > 0`)
+        fn inactive(self) -> bool {
+            match self { Outside | Process => false, Ignore | NoFurther => true }
+        }
+    }
+
+    /**
+     * Block information. The parser keeps a list of nested blocks and determines if
+     * a particular line should be processed or not. (C: `struct rnd`)
+     *
+     * Angomlois actually recognizes only one kind of blocks, starting with #RANDOM or
+     * #SETRANDOM and ending with #ENDRANDOM or #END(IF) outside an #IF block. An #IF block is
+     * a state within #RANDOM, so it follows that #RANDOM/#SETRANDOM blocks can nest but #IF
+     * can't nest unless its direct parent is #RANDOM/#SETRANDOM.
+     */
+    struct Block {
+        /// A generated value if any. It can be `None` if this block is the topmost one (which
+        /// is actually not a block but rather a sentinel) or the last `#RANDOM` or `#SETRANDOM`
+        /// command was invalid, and #IF in that case will always evaluates to false. (C: `val`
+        /// field)
+        val: Option<int>,
+        /// The state of the block. (C: `state` field)
+        state: BlockState,
+        /// True if the parent block is already ignored so that this block should be ignored
+        /// no matter what `state` is. (C: `skip` field)
+        skip: bool
+    }
+
+    impl Block {
+        /// Returns true if lines should be ignored in the current block.
+        fn inactive(&self) -> bool { self.skip || self.state.inactive() }
+    }
+
+    // Rust: #[deriving(Eq)] does not work inside the function. (#4913)
+    impl Eq for BlockState {
+        fn eq(&self, other: &BlockState) -> bool {
+            match (*self, *other) {
+                (Outside, Outside) | (Process, Process) |
+                (Ignore, Ignore) | (NoFurther, NoFurther) => true,
+                (_, _) => false
+            }
+        }
+        fn ne(&self, other: &BlockState) -> bool { !self.eq(other) }
+    }
+    impl Eq for Block {
+        fn eq(&self, other: &Block) -> bool {
+            // Rust: this is for using `ImmutableEqVector<T>::rposition`, which should have been
+            //       in `ImmutableVector<T>`.
+            self.val == other.val && self.state == other.state && self.skip == other.skip
+        }
+        fn ne(&self, other: &Block) -> bool { !self.eq(other) }
+    }
+
+    // A list of nested blocks. (C: `rnd`)
+    let mut blk = ~[Block { val: None, state: Outside, skip: false }];
+
+    /// An unprocessed data line of BMS file.
+    struct BmsLine { measure: uint, chan: Key, data: ~str }
+
+    impl Ord for BmsLine {
+        fn lt(&self, other: &BmsLine) -> bool {
+            self.measure < other.measure ||
+            (self.measure == other.measure && self.chan < other.chan)
+        }
+        fn le(&self, other: &BmsLine) -> bool {
+            self.measure < other.measure ||
+            (self.measure == other.measure && self.chan <= other.chan)
+        }
+        fn ge(&self, other: &BmsLine) -> bool { !self.lt(other) }
+        fn gt(&self, other: &BmsLine) -> bool { !self.le(other) }
+    }
+
+    // A list of unprocessed data lines. They have to be sorted with a stable algorithm and
+    // processed in the order of measure number. (C: `bmsline`)
+    let mut bmsline = ~[];
+    // A table of BPMs. Maps to BMS #BPMxx command. (C: `bpmtab`)
+    let mut bpmtab = ~[DefaultBPM, ..MAXKEY];
+    // A table of the length of scroll stoppers. Maps to BMS #STOP/#STP commands. (C: `stoptab`)
+    let mut stoptab = ~[Seconds(0.0), ..MAXKEY];
+
+    // Allows LNs to be specified as a consecutive row of same or non-00 alphanumeric keys (MGQ
+    // type, #LNTYPE 2). The default is to specify LNs as two endpoints (RDM type, #LNTYPE 1).
+    // (C: `value[V_LNTYPE]`)
+    let mut consecutiveln = false;
+
+    // An end-of-LN marker used in LN specification for channels #1x/2x. Maps to BMS #LNOBJ
+    // command. (C: `value[V_LNOBJ]`)
+    let mut lnobj = None;
+
+    let lines = vec::split(f.read_whole_stream(), |&ch| ch == 10u8);
+    for lines.each |&line0| {
+        let line0 = ::util::core::str::from_fixed_utf8_bytes(line0, |_| ~"\ufffd");
+        let line: &str = line0;
+
+        // skip non-command lines
+        let line = line.trim_left();
+        if !line.starts_with("#") { loop; }
+        let line = line.slice_to_end(1);
+
+        // search for header prefix. the header list (`bmsheader`) is in the decreasing order
+        // of prefix length.
+        let mut prefix = "";
+        for bmsheader.each |&header| {
+            if line.len() >= header.len() &&
+               line.slice(0, header.len()).to_upper() == header.to_owned() {
+                prefix = header;
+                break;
+            }
+        }
+        let line = line.slice_to_end(prefix.len());
+
+        // Common readers.
+        macro_rules! read(
+            (string $string:ident) => ({
+                let mut text = ~"";
+                if lex!(line; ws, str* -> text, ws*, !) {
+                    bms.$string = Some(text);
+                }
+            });
+            (value $value:ident) => ({
+                lex!(line; ws, int -> bms.$value);
+            });
+            (path $paths:ident) => ({
+                let mut key = Key(-1), path = ~"";
+                if lex!(line; Key -> key, ws, str -> path, ws*, !) {
+                    let Key(key) = key;
+                    bms.$paths[key] = Some(path);
+                }
+            })
+        )
+
+        // Rust: mutable loan and immutable loan cannot coexist in the same block (although
+        //       it's safe). (#4666)
+        assert!(!blk.is_empty());
+        match (prefix, { blk.last().inactive() }) { // XXX #4666
+            // #TITLE|#GENRE|#ARTIST|#STAGEFILE|#PATH_WAV <string>
+            ("TITLE", false) => read!(string title),
+            ("GENRE", false) => read!(string genre),
+            ("ARTIST", false) => read!(string artist),
+            ("STAGEFILE", false) => read!(string stagefile),
+            ("PATH_WAV", false) => read!(string basepath),
+
+            // #BPM <float> or #BPMxx <float>
+            ("BPM", false) => {
+                let mut key = Key(-1), bpm = 0.0;
+                if lex!(line; Key -> key, ws, float -> bpm) {
+                    let Key(key) = key; bpmtab[key] = BPM(bpm);
+                } else if lex!(line; ws, float -> bpm) {
+                    bms.initbpm = BPM(bpm);
+                }
+            }
+
+            // #PLAYER|#PLAYLEVEL|#RANK <int>
+            ("PLAYER", false) => read!(value player),
+            ("PLAYLEVEL", false) => read!(value playlevel),
+            ("RANK", false) => read!(value rank),
+
+            // #LNTYPE <int>
+            ("LNTYPE", false) => {
+                let mut lntype = 1;
+                if lex!(line; ws, int -> lntype) {
+                    consecutiveln = (lntype == 2);
+                }
+            }
+            // #LNOBJ <key>
+            ("LNOBJ", false) => {
+                let mut key = Key(-1);
+                if lex!(line; ws, Key -> key) { lnobj = Some(key); }
+            }
+
+            // #WAVxx|#BMPxx <path>
+            ("WAV", false) => read!(path sndpath),
+            ("BMP", false) => read!(path imgpath),
+
+            // #BGAxx yy <int> <int> <int> <int> <int> <int>
+            ("BGA", false) => {
+                let mut dst = Key(0), src = Key(0);
+                let mut bc = BlitCmd { dst: ImageRef(Key(0)), src: ImageRef(Key(0)),
+                                       x1: 0, y1: 0, x2: 0, y2: 0, dx: 0, dy: 0 };
+                if lex!(line; Key -> dst, ws, Key -> src, ws,
+                        int -> bc.x1, ws, int -> bc.y1, ws, int -> bc.x2, ws, int -> bc.y2, ws,
+                        int -> bc.dx, ws, int -> bc.dy) {
+                    bc.src = ImageRef(src);
+                    bc.dst = ImageRef(dst);
+                    bms.blitcmd.push(bc);
+                }
+            }
+
+            // #STOPxx <int>
+            ("STOP", false) => {
+                let mut key = Key(-1), duration = 0;
+                if lex!(line; Key -> key, ws, int -> duration) {
+                    let Key(key) = key;
+                    stoptab[key] = Measures(duration as float / 192.0);
+                }
+            }
+
+            // #STP<int>.<int> <int>
+            ("STP", false) => {
+                let mut measure = 0, frac = 0, duration = 0;
+                if lex!(line; Measure -> measure, '.', uint -> frac, ws,
+                        int -> duration) && duration > 0 {
+                    let pos = measure as float + frac as float * 0.001;
+                    let dur = Seconds(duration as float * 0.001);
+                    bms.objs.push(Obj::Stop(pos, dur));
+                }
+            }
+
+            // #RANDOM|#SETRANDOM <int>
+            ("RANDOM", _) |
+            ("SETRANDOM", _) => {
+                let mut val = 0;
+                if lex!(line; ws, int -> val) {
+                    let val = if val <= 0 {None} else {Some(val)};
+
+                    // do not generate a random value if the entire block is skipped (but it
+                    // still marks the start of block)
+                    let inactive = {blk.last().inactive()};// XXX #4666
+                    let generated = do val.chain |val| {
+                        // Rust: there should be `Option<T>::chain` if `T` is copyable.
+                        if prefix == "SETRANDOM" {
+                            Some(val)
+                        } else if !inactive {
+                            // Rust: not an uniform distribution yet!
+                            Some(r.gen_int_range(1, val + 1))
+                        } else {
+                            None
+                        }
+                    };
+                    blk.push(Block { val: generated, state: Outside, skip: inactive });
+                }
+            }
+
+            // #ENDRANDOM
+            ("ENDRANDOM", _) => {
+                if blk.len() > 1 { blk.pop(); }
+            }
+
+            // #IF|#ELSEIF <int>
+            ("IF", _) |
+            ("ELSEIF", _) => {
+                let mut val = 0;
+                if lex!(line; ws, int -> val) {
+                    let val = if val <= 0 {None} else {Some(val)};
+
+                    // Rust: `blk.last_ref()` may be useful?
+                    let last = &mut blk[blk.len() - 1];
+                    last.state =
+                        if (prefix == "IF" && !last.state.inactive()) || last.state == Ignore {
+                            if val.is_none() || val != last.val {Ignore} else {Process}
+                        } else {
+                            NoFurther
+                        };
+                }
+            }
+
+            // #ELSE
+            ("ELSE", _) => {
+                let last = &mut blk[blk.len() - 1];
+                last.state = if last.state == Ignore {Process} else {NoFurther};
+            }
+
+            // #END(IF)
+            ("END", _) => {
+                for blk.rposition(|&i| i.state != Outside).each |&idx| {
+                    if idx > 0 { blk.truncate(idx + 1); }
+                }
+
+                { // XXX #4666
+                    let last = &mut blk[blk.len() - 1];
+                    last.state = Outside;
+                }
+            }
+
+            // #nnnmm:...
+            ("", false) => {
+                let mut measure = 0, chan = Key(0), data = ~"";
+                if lex!(line; Measure -> measure, Key -> chan, ':', ws*, str -> data, ws*, !) {
+                    bmsline.push(BmsLine { measure: measure, chan: chan, data: data })
+                }
+            }
+
+            (_, _) => {}
+        }
+    }
+
+    // Poor BGA defined by #BMP00 wouldn't be played if it is a movie. We can't just let it
+    // played at the beginning of the chart as the "beginning" is not always 0.0 (actually,
+    // `originoffset`). Thus we add an artificial BGA object at time 0.0 only when the other
+    // poor BGA does not exist at this position. (C: `poorbgafix`)
+    let mut poorbgafix = true;
+
+    // Indices to last visible object per channels. A marker specified by #LNOBJ will turn
+    // this last object to the start of LN. (C: `prev12`)
+    let mut lastvis: [Option<uint>, ..NLANES] = [None, ..NLANES];
+
+    // Indices to last LN start or end inserted (and not finalized yet) per channels.
+    // If `consecutiveln` is on (#LNTYPE 2), the position of referenced object gets updated
+    // during parsing; if off (#LNTYPE 1), it is solely used for checking if we are inside
+    // the LN or not. (C: `prev56`)
+    let mut lastln: [Option<uint>, ..NLANES] = [None, ..NLANES];
+
+    // Handles a non-00 alphanumeric key `v` positioned at the particular channel `chan` and
+    // particular position `t`. The position `t2` next to `t` is used for some cases that
+    // an alphanumeric key designates an area rather than a point.
+    let handle_key = |chan: Key, t: float, t2: float, v: Key| {
+        // Adds an object. Objects are sorted by its position later.
+        let add = |obj: Obj| { bms.objs.push(obj); };
+        // Adds an object and returns its position. LN parsing generally mutates the existing
+        // object for simplicity.
+        let mark = |obj: Obj| -> Option<uint> {
+            let marked = bms.objs.len();
+            bms.objs.push(obj);
+            Some(marked)
+        };
+
+        match *chan {
+            // channel #01: BGM
+            1 => { add(Obj::BGM(t, v)); }
+
+            // channel #03: BPM as an hexadecimal key
+            3 => {
+                for v.to_hex().each |&v| {
+                    add(Obj::SetBPM(t, BPM(v as float)))
+                }
+            }
+
+            // channel #04: BGA layer 1
+            4 => { add(Obj::SetBGA(t, Layer1, Some(v))); }
+
+            // channel #06: POOR BGA
+            6 => {
+                add(Obj::SetBGA(t, PoorBGA, Some(v)));
+                poorbgafix = false; // we don't add artificial BGA
+            }
+
+            // channel #07: BGA layer 2
+            7 => { add(Obj::SetBGA(t, Layer2, Some(v))); }
+
+            // channel #08: BPM defined by #BPMxx
+            8 => { add(Obj::SetBPM(t, bpmtab[*v])); } // TODO bpmtab validity check
+
+            // channel #09: scroll stopper defined by #STOPxx
+            9 => { add(Obj::Stop(t, stoptab[*v])); } // TODO stoptab validity check
+
+            // channel #0A: BGA layer 3
+            10 => { add(Obj::SetBGA(t, Layer3, Some(v))); }
+
+            // channels #1x/2x: visible object, possibly LNs when #LNOBJ is in active
+            36/*1*36*/..107/*3*36-1*/ => {
+                let lane = Lane::from_channel(chan);
+                if lnobj.is_some() && lnobj == Some(v) {
+                    // change the last inserted visible object to the start of LN if any.
+                    for {lastvis[*lane]}.each |&pos| { // XXX #4666
+                        assert!(bms.objs[pos].is_visible());
+                        bms.objs[pos] = bms.objs[pos].to_lnstart();
+                        add(Obj::LNDone(t, lane, Some(v)));
+                        lastvis[*lane] = None;
+                    }
+                } else {
+                    lastvis[*lane] = mark(Obj::Visible(t, lane, Some(v)));
+                }
+            }
+
+            // channels #3x/4x: invisible object
+            108/*3*36*/..179/*5*36-1*/ => {
+                let lane = Lane::from_channel(chan);
+                add(Obj::Invisible(t, lane, Some(v)));
+            }
+
+            // channels #5x/6x, #LNTYPE 1: LN endpoints
+            180/*5*36*/..251/*7*36-1*/ if !consecutiveln => {
+                let lane = Lane::from_channel(chan);
+
+                // a pair of non-00 alphanumeric keys designate one LN. if there are an odd
+                // number of them, the last LN is implicitly closed later.
+                if lastln[*lane].is_some() {
+                    lastln[*lane] = None;
+                    add(Obj::LNDone(t, lane, Some(v)));
+                } else {
+                    lastln[*lane] = mark(Obj::LNStart(t, lane, Some(v)));
+                }
+            }
+
+            // channels #5x/6x, #LNTYPE 2: LN areas
+            180/*5*36*/..251/*7*36-1*/ if consecutiveln => {
+                let lane = Lane::from_channel(chan);
+
+                // one non-00 alphanumeric key, in the absence of other information, inserts one
+                // complete LN starting at `t` and ending at `t2`.
+                //
+                // the next non-00 alphanumeric key also inserts one complete LN from `t` to
+                // `t2`, unless there is already an end of LN at `t` in which case the end of LN
+                // is simply moved from `t` to `t2` (effectively increasing the length of
+                // previous LN).
+                match lastln[*lane] {
+                    Some(pos) if bms.objs[pos].time == t => {
+                        assert!(bms.objs[pos].is_lndone());
+                        bms.objs[pos].time = t2;
+                    }
+                    _ => {
+                        add(Obj::LNStart(t, lane, Some(v)));
+                        lastln[*lane] = mark(Obj::LNDone(t2, lane, Some(v)));
+                    }
+                }
+            }
+
+            // channels #Dx/Ex: bombs, base-36 damage value (unit of 0.5% of the full gauge) or
+            // instant death (ZZ)
+            468/*0xD*36*/..539/*0xF*36-1*/ => {
+                let lane = Lane::from_channel(chan);
+                let damage = match *v {
+                    1..200 => Some(GaugeDamage(*v as float / 200.0)),
+                    1295 => Some(InstantDeath), // XXX 1295=MAXKEY-1
+                    _ => None
+                };
+                for damage.each |&damage| {
+                    add(Obj::Bomb(t, lane, Some(Key(0)), damage));
+                }
+            }
+
+            // unsupported: channels #0B/0C/0D/0E (BGA opacity), #97/98 (sound volume),
+            // #99 (text), #A0 (dynamic #RANK), #A1/A2/A3/A4 (BGA color key update),
+            // #A5 (BGA on keypress), #A6 (player-specific option)
+            _ => {}
+        }
+    };
+
+    // loops over the sorted bmslines
+    ::extra::sort::tim_sort(bmsline);
+    for bmsline.each |line| {
+        if *line.chan == 2 {
+            let mut shorten = 0.0;
+            if lex!(line.data; ws*, float -> shorten) {
+                if shorten > 0.001 {
+                    bms.shortens.grow_set(line.measure, &1.0, shorten);
+                }
+            }
+        } else {
+            let measure = line.measure as float;
+            let data = str::to_chars(line.data);
+            let max = data.len() / 2 * 2;
+            let count = max as float;
+            for uint::range_step(0, max, 2) |i| {
+                let v = key2index(data.slice(i, i+2));
+                for v.each |&v| {
+                    if v != 0 { // ignores 00
+                        let t = measure + i as float / count;
+                        let t2 = measure + (i + 2) as float / count;
+                        handle_key(line.chan, t, t2, Key(v));
+                    }
+                }
+            }
+        }
+    }
+
+    if poorbgafix {
+        bms.objs.push(Obj::SetBGA(0.0, PoorBGA, Some(Key(0))));
+    }
+
+    // fix the unterminated longnote
+    bms.nmeasures = bmsline.last_opt().map_default(0, |l| l.measure) + 1;
+    let endt = bms.nmeasures as float;
+    for uint::range(0, NLANES) |i| {
+        if lastvis[i].is_some() || (!consecutiveln && lastln[i].is_some()) {
+            bms.objs.push(Obj::LNDone(endt, Lane(i), None));
+        }
+    }
+
+    Ok(bms)
+}
+
+/// Reads and parses the BMS file with given RNG. (C: `parse_bms`)
+pub fn parse_bms<R:RngUtil>(bmspath: &str, r: &mut R) -> Result<Bms,~str> {
+    do io::file_reader(&Path(bmspath)).chain |f| {
+        parse_bms_from_reader(f, r)
+    }
+}
+
+//----------------------------------------------------------------------------------------------
+// key specification
+
+/// The key specification. Specifies the order and apperance of lanes. Once determined from
+/// the options and BMS file, the key specification is fixed and independent of other data
+/// (e.g. `#PLAYER` value).
+pub struct KeySpec {
+    /// The number of lanes on the left side. This number is significant only when Couple Play
+    /// is used. (C: `nleftkeys`)
+    split: uint,
+    /// The order of significant lanes. The first `nleftkeys` lanes go to the left side and
+    /// the remaining lanes (C: `nrightkeys`) go to the right side. (C: `keyorder`)
+    order: ~[Lane],
+    /// The type of lanes. (C: `keykind`)
+    kinds: ~[Option<KeyKind>]
+}
+
+pub impl KeySpec {
+    /// Returns a number of lanes that count towards "keys". Notably scratches and pedals do not
+    /// count as keys. (C: `nkeys`)
+    fn nkeys(&self) -> uint {
+        let mut nkeys = 0;
+        for self.kinds.each_some |kind| {
+            if kind.counts_as_key() { nkeys += 1; }
+        }
+        nkeys
+    }
+
+    /// Iterates over lanes on the left side, from left to right.
+    fn each_left_lanes(&self, f: &fn(&Lane) -> bool) -> iter::Ret {
+        assert!(self.split <= self.order.len());
+        self.order.slice(0, self.split).each(f)
+    }
+
+    /// Iterates over lanes on the right side if any, from left to right.
+    fn each_right_lanes(&self, f: &fn(&Lane) -> bool) -> iter::Ret {
+        assert!(self.split <= self.order.len());
+        self.order.slice(self.split, self.order.len()).each(f)
+    }
+}
+
+/// Parses the key specification from the string. (C: `parse_key_spec`)
+pub fn parse_key_spec(s: &str) -> Option<~[(Lane, KeyKind)]> {
+    let mut specs = ~[];
+    let mut s = s.trim_left().to_owned();
+    while !s.is_empty() {
+        let mut chan = Key(0), kind = '\x00', s2 = ~"";
+        if !lex!(s; Key -> chan, char -> kind, ws*, str* -> s2, !) {
+            return None;
+        }
+        s = s2;
+        match (chan, KeyKind::from_char(kind)) {
+            (Key(36/*1*36*/..107/*3*36-1*/), Some(kind)) => {
+                specs.push((Lane(*chan as uint - 1*36), kind));
+            }
+            (_, _) => { return None; }
+        }
+    }
+    Some(specs)
+}
+
+/// A list of well-known key specifications. (C: `presets`)
+static PRESETS: &'static [(&'static str, &'static str, &'static str)] = &[
+    // 5-key BMS, SP/DP
+    ("5",     "16s 11a 12b 13a 14b 15a", ""),
+    ("10",    "16s 11a 12b 13a 14b 15a", "21a 22b 23a 24b 25a 26s"),
+    // 5-key BMS with a foot pedal, SP/DP
+    ("5/fp",  "16s 11a 12b 13a 14b 15a 17p", ""),
+    ("10/fp", "16s 11a 12b 13a 14b 15a 17p", "27p 21a 22b 23a 24b 25a 26s"),
+    // 7-key BME, SP/DP
+    ("7",     "16s 11a 12b 13a 14b 15a 18b 19a", ""),
+    ("14",    "16s 11a 12b 13a 14b 15a 18b 19a", "21a 22b 23a 24b 25a 28b 29a 26s"),
+    // 7-key BME with a foot pedal, SP/DP
+    ("7/fp",  "16s 11a 12b 13a 14b 15a 18b 19a 17p", ""),
+    ("14/fp", "16s 11a 12b 13a 14b 15a 18b 19a 17p", "27p 21a 22b 23a 24b 25a 28b 29a 26s"),
+    // 9-key PMS (#PLAYER 3)
+    ("9",     "11q 12w 13e 14r 15t 22r 23e 24w 25q", ""),
+    // 9-key PMS (BME-compatible)
+    ("9-bme", "11q 12w 13e 14r 15t 18r 19e 16w 17q", ""),
+];
+
+/**
+ * Determines the key specification from the preset name, in the absence of explicit key
+ * specification with `-K` option. (C: `detect_preset`)
+ *
+ * Besides from presets specified in `PRESETS`, this function also allows the following
+ * pseudo-presets inferred from the BMS file:
+ *
+ * - `bms`, `bme`, `bml` or no preset: Selects one of eight presets `{5,7,10,14}[/fp]`.
+ * - `pms`: Selects one of two presets `9` and `9-bme`.
+ */
+pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str)> {
+    let mut present = [false, ..NLANES];
+    for bms.objs.each |&obj| {
+        for obj.object_lane().each |&Lane(lane)| {
+            present[lane] = true;
+        }
+    }
+
+    let preset = match preset.map(|s| s.to_lower()) {
+        None | Some(~"bms") | Some(~"bme") | Some(~"bml") => {
+            let isbme = (present[8] || present[9] || present[36+8] || present[36+9]);
+            let haspedal = (present[7] || present[36+7]);
+            let nkeys = match bms.player {
+                CouplePlay | DoublePlay => if isbme {~"14"} else {~"10"},
+                _                       => if isbme {~"7" } else {~"5" }
+            };
+            if haspedal {nkeys + ~"/fp"} else {nkeys}
+        },
+        Some(~"pms") => {
+            let isbme = (present[6] || present[7] || present[8] || present[9]);
+            if isbme {~"9-bme"} else {~"9"}
+        },
+        Some(preset) => preset
+    };
+
+    for PRESETS.each |&(name, leftkeys, rightkeys)| {
+        if name == preset {
+            return Some((leftkeys.to_owned(), rightkeys.to_owned()));
+        }
+    }
+    None
+}
+
+//----------------------------------------------------------------------------------------------
+// post-processing
+
+/// Updates the object in place to BGM or placeholder. (C: `remove_or_replace_note`)
+fn remove_or_replace_note(obj: &mut Obj) {
+    obj.data = match obj.data {
+        Visible(_,Some(sref)) | Invisible(_,Some(sref)) |
+        LNStart(_,Some(sref)) | LNDone(_,Some(sref)) => BGM(sref),
+        _ => Deleted
+    };
+}
+
+/// Fixes a problematic data. (C: `sanitize_bms`)
+pub fn sanitize_bms(bms: &mut Bms) {
+    ::extra::sort::tim_sort(bms.objs);
+
+    fn sanitize(objs: &mut [Obj], to_type: &fn(&Obj) -> Option<uint>,
+                merge_types: &fn(uint) -> uint) {
+        let len = objs.len();
+        let mut i = 0;
+        while i < len {
+            let cur = objs[i].time;
+            let mut types = 0;
+            let mut j = i;
+            while j < len && objs[j].time <= cur {
+                let obj = &mut objs[j];
+                for to_type(obj).each |&t| {
+                    if (types & (1 << t)) != 0 {
+                        // duplicate type
+                        remove_or_replace_note(obj);
+                    } else {
+                        types |= 1 << t;
+                    }
+                }
+                j += 1;
+            }
+
+            types = merge_types(types);
+
+            while i < j {
+                let obj = &mut objs[i];
+                for to_type(obj).each |&t| {
+                    if (types & (1 << t)) == 0 {
+                        remove_or_replace_note(obj);
+                    }
+                }
+                i += 1;
+            }
+        }
+    }
+
+    for uint::range(0, NLANES) |lane| {
+        let lane0 = Lane(lane);
+
+        static LNDONE: uint = 0;
+        static LNSTART: uint = 1;
+        static VISIBLE: uint = 2;
+        static INVISIBLE: uint = 3;
+        static BOMB: uint = 4;
+        let to_type = |obj: &Obj| -> Option<uint> {
+            match obj.data {
+                Visible(lane,_) if lane == lane0 => Some(VISIBLE),
+                Invisible(lane,_) if lane == lane0 => Some(INVISIBLE),
+                LNStart(lane,_) if lane == lane0 => Some(LNSTART),
+                LNDone(lane,_) if lane == lane0 => Some(LNDONE),
+                Bomb(lane,_,_) if lane == lane0 => Some(BOMB),
+                _ => None,
+            }
+        };
+
+        let mut inside = false;
+        do sanitize(bms.objs, to_type) |mut types| {
+            static LNMASK: uint = (1 << LNSTART) | (1 << LNDONE);
+
+            // remove overlapping LN endpoints altogether
+            if (types & LNMASK) == LNMASK { types &= !LNMASK; }
+
+            // remove prohibited types according to inside
+            if inside {
+                types &= !((1 << LNSTART) | (1 << VISIBLE) | (1 << BOMB));
+            } else {
+                types &= !(1 << LNDONE);
+            }
+
+            // invisible note cannot overlap with long note endpoints
+            if (types & LNMASK) != 0 { types &= !(1 << INVISIBLE); }
+
+            // keep the most important (lowest) type, except for
+            // BOMB/INVISIBLE combination
+            let lowest = types & -types;
+            if lowest == (1 << INVISIBLE) {
+                types = lowest | (types & (1 << BOMB));
+            } else {
+                types = lowest;
+            }
+
+            if (types & (1 << LNSTART)) != 0 {
+                inside = true;
+            } else if (types & (1 << LNDONE)) != 0 {
+                inside = false;
+            }
+
+            types
+        }
+
+        if inside {
+            // remove last starting longnote which is unfinished
+            match bms.objs.rposition(|obj| to_type(obj).is_some()) {
+                Some(pos) if bms.objs[pos].is_lnstart() =>
+                    remove_or_replace_note(&mut bms.objs[pos]),
+                _ => {}
+            }
+        }
+    }
+
+    sanitize(bms.objs,
+             |&obj| match obj.data {
+                        SetBGA(Layer1,_) => Some(0),
+                        SetBGA(Layer2,_) => Some(1),
+                        SetBGA(Layer3,_) => Some(2),
+                        SetBGA(PoorBGA,_) => Some(3),
+                        SetBPM(*) => Some(4),
+                        Stop(*) => Some(5),
+                        _ => None,
+                    },
+             |types| types);
+}
+
+/// Removes insignificant objects (i.e. not in visible lanes) and ensures that there is no
+/// `Deleted` object. (C: `analyze_and_compact_bms`)
+pub fn compact_bms(bms: &mut Bms, keyspec: &KeySpec) {
+    for vec::each_mut(bms.objs) |obj| {
+        for obj.object_lane().each |&Lane(lane)| {
+            if keyspec.kinds[lane].is_none() {
+                remove_or_replace_note(obj)
+            }
+        }
+    }
+
+    do bms.objs.retain |&obj| { obj.data != Deleted }
+}
+
+//----------------------------------------------------------------------------------------------
+// analysis
+
+/// Derived BMS information. Again, this is not a global state.
+pub struct BmsInfo {
+    /// The start position of the BMS file. This is either -1.0 or 0.0 depending on the first
+    /// measure has any visible objects or not. (C: `originoffset`)
+    originoffset: float,
+    /// Set to true if the BMS file has a BPM change. (C: `hasbpmchange`)
+    hasbpmchange: bool,
+    /// Set to true if the BMS file has long note objects. (C: `haslongnote`)
+    haslongnote: bool,
+    /// The number of visible objects in the BMS file. A long note object counts as one object.
+    /// (C: `nnotes`)
+    nnotes: int,
+    /// The maximum possible score. (C: `maxscore`)
+    maxscore: int
+}
+
+/// Analyzes the loaded BMS file. (C: `analyze_and_compact_bms`)
+pub fn analyze_bms(bms: &Bms) -> BmsInfo {
+    let mut infos = BmsInfo { originoffset: 0.0, hasbpmchange: false, haslongnote: false,
+                              nnotes: 0, maxscore: 0 };
+
+    for bms.objs.each |&obj| {
+        infos.haslongnote |= obj.is_lnstart();
+        infos.hasbpmchange |= obj.is_setbpm();
+
+        if obj.is_lnstart() || obj.is_visible() {
+            infos.nnotes += 1;
+            if obj.time < 1.0 { infos.originoffset = -1.0; }
+        }
+    }
+
+    for int::range(0, infos.nnotes) |i| {
+        let ratio = (i as float) / (infos.nnotes as float);
+        infos.maxscore += (300.0 * (1.0 + ratio)) as int;
+    }
+
+    infos
+}
+
+/// Calculates the duration of the loaded BMS file in seconds. `sound_length` should return
+/// the length of sound resources in seconds or 0.0. (C: `get_bms_duration`)
+pub fn bms_duration(bms: &Bms, originoffset: float,
+                    sound_length: &fn(SoundRef) -> float) -> float {
+    let mut pos = originoffset;
+    let mut bpm = bms.initbpm;
+    let mut time = 0.0, sndtime = 0.0;
+
+    for bms.objs.each |&obj| {
+        let delta = bms.adjust_object_position(pos, obj.time);
+        time += bpm.measure_to_msec(delta);
+        match obj.data {
+            Visible(_,Some(sref)) | LNStart(_,Some(sref)) | BGM(sref) => {
+                sndtime = cmp::max(sndtime, time + sound_length(sref) * 1000.0);
+            }
+            SetBPM(BPM(newbpm)) => {
+                if newbpm > 0.0 {
+                    bpm = BPM(newbpm);
+                } else if newbpm < 0.0 {
+                    bpm = BPM(newbpm);
+                    let delta = bms.adjust_object_position(originoffset, pos);
+                    time += BPM(-newbpm).measure_to_msec(delta);
+                    break;
+                }
+            }
+            Stop(duration) => {
+                time = duration.to_msec(bpm);
+            }
+            _ => {}
+        }
+        pos = obj.time;
+    }
+
+    if *bpm > 0.0 { // the chart scrolls backwards to `originoffset` for negative BPM
+        let delta = bms.adjust_object_position(pos, (bms.nmeasures + 1) as float);
+        time += bpm.measure_to_msec(delta);
+    }
+    cmp::max(time, sndtime) / 1000.0
+ }
+
+//----------------------------------------------------------------------------------------------
+// modifiers
+
+/// Applies a function to the object lane if any. This is used to shuffle the lanes without
+/// modifying the relative time position.
+fn update_object_lane(obj: &mut Obj, f: &fn(Lane) -> Lane) {
+    obj.data = match obj.data {
+        Visible(lane,sref) => Visible(f(lane),sref),
+        Invisible(lane,sref) => Invisible(f(lane),sref),
+        LNStart(lane,sref) => LNStart(f(lane),sref),
+        LNDone(lane,sref) => LNDone(f(lane),sref),
+        Bomb(lane,sref,damage) => Bomb(f(lane),sref,damage),
+        objdata => objdata
+    };
+}
+
+/// Swaps given lanes in the reverse order. (C: `shuffle_bms` with `MIRROR_MODF`)
+pub fn apply_mirror_modf(bms: &mut Bms, lanes: &[Lane]) {
+    let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
+    let rlanes = vec::reversed(lanes);
+    for vec::zip_slice(lanes, rlanes).each |&(Lane(from), to)| {
+        map[from] = to;
+    }
+
+    for vec::each_mut(bms.objs) |obj| {
+        update_object_lane(obj, |Lane(lane)| map[lane]);
+    }
+}
+
+/// Swaps given lanes in the random order. (C: `shuffle_bms` with
+/// `SHUFFLE_MODF`/`SHUFFLEEX_MODF`)
+pub fn apply_shuffle_modf<R:RngUtil>(bms: &mut Bms, r: &mut R, lanes: &[Lane]) {
+    let shuffled = r.shuffle(lanes);
+    let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
+    for vec::zip_slice(lanes, shuffled).each |&(Lane(from), to)| {
+        map[from] = to;
+    }
+
+    for vec::each_mut(bms.objs) |obj| {
+        update_object_lane(obj, |Lane(lane)| map[lane]);
+    }
+}
+
+/// Swaps given lanes in the random order, where the order is determined per object.
+/// `bms` should be first sanitized by `sanitize_bms`. It does not cause objects to move within
+/// another LN object, or place two objects in the same or very close time position to the same
+/// lane. (C: `shuffle_bms` with `RANDOM_MODF`/`RANDOMEX_MODF`)
+pub fn apply_random_modf<R:RngUtil>(bms: &mut Bms, r: &mut R, lanes: &[Lane]) {
+    let mut movable = lanes.to_owned();
+    let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
+
+    let mut lasttime = float::neg_infinity;
+    for vec::each_mut(bms.objs) |obj| {
+        if obj.is_lnstart() {
+            let lane = obj.object_lane().get();
+            match movable.position_elem(&lane) {
+                Some(i) => { movable.swap_remove(i); }
+                None => fail!(~"non-sanitized BMS detected")
+            }
+        }
+        if lasttime < obj.time { // reshuffle required
+            lasttime = obj.time + 1e-4;
+            let shuffled = r.shuffle(movable);
+            for vec::zip_slice(movable, shuffled).each |&(Lane(from), to)| {
+                map[from] = to;
+            }
+        }
+        if obj.is_lnstart() {
+            let lane = obj.object_lane().get();
+            movable.push(lane);
+        }
+        update_object_lane(obj, |Lane(lane)| map[lane]);
+    }
+}
+
+//----------------------------------------------------------------------------------------------
+
