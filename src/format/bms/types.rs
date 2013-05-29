@@ -2,10 +2,9 @@
 // Copyright (c) 2005, 2007, 2009, 2012, 2013, Kang Seonghoon.
 // See README.md and LICENSE.txt for details.
 
-use format::obj::Lane;
+//! Common types for BMS format.
 
-//----------------------------------------------------------------------------------------------
-// alphanumeric key
+use format::obj::Lane;
 
 /// Two-letter alphanumeric identifier used for virtually everything, including resource
 /// management, variable BPM and chart specification.
@@ -69,7 +68,6 @@ pub impl Key {
         };
         Lane(player * 36 + *self as uint % 36)
     }
-
 }
 
 impl Ord for Key {
@@ -79,7 +77,6 @@ impl Ord for Key {
     fn ge(&self, other: &Key) -> bool { **self >= **other }
     fn gt(&self, other: &Key) -> bool { **self > **other }
 }
-
 
 impl ToStr for Key {
     /// Returns a two-letter representation of alphanumeric key. (C: `TO_KEY`)

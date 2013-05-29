@@ -2,12 +2,15 @@
 // Copyright (c) 2005, 2007, 2009, 2012, 2013, Kang Seonghoon.
 // See README.md and LICENSE.txt for details.
 
+//! BMS parser.
+
 use compat::core::iter;
 
 use format::obj::{BPM, Duration, Seconds, Measures};
 use format::bms::types::{Key};
-use format::bms::{SoundRef, ImageRef, BlitCmd};
+use format::bms::{ImageRef, BlitCmd};
 
+/// Represents one line of BMS file.
 pub enum BmsCommand<'self> {
     BmsUnknown(&'self str),             // starting with `#` but unknown otherwise
     BmsTitle(&'self str),               // #TITLE
@@ -22,8 +25,8 @@ pub enum BmsCommand<'self> {
     BmsRank(int),                       // #RANK
     BmsLNType(int),                     // #LNTYPE
     BmsLNObj(Key),                      // #LNOBJ
-    BmsWAV(SoundRef, &'self str),       // #WAV
-    BmsBMP(ImageRef, &'self str),       // #BMP
+    BmsWAV(Key, &'self str),            // #WAV
+    BmsBMP(Key, &'self str),            // #BMP
     BmsBGA(BlitCmd),                    // #BGA
     BmsStop(Key, Duration),             // #STOP
     BmsStp(float, Duration),            // #STP
@@ -34,7 +37,47 @@ pub enum BmsCommand<'self> {
     BmsElseIf(int),                     // #ELSEIF
     BmsElse,                            // #ELSE
     BmsEndIf,                           // #END(IF)
+    BmsShorten(uint, float),            // #xxx02
     BmsData(uint, Key, &'self str)      // #xxxyy:...
+}
+
+impl<'self> ToStr for BmsCommand<'self> {
+    /// Returns a reconstructed line for given BMS command.
+    fn to_str(&self) -> ~str {
+        match *self {
+            BmsUnknown(s) => fmt!("#%s", s),
+            BmsTitle(s) => fmt!("#TITLE %s", s),
+            BmsGenre(s) => fmt!("#GENRE %s", s),
+            BmsArtist(s) => fmt!("#ARTIST %s", s),
+            BmsStageFile(s) => fmt!("#STAGEFILE %s", s),
+            BmsPathWAV(s) => fmt!("#PATH_WAV %s", s),
+            BmsBPM(BPM(bpm)) => fmt!("#BPM %f", bpm),
+            BmsExBPM(key, BPM(bpm)) => fmt!("#BPM%s %f", key.to_str(), bpm),
+            BmsPlayer(v) => fmt!("#PLAYER %d", v),
+            BmsPlayLevel(v) => fmt!("#PLAYLEVEL %d", v),
+            BmsRank(v) => fmt!("#RANK %d", v),
+            BmsLNType(lntype) => fmt!("#LNTYPE %d", lntype),
+            BmsLNObj(key) => fmt!("#LNOBJ %s", key.to_str()),
+            BmsWAV(key, s) => fmt!("#WAV%s %s", key.to_str(), s),
+            BmsBMP(key, s) => fmt!("#BMP%s %s", key.to_str(), s),
+            BmsBGA(BlitCmd { dst, src, x1, y1, x2, y2, dx, dy }) =>
+                fmt!("#BGA%s %s %d %d %d %d %d %d",
+                     dst.to_str(), src.to_str(), x1, y1, x2, y2, dx, dy),
+            BmsStop(key, Measures(dur)) => fmt!("#STOP%s %d", key.to_str(), (dur * 192.0) as int),
+            BmsStop(*) => fail!(~"unsupported"),
+            BmsStp(pos, Seconds(dur)) => fmt!("#STP %07.3f %d", pos, (dur * 1000.0) as int),
+            BmsStp(*) => fail!(~"unsupported"),
+            BmsRandom(val) => fmt!("#RANDOM %d", val),
+            BmsSetRandom(val) => fmt!("#SETRANDOM %d", val),
+            BmsEndRandom => ~"#ENDRANDOM",
+            BmsIf(val) => fmt!("#IF %d", val),
+            BmsElseIf(val) => fmt!("#ELSEIF %d", val),
+            BmsElse => ~"#ELSE",
+            BmsEndIf => ~"#ENDIF",
+            BmsShorten(measure, shorten) => fmt!("#%03u02:%f", measure, shorten),
+            BmsData(measure, chan, data) => fmt!("#%03u%s:%s", measure, chan.to_str(), data),
+        }
+    }
 }
 
 pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::Ret {
@@ -67,11 +110,11 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
                     }
                 })
             );
-            ($prefix:expr -> $constr:ident path($keyconstr:ident)) => (
+            ($prefix:expr -> $constr:ident path) => (
                 if_prefix!($prefix {
                     let mut key = Key(-1), path = ~"";
                     if lex!(line; Key -> key, ws, str -> path, ws*, !) {
-                        if !blk($constr($keyconstr(key), path)) { return iter::EarlyExit; }
+                        if !blk($constr(key, path)) { return iter::EarlyExit; }
                     }
                 })
             );
@@ -85,7 +128,8 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
                 if upperline.starts_with(prefix) {
                     let line = line.slice_to_end(prefix.len());
                     let _ = line; // removes warning
-                    $blk
+                    $blk;
+                    loop;
                 }
             })
         )
@@ -117,8 +161,8 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
             }
         })
 
-        if_prefix!("WAV" -> BmsWAV path(SoundRef))
-        if_prefix!("BMP" -> BmsBMP path(ImageRef))
+        if_prefix!("WAV" -> BmsWAV path)
+        if_prefix!("BMP" -> BmsBMP path)
 
         if_prefix!("BGA" { // #BGAxx yy <int> <int> <int> <int> <int> <int>
             let mut dst = Key(0), src = Key(0);
@@ -150,7 +194,7 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
             }
         })
 
-        if_prefix!("ENDSW" { loop; })
+        if_prefix!("ENDSW" { }) // avoids #ENDSW being parsed as #ENDIF
 
         if_prefix!("RANDOM"    -> BmsRandom    value)
         if_prefix!("SETRANDOM" -> BmsSetRandom value)
@@ -162,7 +206,16 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
 
         let mut measure = 0, chan = Key(0), data = ~"";
         if lex!(line; Measure -> measure, Key -> chan, ':', ws*, str -> data, ws*, !) {
-            if !blk(BmsData(measure, chan, data)) { return iter::EarlyExit; }
+            if chan == Key(2) { // #xxx02:<float>
+                let mut shorten = 0.0;
+                if lex!(data; ws*, float -> shorten) {
+                    if !blk(BmsShorten(measure, shorten)) { return iter::EarlyExit; }
+                    loop;
+                }
+            } else {
+                if !blk(BmsData(measure, chan, data)) { return iter::EarlyExit; }
+                loop;
+            }
         }
 
         if !blk(BmsUnknown(line)) { return iter::EarlyExit; }

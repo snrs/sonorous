@@ -414,23 +414,29 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
         //       it's safe). (#4666)
         assert!(!blk.is_empty());
         match (cmd, { blk.last().inactive() }) { // XXX #4666
-            (parse::BmsTitle(s),            false) => { bms.title = Some(s.to_owned()); }
-            (parse::BmsGenre(s),            false) => { bms.genre = Some(s.to_owned()); }
-            (parse::BmsArtist(s),           false) => { bms.artist = Some(s.to_owned()); }
-            (parse::BmsStageFile(s),        false) => { bms.stagefile = Some(s.to_owned()); }
-            (parse::BmsPathWAV(s),          false) => { bms.basepath = Some(s.to_owned()); }
-            (parse::BmsBPM(bpm),            false) => { bms.initbpm = bpm; }
-            (parse::BmsExBPM(key, bpm),     false) => { bpmtab[*key] = bpm; }
-            (parse::BmsPlayer(v),           false) => { bms.player = v; }
-            (parse::BmsPlayLevel(v),        false) => { bms.playlevel = v; }
-            (parse::BmsRank(v),             false) => { bms.rank = v; }
-            (parse::BmsLNType(lntype),      false) => { consecutiveln = (lntype == 2); }
-            (parse::BmsLNObj(key),          false) => { lnobj = Some(key); }
-            (parse::BmsWAV(sref, s),        false) => { bms.sndpath[**sref] = Some(s.to_owned()); }
-            (parse::BmsBMP(iref, s),        false) => { bms.imgpath[**iref] = Some(s.to_owned()); }
-            (parse::BmsBGA(bc),             false) => { bms.blitcmd.push(bc); }
-            (parse::BmsStop(key, duration), false) => { stoptab[*key] = duration; }
-            (parse::BmsStp(pos, duration),  false) => { bms.objs.push(Obj::Stop(pos, duration)); }
+            (parse::BmsTitle(s),           false) => { bms.title = Some(s.to_owned()); }
+            (parse::BmsGenre(s),           false) => { bms.genre = Some(s.to_owned()); }
+            (parse::BmsArtist(s),          false) => { bms.artist = Some(s.to_owned()); }
+            (parse::BmsStageFile(s),       false) => { bms.stagefile = Some(s.to_owned()); }
+            (parse::BmsPathWAV(s),         false) => { bms.basepath = Some(s.to_owned()); }
+            (parse::BmsBPM(bpm),           false) => { bms.initbpm = bpm; }
+            (parse::BmsExBPM(Key(i), bpm), false) => { bpmtab[i] = bpm; }
+            (parse::BmsPlayer(v),          false) => { bms.player = v; }
+            (parse::BmsPlayLevel(v),       false) => { bms.playlevel = v; }
+            (parse::BmsRank(v),            false) => { bms.rank = v; }
+            (parse::BmsLNType(lntype),     false) => { consecutiveln = (lntype == 2); }
+            (parse::BmsLNObj(key),         false) => { lnobj = Some(key); }
+            (parse::BmsWAV(Key(i), s),     false) => { bms.sndpath[i] = Some(s.to_owned()); }
+            (parse::BmsBMP(Key(i), s),     false) => { bms.imgpath[i] = Some(s.to_owned()); }
+            (parse::BmsBGA(bc),            false) => { bms.blitcmd.push(bc); }
+            (parse::BmsStop(Key(i), dur),  false) => { stoptab[i] = dur; }
+            (parse::BmsStp(pos, dur),      false) => { bms.objs.push(Obj::Stop(pos, dur)); }
+
+            (parse::BmsShorten(measure, shorten), false) => {
+                if shorten > 0.001 {
+                    bms.shortens.grow_set(measure, &1.0, shorten);
+                }
+            }
             (parse::BmsData(measure, chan, data), false) => {
                 bmsline.push(BmsLine { measure: measure, chan: chan, data: data.to_owned() })
             }
@@ -635,26 +641,17 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
     // loops over the sorted bmslines
     ::extra::sort::tim_sort(bmsline);
     for bmsline.each |line| {
-        if *line.chan == 2 {
-            let mut shorten = 0.0;
-            if lex!(line.data; ws*, float -> shorten) {
-                if shorten > 0.001 {
-                    bms.shortens.grow_set(line.measure, &1.0, shorten);
-                }
-            }
-        } else {
-            let measure = line.measure as float;
-            let data = str::to_chars(line.data);
-            let max = data.len() / 2 * 2;
-            let count = max as float;
-            for uint::range_step(0, max, 2) |i| {
-                let v = Key::from_chars(data.slice(i, i+2));
-                for v.each |&v| {
-                    if v != Key(0) { // ignores 00
-                        let t = measure + i as float / count;
-                        let t2 = measure + (i + 2) as float / count;
-                        handle_key(line.chan, t, t2, v);
-                    }
+        let measure = line.measure as float;
+        let data = str::to_chars(line.data);
+        let max = data.len() / 2 * 2;
+        let count = max as float;
+        for uint::range_step(0, max, 2) |i| {
+            let v = Key::from_chars(data.slice(i, i+2));
+            for v.each |&v| {
+                if v != Key(0) { // ignores 00
+                    let t = measure + i as float / count;
+                    let t2 = measure + (i + 2) as float / count;
+                    handle_key(line.chan, t, t2, v);
                 }
             }
         }
