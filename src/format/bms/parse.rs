@@ -5,7 +5,8 @@
 use compat::core::iter;
 
 use format::obj::{BPM, Duration, Seconds, Measures};
-use format::bms::{Key, SoundRef, ImageRef, BlitCmd};
+use format::bms::types::{Key};
+use format::bms::{SoundRef, ImageRef, BlitCmd};
 
 pub enum BmsCommand<'self> {
     BmsUnknown(&'self str),             // starting with `#` but unknown otherwise

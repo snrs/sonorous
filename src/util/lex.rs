@@ -123,8 +123,8 @@ macro_rules! lex(
     // start Angolmois-specific
     ($e:expr; Key -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        do ::format::bms::key2index_str(_line).map_default(false) |&_value| {
-            $dst = ::format::bms::Key(_value);
+        do ::format::bms::types::Key::from_str(_line).map_default(false) |&_value| {
+            $dst = _value;
             lex!(_line.slice_to_end(2u); $($tail)*)
         }
     });
