@@ -43,6 +43,8 @@ pub use format::obj::{ObjData, Deleted, Visible, Invisible, LNStart, LNDone, Bom
                       SetBPM, Stop};
 pub use format::obj::{ObjQueryOps, ObjConvOps, Obj};
 
+pub mod parse;
+
 //----------------------------------------------------------------------------------------------
 // alphanumeric key
 
@@ -383,15 +385,6 @@ pub fn key2index_str(s: &str) -> Option<int> {
 
 /// Reads and parses the BMS file with given RNG from given reader.
 pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms,~str> {
-    /// The list of recognized prefixes of directives. The longest prefix should come first.
-    /// Also note that not all recognized prefixes are processed (counterexample being `ENDSW`).
-    /// (C: `bmsheader`)
-    static bmsheader: &'static [&'static str] = &[
-        "TITLE", "GENRE", "ARTIST", "STAGEFILE", "PATH_WAV", "BPM",
-        "PLAYER", "PLAYLEVEL", "RANK", "LNTYPE", "LNOBJ", "WAV", "BMP",
-        "BGA", "STOP", "STP", "RANDOM", "SETRANDOM", "ENDRANDOM", "IF",
-        "ELSEIF", "ELSE", "ENDSW", "END"];
-
     let mut bms = Bms();
 
     /// The state of the block, for determining which lines should be processed.
@@ -498,181 +491,73 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
     // command. (C: `value[V_LNOBJ]`)
     let mut lnobj = None;
 
-    let lines = vec::split(f.read_whole_stream(), |&ch| ch == 10u8);
-    for lines.each |&line0| {
-        let line0 = ::util::core::str::from_fixed_utf8_bytes(line0, |_| ~"\ufffd");
-        let line: &str = line0;
-
-        // skip non-command lines
-        let line = line.trim_left();
-        if !line.starts_with("#") { loop; }
-        let line = line.slice_to_end(1);
-
-        // search for header prefix. the header list (`bmsheader`) is in the decreasing order
-        // of prefix length.
-        let mut prefix = "";
-        for bmsheader.each |&header| {
-            if line.len() >= header.len() &&
-               line.slice(0, header.len()).to_upper() == header.to_owned() {
-                prefix = header;
-                break;
-            }
-        }
-        let line = line.slice_to_end(prefix.len());
-
-        // Common readers.
-        macro_rules! read(
-            (string $string:ident) => ({
-                let mut text = ~"";
-                if lex!(line; ws, str* -> text, ws*, !) {
-                    bms.$string = Some(text);
-                }
-            });
-            (value $value:ident) => ({
-                lex!(line; ws, int -> bms.$value);
-            });
-            (path $paths:ident) => ({
-                let mut key = Key(-1), path = ~"";
-                if lex!(line; Key -> key, ws, str -> path, ws*, !) {
-                    let Key(key) = key;
-                    bms.$paths[key] = Some(path);
-                }
-            })
-        )
-
+    for parse::each_bms_command(f) |cmd| {
         // Rust: mutable loan and immutable loan cannot coexist in the same block (although
         //       it's safe). (#4666)
         assert!(!blk.is_empty());
-        match (prefix, { blk.last().inactive() }) { // XXX #4666
-            // #TITLE|#GENRE|#ARTIST|#STAGEFILE|#PATH_WAV <string>
-            ("TITLE", false) => read!(string title),
-            ("GENRE", false) => read!(string genre),
-            ("ARTIST", false) => read!(string artist),
-            ("STAGEFILE", false) => read!(string stagefile),
-            ("PATH_WAV", false) => read!(string basepath),
-
-            // #BPM <float> or #BPMxx <float>
-            ("BPM", false) => {
-                let mut key = Key(-1), bpm = 0.0;
-                if lex!(line; Key -> key, ws, float -> bpm) {
-                    let Key(key) = key; bpmtab[key] = BPM(bpm);
-                } else if lex!(line; ws, float -> bpm) {
-                    bms.initbpm = BPM(bpm);
-                }
+        match (cmd, { blk.last().inactive() }) { // XXX #4666
+            (parse::BmsTitle(s),            false) => { bms.title = Some(s.to_owned()); }
+            (parse::BmsGenre(s),            false) => { bms.genre = Some(s.to_owned()); }
+            (parse::BmsArtist(s),           false) => { bms.artist = Some(s.to_owned()); }
+            (parse::BmsStageFile(s),        false) => { bms.stagefile = Some(s.to_owned()); }
+            (parse::BmsPathWAV(s),          false) => { bms.basepath = Some(s.to_owned()); }
+            (parse::BmsBPM(bpm),            false) => { bms.initbpm = bpm; }
+            (parse::BmsExBPM(key, bpm),     false) => { bpmtab[*key] = bpm; }
+            (parse::BmsPlayer(v),           false) => { bms.player = v; }
+            (parse::BmsPlayLevel(v),        false) => { bms.playlevel = v; }
+            (parse::BmsRank(v),             false) => { bms.rank = v; }
+            (parse::BmsLNType(lntype),      false) => { consecutiveln = (lntype == 2); }
+            (parse::BmsLNObj(key),          false) => { lnobj = Some(key); }
+            (parse::BmsWAV(sref, s),        false) => { bms.sndpath[**sref] = Some(s.to_owned()); }
+            (parse::BmsBMP(iref, s),        false) => { bms.imgpath[**iref] = Some(s.to_owned()); }
+            (parse::BmsBGA(bc),             false) => { bms.blitcmd.push(bc); }
+            (parse::BmsStop(key, duration), false) => { stoptab[*key] = duration; }
+            (parse::BmsStp(pos, duration),  false) => { bms.objs.push(Obj::Stop(pos, duration)); }
+            (parse::BmsData(measure, chan, data), false) => {
+                bmsline.push(BmsLine { measure: measure, chan: chan, data: data.to_owned() })
             }
 
-            // #PLAYER|#PLAYLEVEL|#RANK <int>
-            ("PLAYER", false) => read!(value player),
-            ("PLAYLEVEL", false) => read!(value playlevel),
-            ("RANK", false) => read!(value rank),
+            // flow commands
+            (parse::BmsRandom(val), _) | (parse::BmsSetRandom(val), _) => {
+                let val = if val <= 0 {None} else {Some(val)};
+                let setrandom = match cmd { parse::BmsSetRandom(_) => true, _ => false };
 
-            // #LNTYPE <int>
-            ("LNTYPE", false) => {
-                let mut lntype = 1;
-                if lex!(line; ws, int -> lntype) {
-                    consecutiveln = (lntype == 2);
-                }
+                // do not generate a random value if the entire block is skipped (but it
+                // still marks the start of block)
+                let inactive = {blk.last().inactive()}; // XXX #4666
+                let generated = do val.chain |val| {
+                    // Rust: there should be `Option<T>::chain` if `T` is copyable.
+                    if setrandom {
+                        Some(val)
+                    } else if !inactive {
+                        Some(r.gen_int_range(1, val + 1)) // Rust: not an uniform distribution yet!
+                    } else {
+                        None
+                    }
+                };
+                blk.push(Block { val: generated, state: Outside, skip: inactive });
             }
-            // #LNOBJ <key>
-            ("LNOBJ", false) => {
-                let mut key = Key(-1);
-                if lex!(line; ws, Key -> key) { lnobj = Some(key); }
-            }
-
-            // #WAVxx|#BMPxx <path>
-            ("WAV", false) => read!(path sndpath),
-            ("BMP", false) => read!(path imgpath),
-
-            // #BGAxx yy <int> <int> <int> <int> <int> <int>
-            ("BGA", false) => {
-                let mut dst = Key(0), src = Key(0);
-                let mut bc = BlitCmd { dst: ImageRef(Key(0)), src: ImageRef(Key(0)),
-                                       x1: 0, y1: 0, x2: 0, y2: 0, dx: 0, dy: 0 };
-                if lex!(line; Key -> dst, ws, Key -> src, ws,
-                        int -> bc.x1, ws, int -> bc.y1, ws, int -> bc.x2, ws, int -> bc.y2, ws,
-                        int -> bc.dx, ws, int -> bc.dy) {
-                    bc.src = ImageRef(src);
-                    bc.dst = ImageRef(dst);
-                    bms.blitcmd.push(bc);
-                }
-            }
-
-            // #STOPxx <int>
-            ("STOP", false) => {
-                let mut key = Key(-1), duration = 0;
-                if lex!(line; Key -> key, ws, int -> duration) {
-                    let Key(key) = key;
-                    stoptab[key] = Measures(duration as float / 192.0);
-                }
-            }
-
-            // #STP<int>.<int> <int>
-            ("STP", false) => {
-                let mut measure = 0, frac = 0, duration = 0;
-                if lex!(line; Measure -> measure, '.', uint -> frac, ws,
-                        int -> duration) && duration > 0 {
-                    let pos = measure as float + frac as float * 0.001;
-                    let dur = Seconds(duration as float * 0.001);
-                    bms.objs.push(Obj::Stop(pos, dur));
-                }
-            }
-
-            // #RANDOM|#SETRANDOM <int>
-            ("RANDOM", _) |
-            ("SETRANDOM", _) => {
-                let mut val = 0;
-                if lex!(line; ws, int -> val) {
-                    let val = if val <= 0 {None} else {Some(val)};
-
-                    // do not generate a random value if the entire block is skipped (but it
-                    // still marks the start of block)
-                    let inactive = {blk.last().inactive()};// XXX #4666
-                    let generated = do val.chain |val| {
-                        // Rust: there should be `Option<T>::chain` if `T` is copyable.
-                        if prefix == "SETRANDOM" {
-                            Some(val)
-                        } else if !inactive {
-                            // Rust: not an uniform distribution yet!
-                            Some(r.gen_int_range(1, val + 1))
-                        } else {
-                            None
-                        }
-                    };
-                    blk.push(Block { val: generated, state: Outside, skip: inactive });
-                }
-            }
-
-            // #ENDRANDOM
-            ("ENDRANDOM", _) => {
+            (parse::BmsEndRandom, _) => {
                 if blk.len() > 1 { blk.pop(); }
             }
+            (parse::BmsIf(val), _) | (parse::BmsElseIf(val), _) => {
+                let val = if val <= 0 {None} else {Some(val)};
+                let haspriorelse = match cmd { parse::BmsElseIf(_) => true, _ => false };
 
-            // #IF|#ELSEIF <int>
-            ("IF", _) |
-            ("ELSEIF", _) => {
-                let mut val = 0;
-                if lex!(line; ws, int -> val) {
-                    let val = if val <= 0 {None} else {Some(val)};
-
-                    // Rust: `blk.last_ref()` may be useful?
-                    let last = &mut blk[blk.len() - 1];
-                    last.state =
-                        if (prefix == "IF" && !last.state.inactive()) || last.state == Ignore {
-                            if val.is_none() || val != last.val {Ignore} else {Process}
-                        } else {
-                            NoFurther
-                        };
-                }
+                // Rust: `blk.last_ref()` may be useful?
+                let last = &mut blk[blk.len() - 1];
+                last.state =
+                    if (!haspriorelse && !last.state.inactive()) || last.state == Ignore {
+                        if val.is_none() || val != last.val {Ignore} else {Process}
+                    } else {
+                        NoFurther
+                    };
             }
-
-            // #ELSE
-            ("ELSE", _) => {
+            (parse::BmsElse, _) => {
                 let last = &mut blk[blk.len() - 1];
                 last.state = if last.state == Ignore {Process} else {NoFurther};
             }
-
-            // #END(IF)
-            ("END", _) => {
+            (parse::BmsEndIf, _) => {
                 for blk.rposition(|&i| i.state != Outside).each |&idx| {
                     if idx > 0 { blk.truncate(idx + 1); }
                 }
@@ -680,14 +565,6 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
                 { // XXX #4666
                     let last = &mut blk[blk.len() - 1];
                     last.state = Outside;
-                }
-            }
-
-            // #nnnmm:...
-            ("", false) => {
-                let mut measure = 0, chan = Key(0), data = ~"";
-                if lex!(line; Measure -> measure, Key -> chan, ':', ws*, str -> data, ws*, !) {
-                    bmsline.push(BmsLine { measure: measure, chan: chan, data: data })
                 }
             }
 

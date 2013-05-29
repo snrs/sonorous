@@ -113,9 +113,9 @@ macro_rules! lex(
     ($e:expr; char -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
         if !_line.is_empty() {
-            let str::CharRange {ch:_ch, next:_pos} = str::char_range_at(_line, 0);
-            $dst = _ch;
-            lex!(_line.slice_to_end(_pos); $($tail)*)
+            let _charrange = ::core::str::char_range_at(_line, 0);
+            $dst = _charrange.ch;
+            lex!(_line.slice_to_end(_charrange.next); $($tail)*)
         } else {
             false
         }
@@ -123,8 +123,8 @@ macro_rules! lex(
     // start Angolmois-specific
     ($e:expr; Key -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        do key2index_str(_line).map_default(false) |&_value| {
-            $dst = Key(_value);
+        do ::format::bms::key2index_str(_line).map_default(false) |&_value| {
+            $dst = ::format::bms::Key(_value);
             lex!(_line.slice_to_end(2u); $($tail)*)
         }
     });
@@ -145,14 +145,14 @@ macro_rules! lex(
     ($e:expr; ws, $($tail:tt)*) => ({
         let _line: &str = $e;
         if !_line.is_empty() && char::is_whitespace(_line.char_at(0)) {
-            lex!(str::trim_left(_line); $($tail)*)
+            lex!(_line.trim_left(); $($tail)*)
         } else {
             false
         }
     });
     ($e:expr; ws*, $($tail:tt)*) => ({
         let _line: &str = $e;
-        lex!(str::trim_left(_line); $($tail)*)
+        lex!(_line.trim_left(); $($tail)*)
     });
     ($e:expr; int, $($tail:tt)*) => ({
         let mut _dummy: int = 0;

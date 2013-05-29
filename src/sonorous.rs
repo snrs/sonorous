@@ -74,7 +74,7 @@ pub mod ext {
 }
 pub mod format {
     pub mod obj;
-    pub mod bms;
+    #[path="bms/mod.rs"] pub mod bms;
 }
 #[macro_escape] pub mod ui {
     pub mod common;
