@@ -46,6 +46,7 @@ pub use format::bms::types::{Key, MAXKEY};
 
 pub mod types;
 pub mod parse;
+pub mod pointer;
 
 //----------------------------------------------------------------------------------------------
 // key kinds

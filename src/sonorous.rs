@@ -67,6 +67,7 @@ pub mod compat;
     pub mod lex;
     pub mod gfx;
     pub mod bmfont;
+    pub mod filesearch;
 }
 pub mod ext {
     pub mod sdl;
@@ -78,6 +79,7 @@ pub mod format {
 }
 #[macro_escape] pub mod ui {
     pub mod common;
+    pub mod options;
     pub mod player;
 }
 
@@ -92,7 +94,7 @@ pub fn exename() -> ~str {
 
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop. (C: `play`)
-pub fn play(opts: ~ui::player::Options) {
+pub fn play(opts: ~ui::options::Options) {
     use util::gfx;
     use format::bms;
     use ui::player;
@@ -151,7 +153,7 @@ pub fn play(opts: ~ui::player::Options) {
         let atexit = if opts.is_exclusive() { || player::update_line("") } else { || {} };
 
         // render the loading screen
-        let mut ticker = player::Ticker();
+        let mut ticker = ui::common::Ticker();
         let mut saved_screen = None; // XXX should be in a trait actually
         let _ = saved_screen; // Rust: avoids incorrect warning. (#3796)
         let update_status;
@@ -280,7 +282,7 @@ Environment Variables:
 /// The entry point. Parses the command line options and delegates other things to `play`.
 /// (C: `main`)
 pub fn main() {
-    use ui::player::*;
+    use ui::options::*;
 
     let longargs = util::core::hashmap::map_from_vec([
         (~"--help", 'h'), (~"--version", 'V'), (~"--speed", 'a'),

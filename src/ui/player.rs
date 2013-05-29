@@ -16,7 +16,10 @@ use ext::sdl::mpeg::*;
 use format::bms::*;
 use util::gfx::*;
 use util::bmfont::*;
-use compat::core::{hashmap, to_bytes, iter};
+use util::filesearch::resolve_relative_path;
+use ui::common::{Ticker};
+use ui::options::*;
+use compat::core::{hashmap, to_bytes};
 
 /// The width of screen, unless the exclusive mode.
 pub static SCREENW: uint = 800;
@@ -26,101 +29,6 @@ pub static SCREENH: uint = 600;
 pub static BGAW: uint = 256;
 /// The height of BGA, or the height of screen for the exclusive mode.
 pub static BGAH: uint = 256;
-
-//----------------------------------------------------------------------------------------------
-// options
-
-/// Game play modes. (C: `enum mode`)
-#[deriving(Eq)]
-pub enum Mode {
-    /// Normal game play. The graphical display and input is enabled. (C: `PLAY_MODE`)
-    PlayMode,
-    /// Automatic game play. The graphical display is enabled but the input is mostly ignored
-    /// except for the play speed change. (C: `AUTOPLAY_MODE`)
-    AutoPlayMode,
-    /// Exclusive (headless) mode. The graphical display is reduced to the BGA or absent at all
-    /// (when `NoBga` is also set). (C: `EXCLUSIVE_MODE`)
-    ExclusiveMode
-}
-
-/// Modifiers that affect the game data. (C: `enum modf`)
-#[deriving(Eq)]
-pub enum Modf {
-    /// Swaps all "key" (i.e. `KeyKind::counts_as_key` returns true) lanes in the reverse order.
-    /// See `player::apply_mirror_modf` for the detailed algorithm. (C: `MIRROR_MODF`)
-    MirrorModf,
-    /// Swaps all "key" lanes in the random order. See `player::apply_shuffle_modf` for
-    /// the detailed algorithm. (C: `SHUFFLE_MODF`)
-    ShuffleModf,
-    /// Swaps all lanes in the random order. (C: `SHUFFLEEX_MODF`)
-    ShuffleExModf,
-    /// Swaps all "key" lanes in the random order, where the order is determined per object.
-    /// See `player::apply_random_modf` for the detailed algorithm. (C: `RANDOM_MODF`)
-    RandomModf,
-    /// Swaps all lanes in the random order, where the order is determined per object.
-    /// (C: `RANDOMEX_MODF`)
-    RandomExModf
-}
-
-/// Specifies how the BGA is displayed. (C: `enum bga`)
-#[deriving(Eq)]
-pub enum Bga {
-    /// Both the BGA image and movie is displayed. (C: `BGA_AND_MOVIE`)
-    BgaAndMovie,
-    /// The BGA is displayed but the movie is not loaded. (C: `BGA_BUT_NO_MOVIE`)
-    BgaButNoMovie,
-    /// The BGA is not displayed. When used with `ExclusiveMode` it also disables the graphical
-    /// display entirely. (C: `NO_BGA`)
-    NoBga
-}
-
-/// Global options set from the command line and environment variables.
-pub struct Options {
-    /// A path to the BMS file. Used for finding the resource when `BMS::basepath` is not set.
-    /// (C: `bmspath`)
-    bmspath: ~str,
-    /// Game play mode. (C: `opt_mode`)
-    mode: Mode,
-    /// Modifiers that affect the game data. (C: `opt_modf`)
-    modf: Option<Modf>,
-    /// Specifies how the BGA is displayed. (C: `opt_bga`)
-    bga: Bga,
-    /// True if the metadata (either overlaid in the loading screen or printed separately
-    /// in the console) is displayed. (C: `opt_showinfo`)
-    showinfo: bool,
-    /// True if the full screen is enabled. (C: `opt_fullscreen`)
-    fullscreen: bool,
-    /// An index to the joystick device if any. (C: `opt_joystick`)
-    joystick: Option<uint>,
-    /// A key specification preset name if any. (C: `preset`)
-    preset: Option<~str>,
-    /// A left-hand-side key specification if any. (C: `leftkeys`)
-    leftkeys: Option<~str>,
-    /// A right-hand-side key specification if any. Can be an empty string. (C: `rightkeys`)
-    rightkeys: Option<~str>,
-    /// An initial play speed. (C: `playspeed`)
-    playspeed: float,
-}
-
-pub impl Options {
-    /// Returns true if the exclusive mode is enabled. This enables a text-based interface.
-    /// (C: `opt_mode >= EXCLUSIVE_MODE`)
-    fn is_exclusive(&self) -> bool { self.mode == ExclusiveMode }
-
-    /// Returns true if the input is ignored. Escape key or speed-changing keys are still
-    /// available as long as the graphical screen is enabled. (C: `!!opt_mode`)
-    fn is_autoplay(&self) -> bool { self.mode != PlayMode }
-
-    /// Returns true if the BGA is displayed. (C: `opt_bga < NO_BGA`)
-    fn has_bga(&self) -> bool { self.bga != NoBga }
-
-    /// Returns true if the BGA movie is enabled. (C: `opt_bga < BGA_BUT_NO_MOVIE`)
-    fn has_movie(&self) -> bool { self.bga == BgaAndMovie }
-
-    /// Returns true if the graphical screen is enabled.
-    /// (C: `opt_mode < EXCLUSIVE_MODE || opt_bga < NO_BGA`)
-    fn has_screen(&self) -> bool { !self.is_exclusive() || self.has_bga() }
-}
 
 //----------------------------------------------------------------------------------------------
 // bms utilities
@@ -227,40 +135,6 @@ pub fn check_exit(atexit: &fn()) {
 /// to be replaced (currently up to 72 bytes).
 pub fn update_line(s: &str) {
     io::stderr().write_str(fmt!("\r%s\r%s", str::repeat(" ", 72), s));
-}
-
-/// A periodic timer for thresholding the rate of information display.
-pub struct Ticker {
-    /// Minimal required milliseconds after the last display.
-    interval: uint,
-    /// The timestamp at the last display. It is a return value from `sdl::get_ticks` and
-    /// measured in milliseconds. May be a `None` if the ticker is at the initial state or
-    /// has been reset by `reset` method. (C: `lastinfo`)
-    lastinfo: Option<uint>
-}
-
-/// Returns a new ticker with a default display interval.
-pub fn Ticker() -> Ticker {
-    /// A reasonable interval for the console and graphic display. Currently set to about 21fps.
-    /// (C: `INFO_INTERVAL`)
-    static INFO_INTERVAL: uint = 47;
-    Ticker { interval: INFO_INTERVAL, lastinfo: None }
-}
-
-pub impl Ticker {
-    /// Calls `f` only when required milliseconds have passed after the last display.
-    /// `now` should be a return value from `sdl::get_ticks`.
-    fn on_tick(&mut self, now: uint, f: &fn()) {
-        if self.lastinfo.map_default(true, |&t| now - t >= self.interval) {
-            self.lastinfo = Some(now);
-            f();
-        }
-    }
-
-    /// Lets the next call to `on_tick` always call the callback.
-    fn reset(&mut self) {
-        self.lastinfo = None;
-    }
 }
 
 //----------------------------------------------------------------------------------------------
@@ -540,77 +414,6 @@ fn get_basedir(bms: &Bms, opts: &Options) -> Path {
         Some(ref basepath) => { let basepath: &str = *basepath; Path(basepath) }
         None => Path(opts.bmspath).dir_path()
     }
-}
-
-/**
- * Resolves the specified resource path to the actual path if possible. May fail, but its
- * success doesn't guarantee that the resource should be read without a failure either.
- * (C: `resolve_relative_path`)
- *
- * The actual resolution is complicated by the fact that many BMSes assume the case-insensitive
- * matching on file names and the coexistence between WAV resources and MP3 resources while
- * keeping the same BMS file. Therefore Angolmois adopted the following resolution rules:
- *
- * 1. Both `/` and `\` are accepted as a directory separator.
- * 2. Path components including file names are matched case-insensitively. If there are multiple
- *    matches then any one can be used, even when a better match exists.
- * 3. If the initial match on the file name fails, and the file name does contain an extension,
- *    then a list of alternative extensions is applied with the same matching procedure.
- */
-fn resolve_relative_path(basedir: &Path, path: &str, exts: &[&str]) -> Option<Path> {
-    let mut parts = ~[];
-    for path.each_split(|c| c == '/' || c == '\\') |part| {
-        if part.is_empty() { loop; }
-        parts.push(part);
-    }
-    if parts.is_empty() { return None; }
-
-    let mut cur = basedir.clone();
-    let lastpart = parts.pop();
-    for parts.each |part| {
-        // early exit if the intermediate path does not exist or is not a directory
-        if !os::path_is_dir(&cur) { return None; }
-
-        let part = part.to_upper();
-        let mut found = false;
-        for os::list_dir(&cur).each |&next| {
-            if next == ~"." || next == ~".." { loop; }
-            if next.to_upper() == part {
-                cur = cur.push(next);
-                found = true;
-                break;
-            }
-        }
-        if !found { return None; }
-    }
-
-    if !os::path_is_dir(&cur) { return None; }
-
-    let lastpart = lastpart.to_upper();
-    for os::list_dir(&cur).each |&next| {
-        if next == ~"." || next == ~".." { loop; }
-        let next_ = next.to_upper();
-        let mut found = (next_ == lastpart);
-        if !found {
-            match str::rfind_char(next_, '.') {
-                Some(idx) => {
-                    let nextnoext = next_.slice(0, idx).to_owned();
-                    for exts.each |ext| {
-                        if nextnoext + ext.to_owned() == lastpart {
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-                None => {} // does not try alternative extensions if there was no extension
-            }
-        }
-        if found {
-            return Some(cur.push(next));
-        }
-    }
-
-    None
 }
 
 /// Sound resource associated to `SoundRef`. It contains the actual SDL_mixer chunk that can be
@@ -999,213 +802,6 @@ pub fn text_update_status(path: Option<~str>, ticker: &mut Ticker, atexit: &fn()
 }
 
 //----------------------------------------------------------------------------------------------
-// pointers
-
-/// A pointer to the object. A pointer is used to implement common operations, e.g. iterating
-/// until given position, or finding the closest object with given condition. A pointer can also
-/// be used like an object when it points to the valid object.
-struct Pointer {
-    /// A BMS data holding objects.
-    bms: @mut ~Bms,
-    /// The current position. Can be the past-the-end value.
-    pos: uint
-}
-
-/// Returns true if two pointers share the common BMS data.
-priv fn has_same_bms(lhs: &Pointer, rhs: &Pointer) -> bool {
-    ::core::managed::mut_ptr_eq(lhs.bms, rhs.bms)
-}
-
-impl Eq for Pointer {
-    fn eq(&self, other: &Pointer) -> bool {
-        has_same_bms(self, other) && self.pos == other.pos
-    }
-    fn ne(&self, other: &Pointer) -> bool {
-        !has_same_bms(self, other) || self.pos != other.pos
-    }
-}
-
-impl Ord for Pointer {
-    fn lt(&self, other: &Pointer) -> bool {
-        assert!(has_same_bms(self, other));
-        self.pos < other.pos
-    }
-    fn le(&self, other: &Pointer) -> bool {
-        assert!(has_same_bms(self, other));
-        self.pos <= other.pos
-    }
-    fn ge(&self, other: &Pointer) -> bool {
-        assert!(has_same_bms(self, other));
-        self.pos >= other.pos
-    }
-    fn gt(&self, other: &Pointer) -> bool {
-        assert!(has_same_bms(self, other));
-        self.pos > other.pos
-    }
-}
-
-
-impl Clone for Pointer {
-    pub fn clone(&self) -> Pointer {
-        Pointer { bms: self.bms, pos: self.pos }
-    }
-}
-
-impl ObjQueryOps<SoundRef,ImageRef> for Pointer {
-    pub fn is_visible(self) -> bool { self.bms.objs[self.pos].is_visible() }
-    pub fn is_invisible(self) -> bool { self.bms.objs[self.pos].is_invisible() }
-    pub fn is_lnstart(self) -> bool { self.bms.objs[self.pos].is_lnstart() }
-    pub fn is_lndone(self) -> bool { self.bms.objs[self.pos].is_lndone() }
-    pub fn is_ln(self) -> bool { self.bms.objs[self.pos].is_ln() }
-    pub fn is_bomb(self) -> bool { self.bms.objs[self.pos].is_bomb() }
-    pub fn is_soundable(self) -> bool { self.bms.objs[self.pos].is_soundable() }
-    pub fn is_gradable(self) -> bool { self.bms.objs[self.pos].is_gradable() }
-    pub fn is_renderable(self) -> bool { self.bms.objs[self.pos].is_renderable() }
-    pub fn is_object(self) -> bool { self.bms.objs[self.pos].is_object() }
-    pub fn is_bgm(self) -> bool { self.bms.objs[self.pos].is_bgm() }
-    pub fn is_setbga(self) -> bool { self.bms.objs[self.pos].is_setbga() }
-    pub fn is_setbpm(self) -> bool { self.bms.objs[self.pos].is_setbpm() }
-    pub fn is_stop(self) -> bool { self.bms.objs[self.pos].is_stop() }
-
-    pub fn object_lane(self) -> Option<Lane> { self.bms.objs[self.pos].object_lane() }
-    pub fn sounds(self) -> ~[SoundRef] { self.bms.objs[self.pos].sounds() }
-    pub fn keydown_sound(self) -> Option<SoundRef> { self.bms.objs[self.pos].keydown_sound() }
-    pub fn keyup_sound(self) -> Option<SoundRef> { self.bms.objs[self.pos].keyup_sound() }
-    pub fn through_sound(self) -> Option<SoundRef> { self.bms.objs[self.pos].through_sound() }
-    pub fn images(self) -> ~[ImageRef] { self.bms.objs[self.pos].images() }
-    pub fn through_damage(self) -> Option<Damage> { self.bms.objs[self.pos].through_damage() }
-}
-
-pub impl Pointer {
-    /// Returns the time of pointed object.
-    fn time(&self) -> float { self.bms.objs[self.pos].time }
-
-    /// Returns the associated game data of pointed object.
-    fn data(&self) -> ObjData<SoundRef,ImageRef> { self.bms.objs[self.pos].data }
-
-    /// Seeks to the first object which time is past the limit, if any.
-    fn seek_until(&mut self, limit: float) {
-        let bms = &*self.bms;
-        let nobjs = bms.objs.len();
-        while self.pos < nobjs {
-            if bms.objs[self.pos].time >= limit { break; }
-            self.pos += 1;
-        }
-    }
-
-    /// Iterates over objects starting from the current object, until the first object which
-    /// time is past the limit is reached.
-    fn iter_until(&mut self, limit: float, f: &fn(&BmsObj) -> bool) -> iter::Ret {
-        let bms = &*self.bms;
-        let nobjs = bms.objs.len();
-        while self.pos < nobjs {
-            let current = &bms.objs[self.pos];
-            if current.time >= limit { return iter::EarlyExit; }
-            if !f(current) { return iter::EarlyExit; }
-            self.pos += 1;
-        }
-        iter::Finished
-    }
-
-    /// Seeks to the object pointed by the other pointer.
-    fn seek_to(&mut self, limit: Pointer) {
-        assert!(has_same_bms(self, &limit));
-        let bms = &*self.bms;
-        assert!(limit.pos <= bms.objs.len());
-        self.pos = limit.pos;
-    }
-
-    /// Iterates over objects starting from the current object, until the object pointed by
-    /// the other pointer is reached.
-    fn iter_to(&mut self, limit: Pointer, f: &fn(&BmsObj) -> bool) -> iter::Ret {
-        assert!(has_same_bms(self, &limit));
-        let bms = &*self.bms;
-        assert!(limit.pos <= bms.objs.len());
-        while self.pos < limit.pos {
-            let current = &bms.objs[self.pos];
-            if !f(current) { return iter::EarlyExit; }
-            self.pos += 1;
-        }
-        iter::Finished
-    }
-
-    /// Seeks to the end of objects.
-    fn seek_to_end(&mut self) {
-        let bms = &*self.bms;
-        self.pos = bms.objs.len();
-    }
-
-    /// Iterates over objects starting from the current object.
-    fn iter_to_end(&mut self, f: &fn(&BmsObj) -> bool) -> iter::Ret {
-        let bms = &*self.bms;
-        let nobjs = bms.objs.len();
-        while self.pos < nobjs {
-            let current = &bms.objs[self.pos];
-            if !f(current) { return iter::EarlyExit; }
-            self.pos += 1;
-        }
-        iter::Finished
-    }
-
-    /// Finds the next object that satisfies given condition if any, without updating itself.
-    fn find_next_of_type(&self, cond: &fn(&BmsObj) -> bool) -> Option<Pointer> {
-        let bms = &*self.bms;
-        let nobjs = bms.objs.len();
-        let mut i = self.pos;
-        while i < nobjs {
-            let current = &bms.objs[i];
-            if cond(current) {
-                return Some(Pointer { bms: self.bms, pos: i });
-            }
-            i += 1;
-        }
-        None
-    }
-
-    /// Finds the previous object that satisfies given condition if any, without updating
-    /// itself.
-    fn find_previous_of_type(&self, cond: &fn(&BmsObj) -> bool) -> Option<Pointer> {
-        let bms = &*self.bms;
-        let mut i = self.pos;
-        while i > 0 {
-            i -= 1;
-            let current = &bms.objs[i];
-            if cond(current) {
-                return Some(Pointer { bms: self.bms, pos: i });
-            }
-        }
-        None
-    }
-
-    /// Finds the closest object from the virtual time `base` that satisfies given condition
-    /// if any. `base` should lie between the pointed object and the previous object.
-    /// The proximity is measured in terms of virtual time, which can differ from actual time.
-    fn find_closest_of_type(&self, base: float, cond: &fn(&BmsObj) -> bool) -> Option<Pointer> {
-        let previous = self.find_previous_of_type(cond);
-        let next = self.find_next_of_type(cond);
-        match (previous, next) {
-            (None, None) => None,
-            (None, Some(next)) => Some(next),
-            (Some(previous), None) => Some(previous),
-            (Some(previous), Some(next)) =>
-                if num::abs(previous.time() - base) <
-                   num::abs(next.time() - base) { Some(previous) }
-                else { Some(next) }
-        }
-    }
-}
-
-/// Returns a pointer pointing the first object in `bms`.
-fn Pointer(bms: @mut ~Bms) -> Pointer {
-    Pointer { bms: bms, pos: 0 }
-}
-
-/// Returns a pointer pointing given object in `bms`.
-fn pointer_with_pos(bms: @mut ~Bms, pos: uint) -> Pointer {
-    Pointer { bms: bms, pos: pos }
-}
-
-//----------------------------------------------------------------------------------------------
 // game play logics
 
 /// Grades. Angolmois performs the time-based grading as long as possible (it can go wrong when
@@ -1347,17 +943,17 @@ pub struct Player {
     /// The virtual time at the top of the visible chart. (C: `top`)
     top: float,
     /// A pointer to the first `Obj` after `bottom`. (C: `pfront`)
-    pfront: Pointer,
+    pfront: pointer::Pointer,
     /// A pointer to the first `Obj` after `line`. (C: `pcur`)
-    pcur: Pointer,
+    pcur: pointer::Pointer,
     /// A pointer to the first `Obj` that haven't escaped the grading area. It is possible that
     /// this `Obj` haven't reached the grading area either. (C: `pcheck`)
-    pcheck: Pointer,
+    pcheck: pointer::Pointer,
     /// Pointers to `Obj`s for the start of LN which grading is in progress. (C: `pthru`)
     //
-    // Rust: this is intended to be `[Option<Pointer>, ..NLANES]` but a fixed-size vector cannot
-    //       be cloned.
-    pthru: ~[Option<Pointer>],
+    // Rust: this is intended to be `[Option<pointer::Pointer>, ..NLANES]` but a fixed-size vector
+    //       cannot be cloned.
+    pthru: ~[Option<pointer::Pointer>],
 
     /// The scale factor for grading area. The factor less than 1 causes the grading area
     /// shrink. (C: `gradefactor`)
@@ -1446,7 +1042,7 @@ pub fn Player(opts: ~Options, bms: ~Bms, infos: ~BmsInfo, duration: float, keysp
     let nsounds = sndres.len();
 
     let bms = @mut bms;
-    let initptr = Pointer(bms);
+    let initptr = pointer::Pointer(bms);
     let mut player = Player {
         opts: opts, bms: bms, infos: infos, duration: duration,
         keyspec: keyspec, keymap: keymap,
@@ -1664,7 +1260,7 @@ pub impl Player {
 
         // apply object-like effects while advancing to new `pcur`
         pfront.seek_until(self.bottom);
-        let mut prevpcur = pointer_with_pos(self.bms, pcur.pos);
+        let mut prevpcur = pointer::pointer_with_pos(self.bms, pcur.pos);
         for pcur.iter_until(self.line) |&obj| {
             match obj.data {
                 BGM(sref) => {
@@ -1830,7 +1426,7 @@ pub impl Player {
                                    lineshorten * self.gradefactor;
                         if num::abs(dist) < BAD_CUTOFF {
                             if p.is_lnstart() {
-                                pthru[*lane] = Some(pointer_with_pos(self.bms, p.pos));
+                                pthru[*lane] = Some(pointer::pointer_with_pos(self.bms, p.pos));
                             }
                             self.nograding[p.pos] = true;
                             self.update_grade_from_distance(dist);

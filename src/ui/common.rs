@@ -107,3 +107,37 @@ pub fn get_path_from_dialog() -> Option<~str> {
     None
 }
 
+/// A periodic timer for thresholding the rate of information display.
+pub struct Ticker {
+    /// Minimal required milliseconds after the last display.
+    interval: uint,
+    /// The timestamp at the last display. It is a return value from `sdl::get_ticks` and
+    /// measured in milliseconds. May be a `None` if the ticker is at the initial state or
+    /// has been reset by `reset` method. (C: `lastinfo`)
+    lastinfo: Option<uint>
+}
+
+/// Returns a new ticker with a default display interval.
+pub fn Ticker() -> Ticker {
+    /// A reasonable interval for the console and graphic display. Currently set to about 21fps.
+    /// (C: `INFO_INTERVAL`)
+    static INFO_INTERVAL: uint = 47;
+    Ticker { interval: INFO_INTERVAL, lastinfo: None }
+}
+
+pub impl Ticker {
+    /// Calls `f` only when required milliseconds have passed after the last display.
+    /// `now` should be a return value from `sdl::get_ticks`.
+    fn on_tick(&mut self, now: uint, f: &fn()) {
+        if self.lastinfo.map_default(true, |&t| now - t >= self.interval) {
+            self.lastinfo = Some(now);
+            f();
+        }
+    }
+
+    /// Lets the next call to `on_tick` always call the callback.
+    fn reset(&mut self) {
+        self.lastinfo = None;
+    }
+}
+
