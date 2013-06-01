@@ -50,9 +50,6 @@ pub enum Bga {
 
 /// Global options set from the command line and environment variables.
 pub struct Options {
-    /// A path to the BMS file. Used for finding the resource when `BMS::basepath` is not set.
-    /// (C: `bmspath`)
-    bmspath: ~str,
     /// Game play mode. (C: `opt_mode`)
     mode: Mode,
     /// Modifiers that affect the game data. (C: `opt_modf`)

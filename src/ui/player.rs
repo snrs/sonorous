@@ -17,9 +17,13 @@ use format::bms::*;
 use util::gfx::*;
 use util::bmfont::*;
 use util::filesearch::resolve_relative_path;
+use engine::keyspec::*;
+use engine::input::{Input, KeyInput, JoyAxisInput, JoyButtonInput, QuitInput};
+use engine::input::{LaneInput, SpeedUpInput, SpeedDownInput};
+use engine::input::{InputState, Positive, Neutral, Negative};
+use engine::input::{KeyMap};
 use ui::common::{Ticker};
 use ui::options::*;
-use compat::core::{hashmap, to_bytes};
 
 /// The width of screen, unless the exclusive mode.
 pub static SCREENW: uint = 800;
@@ -32,64 +36,6 @@ pub static BGAH: uint = 256;
 
 //----------------------------------------------------------------------------------------------
 // bms utilities
-
-/// Parses a key specification from the options.
-pub fn key_spec(bms: &Bms, opts: &Options) -> Result<~KeySpec,~str> {
-    let (leftkeys, rightkeys) =
-        if opts.leftkeys.is_none() && opts.rightkeys.is_none() {
-            let preset =
-                if opts.preset.is_none() && opts.bmspath.to_lower().ends_with(".pms") {
-                    Some(~"pms")
-                } else {
-                    opts.preset.clone()
-                };
-            match preset_to_key_spec(bms, preset) {
-                Some(leftright) => leftright,
-                None => {
-                    return Err(fmt!("Invalid preset name: %s",
-                                    opts.preset.map_default(~"", |&v| v.clone())));
-                }
-            }
-        } else {
-            // Rust: `Option` of managed pointer is not easy to use due to
-            //       implicit move. `Option<T>::clone_default` maybe?
-            (opts.leftkeys.map_default(~"", |&v| v.clone()),
-             opts.rightkeys.map_default(~"", |&v| v.clone()))
-        };
-
-    let mut keyspec = ~KeySpec { split: 0, order: ~[], kinds: ~[None, ..NLANES] };
-    let parse_and_add = |keys: &str| -> Option<uint> {
-        match parse_key_spec(keys) {
-            None | Some([]) => None,
-            Some(left) => {
-                for left.each |&(lane,kind)| {
-                    if keyspec.kinds[*lane].is_some() { return None; }
-                    keyspec.order.push(lane);
-                    keyspec.kinds[*lane] = Some(kind);
-                }
-                Some(left.len())
-            }
-        }
-    };
-
-    if !leftkeys.is_empty() {
-        match parse_and_add(leftkeys) {
-            None => { return Err(fmt!("Invalid key spec for left hand side: %s", leftkeys)); }
-            Some(nkeys) => { keyspec.split += nkeys; }
-        }
-    } else {
-        return Err(fmt!("No key model is specified using -k or -K"));
-    }
-    if !rightkeys.is_empty() {
-        match parse_and_add(rightkeys) {
-            None => { return Err(fmt!("Invalid key spec for right hand side: %s", rightkeys)); }
-            Some(nkeys) => { // no split panes except for #PLAYER 2
-                if bms.player != CouplePlay { keyspec.split += nkeys; }
-            }
-        }
-    }
-    Ok(keyspec)
-}
 
 /// Applies given modifier to the game data. The target lanes of the modifier is determined
 /// from given key specification. This function should be called twice for the Couple Play,
@@ -193,212 +139,6 @@ pub fn init_joystick(joyidx: uint) -> ~joy::Joystick {
 }
 
 //----------------------------------------------------------------------------------------------
-// virtual input
-
-/// Actual input. Mapped to zero or more virtual inputs by input mapping.
-#[deriving(Eq)]
-enum Input {
-    /// Keyboard input.
-    KeyInput(event::Key),
-    /// Joystick axis input.
-    JoyAxisInput(uint),
-    /// Joystick button input.
-    JoyButtonInput(uint)
-}
-
-impl IterBytes for Input {
-    fn iter_bytes(&self, lsb0: bool, f: to_bytes::Cb) -> to_bytes::Ret {
-        match *self {
-            KeyInput(key) => to_bytes::iter_bytes_2(&0u8, &(key as uint), lsb0, f),
-            JoyAxisInput(axis) => to_bytes::iter_bytes_2(&1u8, &axis, lsb0, f),
-            JoyButtonInput(button) => to_bytes::iter_bytes_2(&2u8, &button, lsb0, f)
-        }
-    }
-}
-
-/// Virtual input.
-#[deriving(Eq)]
-enum VirtualInput {
-    /// Virtual input mapped to the lane.
-    LaneInput(Lane),
-    /// Speed down input (normally F3).
-    SpeedDownInput,
-    /// Speed up input (normally F4).
-    SpeedUpInput
-}
-
-/**
- * State of virtual input elements. There are three states: neutral, and positive or negative.
- * There is no difference between positive and negative states (the naming is arbitrary)
- * except for that they are distinct.
- *
- * The states should really be one of pressed (non-neutral) or unpressed (neutral) states,
- * but we need two non-neutral states since the actual input device with continuous values
- * (e.g. joystick axes) can trigger the state transition *twice* without hitting the neutral
- * state. We solve this problem by making the transition from negative to positive (and vice
- * versa) temporarily hit the neutral state.
- */
-#[deriving(Eq)]
-enum InputState {
-    /// Positive input state. Occurs when the button is pressed or the joystick axis is moved
-    /// in the positive direction.
-    Positive = 1,
-    /// Neutral input state. Occurs when the button is not pressed or the joystick axis is moved
-    /// back to the origin.
-    Neutral = 0,
-    /// Negative input state. Occurs when the joystick axis is moved in the negative direction.
-    Negative = -1
-}
-
-pub impl VirtualInput {
-    /// Returns true if the virtual input has a specified key kind in the key specification.
-    fn active_in_key_spec(&self, kind: KeyKind, keyspec: &KeySpec) -> bool {
-        match *self {
-            LaneInput(Lane(lane)) => keyspec.kinds[lane] == Some(kind),
-            SpeedDownInput | SpeedUpInput => true
-        }
-    }
-}
-
-/// An information about an environment variable for multiple keys.
-//
-// Rust: static struct seems not working somehow... (#5688)
-/*
-struct KeySet {
-    envvar: &'static str,
-    default: &'static str,
-    mapping: &'static [(Option<KeyKind>, &'static [VirtualInput])],
-}
-*/
-type KeySet = (
-    &'static str,
-    &'static str,
-    &'static [(Option<KeyKind>, &'static [VirtualInput])]);
-
-/// A list of environment variables that set the mapping for multiple keys, and corresponding
-/// default values and the order of keys. (C: `envvars`)
-static KEYSETS: &'static [KeySet] = &[
-    (/*KeySet { envvar:*/ &"ANGOLMOIS_1P_KEYS",
-             /*default:*/ &"left shift%axis 3|z%button 3|s%button 6|x%button 2|d%button 7|\
-                        c%button 1|f%button 4|v%axis 2|left alt",
-             /*mapping:*/ &[(Some(Scratch),   &[LaneInput(Lane(6))]),
-                        (Some(WhiteKey),  &[LaneInput(Lane(1))]),
-                        (Some(BlackKey),  &[LaneInput(Lane(2))]),
-                        (Some(WhiteKey),  &[LaneInput(Lane(3))]),
-                        (Some(BlackKey),  &[LaneInput(Lane(4))]),
-                        (Some(WhiteKey),  &[LaneInput(Lane(5))]),
-                        (Some(BlackKey),  &[LaneInput(Lane(8))]),
-                        (Some(WhiteKey),  &[LaneInput(Lane(9))]),
-                        (Some(FootPedal), &[LaneInput(Lane(7))])] /*}*/),
-    (/*KeySet { envvar:*/ &"ANGOLMOIS_2P_KEYS",
-             /*default:*/ &"right alt|m|k|,|l|.|;|/|right shift",
-             /*mapping:*/ &[(Some(FootPedal), &[LaneInput(Lane(36+7))]),
-                        (Some(WhiteKey),  &[LaneInput(Lane(36+1))]),
-                        (Some(BlackKey),  &[LaneInput(Lane(36+2))]),
-                        (Some(WhiteKey),  &[LaneInput(Lane(36+3))]),
-                        (Some(BlackKey),  &[LaneInput(Lane(36+4))]),
-                        (Some(WhiteKey),  &[LaneInput(Lane(36+5))]),
-                        (Some(BlackKey),  &[LaneInput(Lane(36+8))]),
-                        (Some(WhiteKey),  &[LaneInput(Lane(36+9))]),
-                        (Some(Scratch),   &[LaneInput(Lane(36+6))])] ),
-    (/*KeySet { envvar:*/ &"ANGOLMOIS_PMS_KEYS",
-             /*default:*/ &"z|s|x|d|c|f|v|g|b",
-             /*mapping:*/ &[(Some(Button1), &[LaneInput(Lane(1))]),
-                        (Some(Button2), &[LaneInput(Lane(2))]),
-                        (Some(Button3), &[LaneInput(Lane(3))]),
-                        (Some(Button4), &[LaneInput(Lane(4))]),
-                        (Some(Button5), &[LaneInput(Lane(5))]),
-                        (Some(Button4), &[LaneInput(Lane(8)), LaneInput(Lane(36+2))]),
-                        (Some(Button3), &[LaneInput(Lane(9)), LaneInput(Lane(36+3))]),
-                        (Some(Button2), &[LaneInput(Lane(6)), LaneInput(Lane(36+4))]),
-                        (Some(Button1), &[LaneInput(Lane(7)), LaneInput(Lane(36+5))])] ),
-    (/*KeySet { envvar:*/ &"ANGOLMOIS_SPEED_KEYS",
-             /*default:*/ &"f3|f4",
-             /*mapping:*/ &[(None, &[SpeedDownInput]),
-                        (None, &[SpeedUpInput])] ),
-];
-
-/// An input mapping, i.e. a mapping from the actual input to the virtual input.
-pub type KeyMap = hashmap::HashMap<Input,VirtualInput>;
-
-/// Reads an input mapping from the environment variables. (C: `read_keymap`)
-pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> KeyMap {
-    /// Finds an SDL virtual key with the given name. Matching is done case-insensitively.
-    fn sdl_key_from_name(name: &str) -> Option<event::Key> {
-        let name = name.to_lower();
-        unsafe {
-            let firstkey = 0;
-            let lastkey = cast::transmute(event::LastKey);
-            for uint::range(firstkey, lastkey) |keyidx| {
-                let key = cast::transmute(keyidx);
-                let keyname = event::get_key_name(key).to_lower();
-                if keyname == name { return Some(key); }
-            }
-        }
-        None
-    }
-
-    /// Parses an `Input` value from the string. E.g. `"backspace"`, `"button 2"` or `"axis 0"`.
-    fn parse_input(s: &str) -> Option<Input> {
-        let mut idx = 0;
-        let s = s.trim();
-        if lex!(s; "button", ws, uint -> idx) {
-            Some(JoyButtonInput(idx))
-        } else if lex!(s; "axis", ws, uint -> idx) {
-            Some(JoyAxisInput(idx))
-        } else {
-            sdl_key_from_name(s).map(|&key| KeyInput(key))
-        }
-    }
-
-    let mut map = hashmap::HashMap::new();
-    let add_mapping = |kind: Option<KeyKind>, input: Input, vinput: VirtualInput| {
-        if kind.map_default(true, |&kind| vinput.active_in_key_spec(kind, keyspec)) {
-            map.insert(input, vinput);
-        }
-    };
-
-    for KEYSETS.each |&keyset| {
-        let (envvar, default, mapping) = keyset; // XXX
-        let spec = getenv(/*keyset.*/envvar);
-        let spec = spec.get_or_default(/*keyset.*/default.to_owned());
-
-        let mut i = 0;
-        for spec.each_split_char('|') |part| {
-            let (kind, vinputs) = /*keyset.*/mapping[i];
-            for part.each_split_char('%') |s| {
-                match parse_input(s) {
-                    Some(input) => {
-                        for vinputs.each |&vinput| {
-                            add_mapping(kind, input, vinput);
-                        }
-                    }
-                    None => die!("Unknown key name in the environment \
-                                  variable %s: %s", /*keyset.*/envvar, s)
-                }
-            }
-
-            i += 1;
-            if i >= /*keyset.*/mapping.len() { break; }
-        }
-    }
-
-    for keyspec.order.each |&lane| {
-        let key = Key(36 + *lane as int);
-        let kind = keyspec.kinds[*lane].get();
-        let envvar = fmt!("ANGOLMOIS_%s%c_KEY", key.to_str(), kind.to_char());
-        for getenv(envvar).each |&s| {
-            match parse_input(s) {
-                Some(input) => { add_mapping(Some(kind), input, LaneInput(lane)); }
-                None => die!("Unknown key name in the environment variable %s: %s", envvar, s)
-            }
-        }
-    }
-
-    map
-}
-
-//----------------------------------------------------------------------------------------------
 // resource management
 
 /// Alternative file extensions for sound resources. (C: `SOUND_EXTS`)
@@ -407,12 +147,12 @@ static SOUND_EXTS: &'static [&'static str] = &[".WAV", ".OGG", ".MP3"];
 static IMAGE_EXTS: &'static [&'static str] = &[".BMP", ".PNG", ".JPG", ".JPEG", ".GIF"];
 
 /// Returns a specified or implied resource directory from the BMS file.
-fn get_basedir(bms: &Bms, opts: &Options) -> Path {
+fn get_basedir(bms: &Bms) -> Path {
     // TODO this logic assumes that #PATH_WAV is always interpreted as a native path, which
     // the C version doesn't assume. this difference barely makes the practical issue though.
     match bms.basepath {
         Some(ref basepath) => { let basepath: &str = *basepath; Path(basepath) }
-        None => Path(opts.bmspath).dir_path()
+        None => Path(bms.bmspath).dir_path()
     }
 }
 
@@ -676,7 +416,7 @@ pub fn show_stagefile_screen(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec, opts
 
     do screen.with_pixels |pixels| {
         for bms.stagefile.each |&path| {
-            let basedir = get_basedir(bms, opts);
+            let basedir = get_basedir(bms);
             for resolve_relative_path(&basedir, path, IMAGE_EXTS).each |&path| {
                 match img::load(&path).chain(|s| s.display_format()) {
                     Ok(surface) => {
@@ -727,7 +467,7 @@ Title:    %s\nGenre:    %s\nArtist:   %s\n%s
 /// loaded. (C: `load_resource`)
 pub fn load_resource(bms: &Bms, opts: &Options,
                      callback: &fn(Option<~str>)) -> (~[SoundResource], ~[ImageResource]) {
-    let basedir = get_basedir(bms, opts);
+    let basedir = get_basedir(bms);
 
     let sndres = do bms.sndpath.mapi |i, &path| {
         match path {
@@ -1320,28 +1060,19 @@ pub impl Player {
             // and `continuous` (true if the input is not discrete and `Negative` input state
             // matters).
             let (key, state) = match poll_event() {
-                NoEvent => break,
-                QuitEvent | KeyEvent(EscapeKey,_,_,_) => { return false; }
-                KeyEvent(key,true,_,_) => (KeyInput(key), Positive),
-                KeyEvent(key,false,_,_) => (KeyInput(key), Neutral),
-                JoyButtonEvent(_which,button,true) =>
-                    (JoyButtonInput(button as uint), Positive),
-                JoyButtonEvent(_which,button,false) =>
-                    (JoyButtonInput(button as uint), Neutral),
-                JoyAxisEvent(_which,axis,delta) if delta > 3200 =>
-                    (JoyAxisInput(axis as uint), Positive),
-                JoyAxisEvent(_which,axis,delta) if delta < -3200 =>
-                    (JoyAxisInput(axis as uint), Negative),
-                JoyAxisEvent(_which,axis,_delta) =>
-                    (JoyAxisInput(axis as uint), Neutral),
-                _ => loop
+                event::NoEvent => { break; }
+                ev => match Input::from_event(ev) {
+                    Some((QuitInput,_)) => { return false; },
+                    Some(key_and_state) => key_and_state,
+                    None => loop
+                }
             };
             let vkey = match self.keymap.find(&key) {
                 Some(&vkey) => vkey,
                 None => loop
             };
             let continuous = match key {
-                KeyInput(*) | JoyButtonInput(*) => false,
+                KeyInput(*) | JoyButtonInput(*) | QuitInput => false,
                 JoyAxisInput(*) => true
             };
 

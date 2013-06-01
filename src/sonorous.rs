@@ -77,6 +77,10 @@ pub mod format {
     pub mod obj;
     #[path="bms/mod.rs"] pub mod bms;
 }
+pub mod engine {
+    pub mod keyspec;
+    pub mod input;
+}
 #[macro_escape] pub mod ui {
     pub mod common;
     pub mod options;
@@ -94,25 +98,26 @@ pub fn exename() -> ~str {
 
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop. (C: `play`)
-pub fn play(opts: ~ui::options::Options) {
+pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     use util::gfx;
     use format::bms;
     use ui::player;
 
     // parses the file and sanitizes it
     let mut r = compat::core::rand::Rng();
-    let mut bms = match bms::parse_bms(opts.bmspath, &mut r) {
+    let mut bms = match bms::parse_bms(bmspath, &mut r) {
         Ok(bms) => ~bms,
         Err(err) => die!("Couldn't load BMS file: %s", err)
     };
     bms::sanitize_bms(bms);
 
     // parses the key specification and further sanitizes `bms` with it
-    let keyspec = match player::key_spec(bms, opts) {
+    let keyspec = match engine::keyspec::key_spec(bms, opts.preset.clone(), opts.leftkeys.clone(),
+                                                  opts.rightkeys.clone()) {
         Ok(keyspec) => keyspec,
         Err(err) => die!("%s", err)
     };
-    bms::compact_bms(bms, keyspec);
+    engine::keyspec::compact_bms(bms, keyspec);
     let infos = ~bms::analyze_bms(bms);
 
     // applies the modifier if any
@@ -134,7 +139,10 @@ pub fn play(opts: ~ui::options::Options) {
         for opts.joystick.each |&joyidx| { player::init_joystick(joyidx); }
 
         // read the input mapping (dependent to the SDL initialization)
-        let keymap = ~player::read_keymap(keyspec, os::getenv);
+        let keymap = match engine::input::read_keymap(keyspec, os::getenv) {
+            Ok(map) => ~map,
+            Err(err) => die!("%s", err)
+        };
 
         // uncompress and populate the bitmap font.
         let mut font = ~util::bmfont::Font();
@@ -409,11 +417,12 @@ pub fn main() {
     match bmspath {
         None => { usage(); }
         Some(bmspath) => {
-            let opts = ~Options { bmspath: bmspath, mode: mode, modf: modf, bga: bga,
-                                  showinfo: showinfo, fullscreen: fullscreen, joystick: joystick,
-                                  preset: preset, leftkeys: leftkeys, rightkeys: rightkeys,
-                                  playspeed: playspeed };
-            play(opts);
+            let opts = ~Options {
+                mode: mode, modf: modf, bga: bga, showinfo: showinfo, fullscreen: fullscreen,
+                joystick: joystick, preset: preset, leftkeys: leftkeys, rightkeys: rightkeys,
+                playspeed: playspeed
+            };
+            play(bmspath, opts);
         }
     }
 }
