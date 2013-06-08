@@ -1,3 +1,9 @@
 [submodule "libs/rust-sdl"]
 	path = libs/rust-sdl
 	url = https://github.com/brson/rust-sdl.git
+[submodule "libs/rust-opengles"]
+	path = libs/rust-opengles
+	url = https://github.com/lifthrasiir/rust-opengles-angle.git
+[submodule "libs/w32api-directx-standalone"]
+	path = libs/w32api-directx-standalone
+	url = https://github.com/lifthrasiir/w32api-directx-standalone.git
