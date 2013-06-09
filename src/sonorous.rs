@@ -51,6 +51,7 @@
 #[cfg(not(legacy))] extern mod extra;
 #[cfg(not(legacy))] extern mod core (name = "std");
 extern mod sdl;
+extern mod opengles;
 
 use core::num::Round;
 
@@ -84,6 +85,7 @@ pub mod engine {
 #[macro_escape] pub mod ui {
     pub mod common;
     pub mod options;
+    pub mod screen;
     pub mod player;
 }
 
@@ -166,12 +168,12 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         let _ = saved_screen; // Rust: avoids incorrect warning. (#3796)
         let update_status;
         if !opts.is_exclusive() {
-            let screen_: &gfx::Surface = *screen.get_ref();
+            let screen_: &gfx::Surface = screen.get_ref().sdl_surface;
             player::show_stagefile_screen(bms, infos, keyspec, opts, screen_, font);
             if opts.showinfo {
                 saved_screen = Some(player::save_screen_for_loading(screen_));
                 update_status = |path| {
-                    let screen: &gfx::Surface = *screen.get_ref();
+                    let screen: &gfx::Surface = screen.get_ref().sdl_surface;
                     let saved_screen: &gfx::Surface = *saved_screen.get_ref();
                     player::graphic_update_status(path, screen, saved_screen,
                                                   font, &mut ticker, atexit)

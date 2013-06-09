@@ -10,6 +10,52 @@
  * the above copyright notice.
  */
 
+#[cfg(target_os = "win32")]
+pub mod syswm {
+    use core::libc::{HANDLE, INVALID_HANDLE_VALUE};
+
+    pub mod ll {
+        use core::libc::{HANDLE, c_int};
+
+        pub struct SDL_version {
+            major: u8,
+            minor: u8,
+            patch: u8
+        }
+
+        pub impl SDL_version {
+            fn new() -> SDL_version {
+                SDL_version { major: 1, minor: 2, patch: 14 }
+            }
+        }
+
+        pub struct SDL_SysWMinfo {
+            version: SDL_version,
+            window: HANDLE,
+            hglrc: HANDLE
+        }
+
+        pub extern {
+            fn SDL_GetWMInfo(info: *mut SDL_SysWMinfo) -> c_int;
+        }
+    }
+
+    pub fn get_wm_info() -> Option<ll::SDL_SysWMinfo> {
+        let mut wminfo = ll::SDL_SysWMinfo {
+            version: ll::SDL_version::new(),
+            window: INVALID_HANDLE_VALUE as HANDLE,
+            hglrc: INVALID_HANDLE_VALUE as HANDLE,
+        };
+        unsafe {
+            if ll::SDL_GetWMInfo(ptr::to_mut_unsafe_ptr(&mut wminfo)) == 0 {
+                None
+            } else {
+                Some(wminfo)
+            }
+        }
+    }
+}
+
 pub mod mixer {
     use core::libc::c_int;
 

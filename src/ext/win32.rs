@@ -11,6 +11,7 @@ pub mod ll {
     use core::libc::{BOOL, CHAR, WORD, DWORD, HANDLE, LPCSTR, LPWSTR, LPCWSTR};
 
     pub type HWND = HANDLE;
+    pub type HDC = HANDLE;
     pub type HINSTANCE = HANDLE;
 
     pub static OFN_HIDEREADONLY: DWORD = 4;
@@ -64,6 +65,7 @@ pub mod ll {
         fn FindFirstFileA(lpFileName: LPCSTR, lpFindFileData: *WIN32_FIND_DATAA) -> HANDLE;
         fn FindNextFileA(hFindFile: HANDLE, lpFindFileData: *WIN32_FIND_DATAA) -> BOOL;
         fn FindClose(hFindFile: HANDLE) -> BOOL;
+        fn LoadLibraryA(lpFileName: LPCSTR) -> HANDLE;
     }
 
     #[link_args = "-luser32"]
@@ -71,6 +73,7 @@ pub mod ll {
     pub extern "stdcall" {
         fn MessageBoxW(hWnd: HWND, lpText: LPCWSTR, lpCaption: LPCWSTR,
                        uType: c_uint) -> c_int;
+        fn GetDC(hwnd: HWND) -> HDC;
     }
 
     #[link_args = "-lcomdlg32"]
