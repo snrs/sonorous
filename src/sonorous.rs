@@ -65,8 +65,10 @@ use self::compat::core::str::*;
 pub mod compat;
 #[macro_escape] pub mod util {
     pub mod core;
+    pub mod macros;
     pub mod lex;
     pub mod gfx;
+    pub mod gl;
     pub mod bmfont;
     pub mod filesearch;
 }

@@ -5,6 +5,8 @@
 //! Abstracted graphical screen.
 
 use sdl::video;
+use gl = opengles::gl2;
+use glutil = util::gl;
 
 #[cfg(target_os="win32")] use opengles::egl;
 #[cfg(target_os="win32")] use ext::sdl::syswm;
@@ -47,11 +49,11 @@ pub impl GLState {
         return_on_err!(egl::initialize(display));
 
         let configattrs = [
-            (egl::RED_SIZE, 5),
-            (egl::GREEN_SIZE, 6),
-            (egl::BLUE_SIZE, 5),
-            (egl::ALPHA_SIZE, egl::DONT_CARE),
-            (egl::DEPTH_SIZE, egl::DONT_CARE),
+            (egl::RED_SIZE, 8),
+            (egl::GREEN_SIZE, 8),
+            (egl::BLUE_SIZE, 8),
+            (egl::ALPHA_SIZE, 8),
+            (egl::DEPTH_SIZE, 16),
             (egl::STENCIL_SIZE, egl::DONT_CARE),
             (egl::SAMPLE_BUFFERS, 0),
         ];
@@ -82,6 +84,16 @@ pub impl GLState {
     }
 }
 
+#[cfg(target_os="win32")]
+impl Drop for GLState {
+    fn finalize(&self) {
+        match egl::terminate(self.egl_display) {
+            Ok(()) => {}
+            Err(err) => fail!(fmt!("EGL error 0x%x", err as uint))
+        }
+    }
+}
+
 /// OpenGL state. This corresponds to EGL context in Windows; in the other platforms the global SDL
 /// context handles this so there is no additional state.
 #[cfg(not(target_os="win32"))]
@@ -104,7 +116,11 @@ pub struct Screen {
     /// SDL surface returned by `sdl::video::set_video_mode`.
     sdl_surface: ~video::Surface,
     /// OpenGL state if required.
-    glstate: GLState
+    glstate: GLState,
+    /// OpenGL program for non-textured triangles.
+    program_for_shades: glutil::ProgramForShades,
+    /// OpenGL program for textured triangles.
+    program_for_textures: glutil::ProgramForTextures,
 }
 
 pub impl Screen {
@@ -119,15 +135,41 @@ pub impl Screen {
             videoflags = &[video::DoubleBuf];
         }
 
-        do video::set_video_mode(width as int, height as int, 32,
-                                 surfaceflags, videoflags).chain |screen| {
-            // Rust: double `chain` doesn't work here. (#4654?)
-            match GLState::new() {
-                Ok(glstate) => Ok(Screen { width: width, height: height,
-                                           sdl_surface: screen, glstate: glstate }),
-                Err(err) => Err(err)
-            }
-        }
+        let screen = earlyexit!(video::set_video_mode(width as int, height as int, 32,
+                                                      surfaceflags, videoflags));
+        let glstate = earlyexit!(GLState::new());
+
+        gl::enable(gl::BLEND);
+        gl::blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        gl::clear_color(0.0, 0.0, 0.0, 0.0);
+
+        let l = 0.0, r = width as f32, t = 0.0, b = height as f32, f = 1.0, n = -1.0;
+        let projection = [
+            2.0/(r-l),    0.0,          0.0,          0.0,
+            0.0,          2.0/(t-b),    0.0,          0.0,
+            0.0,          0.0,          -2.0/(f-n),   0.0,
+            -(r+l)/(r-l), -(t+b)/(t-b), -(f+n)/(f-n), 1.0,
+        ];
+        let local_transform = [
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0,
+        ];
+
+        // initialize shaders
+        let program_for_shades = earlyexit!(glutil::ProgramForShades::new());
+        let program_for_textures = earlyexit!(glutil::ProgramForTextures::new());
+        program_for_shades.bind();
+        program_for_shades.projection.set_matrix_4f(false, projection);
+        program_for_shades.local_transform.set_matrix_3f(false, local_transform);
+        program_for_textures.bind();
+        program_for_textures.projection.set_matrix_4f(false, projection);
+        program_for_textures.local_transform.set_matrix_3f(false, local_transform);
+        program_for_textures.sampler.set_1i(0);
+
+        Ok(Screen { width: width, height: height, sdl_surface: screen, glstate: glstate,
+                    program_for_shades: program_for_shades,
+                    program_for_textures: program_for_textures })
     }
 
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
