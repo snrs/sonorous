@@ -129,10 +129,10 @@ pub impl Screen {
         let surfaceflags, videoflags;
         if fullscreen {
             surfaceflags = &[];
-            videoflags = &[video::Fullscreen];
+            videoflags = &[video::Fullscreen, video::OpenGL];
         } else {
             surfaceflags = &[video::SWSurface];
-            videoflags = &[video::DoubleBuf];
+            videoflags = &[video::DoubleBuf, video::OpenGL];
         }
 
         let screen = earlyexit!(video::set_video_mode(width as int, height as int, 32,
