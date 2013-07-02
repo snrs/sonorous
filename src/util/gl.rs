@@ -189,15 +189,22 @@ pub impl Program {
     }
 }
 
+/// OpenGL program for shaded triangles. See also `ShadedDrawing`.
 pub struct ProgramForShades {
+    /// Compiled and linked program.
     program: Program,
+    /// Vertex position attribute.
     vertex_position: AttribLoc,
+    /// Color attribute.
     color: AttribLoc,
+    /// Local transform (i.e. three-dimensional Affine transform) uniform.
     local_transform: UniformLoc,
+    /// Projection (i.e. four-dimensional 2D projection) uniform.
     projection: UniformLoc,
 }
 
 pub impl ProgramForShades {
+    /// Compiles and links the program.
     fn new() -> Result<ProgramForShades,~str> {
         let vertex_code = stringify!(
             attribute vec2 vertex_position_in;
@@ -240,21 +247,30 @@ pub impl ProgramForShades {
         })
     }
 
+    /// Binds the program to the current OpenGL context.
     fn bind(&self) {
         self.program.bind();
     }
 }
 
+/// OpenGL program for textured triangles. See also `TexturedDrawing`.
 pub struct ProgramForTextures {
+    /// Compiled and linked program.
     program: Program,
+    /// Vertex position attribute.
     vertex_position: AttribLoc,
+    /// Texture coordinate attribute.
     texture_coord: AttribLoc,
+    /// Local transform (i.e. three-dimensional Affine transform) uniform.
     local_transform: UniformLoc,
+    /// Projection (i.e. four-dimensional 2D projection) uniform.
     projection: UniformLoc,
+    /// Texture uniform.
     sampler: UniformLoc,
 }
 
 pub impl ProgramForTextures {
+    /// Compiles and links the program.
     fn new() -> Result<ProgramForTextures,~str> {
         let vertex_code = stringify!(
             attribute vec2 vertex_position_in;
@@ -300,6 +316,7 @@ pub impl ProgramForTextures {
         })
     }
 
+    /// Binds the program to the current OpenGL context.
     fn bind(&self) {
         self.program.bind();
     }
@@ -342,7 +359,7 @@ fn prepare_surface_for_texture(surface: ~video::Surface)
     }
 }
 
-/// Texture.
+/// OpenGL texture.
 pub struct Texture {
     /// OpenGL reference to the texture.
     index: GLuint,
@@ -359,11 +376,16 @@ impl Drop for Texture {
 }
 
 pub impl Texture {
+    /// Creates a new texture with given intrinsic dimension, which is only used for convenience
+    /// in `*Drawing` interfaces.
     fn new(width: uint, height: uint) -> Result<Texture,~str> {
         let texture = gl::gen_textures(1)[0];
         Ok(Texture { index: texture, width: width, height: height })
     }
 
+    /// Creates a new texture from an SDL surface, which is destroyed after the upload. `xwrap` and
+    /// `ywrap` specifies whether the texture should wrap in horizontal or vertical directions or
+    /// not.
     fn from_owned_surface(surface: ~video::Surface,
                           xwrap: bool, ywrap: bool) -> Result<Texture,~str> {
         let (width, height) = surface.get_size();
@@ -374,12 +396,16 @@ pub impl Texture {
         }
     }
 
+    /// Binds the texture to the current OpenGL context.
     fn bind(&self, target: int) {
         let texenum = gl::TEXTURE0 + target as GLenum;
         gl::active_texture(texenum);
         gl::bind_texture(gl::TEXTURE_2D, self.index);
     }
 
+    /// Uploads an SDL surface, which may be converted to the suitable format. If the conversion
+    /// fails the original surface is returned with an error string. `xwrap` and `ywrap` specifies
+    /// whether the texture should wrap in horizontal or vertical directions or not.
     fn upload_surface(&self, surface: ~video::Surface, xwrap: bool, ywrap: bool) ->
                                     Result<~video::Surface,(~video::Surface,~str)> {
         let surface = earlyexit!(prepare_surface_for_texture(surface));
@@ -404,31 +430,61 @@ pub impl Texture {
     }
 }
 
-pub struct Drawing {
-    vbo: GLuint,
+/// OpenGL vertex buffer object.
+pub struct Buffer {
+    /// OpenGL reference to the VBO.
+    index: GLuint,
 }
 
-pub impl Drawing {
-    fn new() -> Drawing {
+impl Drop for Buffer {
+    fn finalize(&self) {
+        gl::delete_buffers(&[self.index]);
+    }
+}
+
+pub impl Buffer {
+    /// Creates a new vertex buffer object.
+    fn new() -> Buffer {
         let vbo = gl::gen_buffers(1)[0];
-        Drawing { vbo: vbo }
+        Buffer { index: vbo }
     }
 
-    fn shaded(&self, program: &ProgramForShades, prim: GLenum,
-              f: &fn(add: &fn(x: f32, y: f32, c: video::Color))) {
-        let mut vertices: ~[(f32,f32,u8,u8,u8,u8)] = ~[];
-        let add = |x: f32, y: f32, c: video::Color| {
-            let (r, g, b, a) = match c {
-                video::RGB(r,g,b) => (r, g, b, 255),
-                video::RGBA(r,g,b,a) => (r, g, b, a)
-            };
-            vertices.push((x, y, r, g, b, a));
+    /// Binds the VBO to the current OpenGL context.
+    fn bind(&self) {
+        gl::bind_buffer(gl::ARRAY_BUFFER, self.index);
+    }
+
+    /// Uploads a data to the VBO.
+    fn upload<T>(&self, data: &[T], usage: GLenum) {
+        gl::buffer_data(gl::ARRAY_BUFFER, data, usage);
+    }
+}
+
+/// A state for non-immediate shaded rendering. This is not intended for the general use, see
+/// `ui::screen::Screen::draw_shaded` for the initial invocation.
+pub struct ShadedDrawing {
+    vertices: ~[(f32,f32,u8,u8,u8,u8)],
+}
+
+pub impl ShadedDrawing {
+    /// Creates a new state.
+    fn new() -> ShadedDrawing {
+        ShadedDrawing { vertices: ~[] }
+    }
+
+    /// Adds a point to the state.
+    fn point(&mut self, x: f32, y: f32, c: video::Color) {
+        let (r, g, b, a) = match c {
+            video::RGB(r,g,b) => (r, g, b, 255),
+            video::RGBA(r,g,b,a) => (r, g, b, a)
         };
+        self.vertices.push((x, y, r, g, b, a));
+    }
 
-        f(add);
-
+    /// Draws specified primitives. The suitable program and scratch VBO should be supplied.
+    fn draw_prim(~self, program: &ProgramForShades, buffer: &Buffer, prim: GLenum) {
         program.bind();
-        gl::bind_buffer(gl::ARRAY_BUFFER, self.vbo);
+        buffer.bind();
 
         // TODO there is no `offsetof` or similar
         let rowsize = sys::size_of::<(f32,f32,u8,u8,u8,u8)>() as GLint;
@@ -436,23 +492,53 @@ pub impl Drawing {
         program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
         program.color.define_pointer_u8(4, true, rowsize, coloroffset);
 
-        gl::buffer_data(gl::ARRAY_BUFFER, vertices, gl::DYNAMIC_DRAW);
-        gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
+        buffer.upload(self.vertices, gl::DYNAMIC_DRAW);
+        gl::draw_arrays(prim, 0, self.vertices.len() as GLsizei);
     }
+}
 
-    fn textured(&self, program: &ProgramForTextures, texture: &Texture, prim: GLenum,
-                f: &fn(add: &fn(x: f32, y: f32, s: f32, t: f32))) {
-        let mut vertices: ~[(f32,f32,f32,f32)] = ~[];
+/// A state for non-immediate textured rendering. This is not intended for the general use, see
+/// `ui::screen::Screen::draw_textured` for the initial invocation.
+pub struct TexturedDrawing {
+    width_recip: f32,
+    height_recip: f32,
+    vertices: ~[(f32,f32,f32,f32)],
+}
+
+pub impl TexturedDrawing {
+    /// Creates a new state. A texture is required for pixel specification.
+    fn new(texture: &Texture) -> TexturedDrawing {
         let width_recip = 1.0 / (texture.width as f32);
         let height_recip = 1.0 / (texture.height as f32);
-        let add = |x: f32, y: f32, s: f32, t: f32| {
-            vertices.push((x, y, s * width_recip, t * height_recip));
-        };
+        TexturedDrawing { width_recip: width_recip, height_recip: height_recip, vertices: ~[] }
+    }
 
-        f(add);
+    /// Adds a point to the state.
+    fn point(&mut self, x: f32, y: f32, s: f32, t: f32) {
+        self.vertices.push((x, y, s * self.width_recip, t * self.height_recip));
+    }
 
+    /// Adds four points of the rectangle to the state.
+    fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, s1: f32, t1: f32, s2: f32, t2: f32) {
+        let s1 = s1 * self.width_recip, t1 = t1 * self.height_recip;
+        let s2 = s2 * self.width_recip, t2 = t2 * self.height_recip;
+        self.vertices.push_all([(x1, y1, s1, t1), (x1, y2, s1, t2),
+                                (x2, y2, s2, t2), (x2, y1, s2, t1)]);
+    }
+
+    /// Adds four points of the rectangle to the state, where the whole texture is used for that
+    /// rectangle.
+    fn rect_whole(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+        self.vertices.push_all([(x1, y1, 0.0, 0.0), (x1, y2, 0.0, 1.0),
+                                (x2, y2, 1.0, 1.0), (x2, y1, 1.0, 0.0)]);
+    }
+
+    /// Draws specified primitives with given texture. The suitable program and scratch VBO
+    /// should be supplied.
+    fn draw_prim(~self, program: &ProgramForTextures, buffer: &Buffer, texture: &Texture,
+                 prim: GLenum) {
         program.bind();
-        gl::bind_buffer(gl::ARRAY_BUFFER, self.vbo);
+        buffer.bind();
 
         // TODO there is no `offsetof` or similar
         let rowsize = sys::size_of::<(f32,f32,f32,f32)>() as GLint;
@@ -462,14 +548,8 @@ pub impl Drawing {
         program.sampler.set_1i(0);
         texture.bind(0);
 
-        gl::buffer_data(gl::ARRAY_BUFFER, vertices, gl::DYNAMIC_DRAW);
-        gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
-    }
-}
-
-impl Drop for Drawing {
-    fn finalize(&self) {
-        gl::delete_buffers([self.vbo]);
+        buffer.upload(self.vertices, gl::DYNAMIC_DRAW);
+        gl::draw_arrays(prim, 0, self.vertices.len() as GLsizei);
     }
 }
 
