@@ -4,11 +4,34 @@
 
 //! Bitmap font.
 
-use std::{uint, vec};
+use std::{int, uint, vec};
 use util::gfx::*;
+use gl = opengles::gl2;
+use glutil = util::gl;
+
+/// Intrinsic width of the bitmap font.
+pub static NCOLUMNS: uint = 8;
+
+/// Intrinsic height of the bitmap font.
+pub static NROWS: uint = 16;
 
 /// Bit vector which represents one row of zoomed font.
 type ZoomedFontRow = u32;
+
+/**
+ * A polygon that makes the font glyph up.
+ *
+ * Specifically: It is a (possibly) concave polygon with corners `(x11,y1)`, `(x12,y1)`,
+ * `(xm2-e2,ym)`, `(x22,y2)`, `(x21,y2)` and `(xm1+e1,ym)`. `ym` is an avarage of `y1` and `y2`.
+ * `e1` is zero if `x11 == xm1 == x21` or a zoom-independent small bias (typically 1/8th of a pixel)
+ * otherwise, and `e2` is defined in the same way. All coordinates have a unit of half-pixel, and
+ * the associated colors are automatically calculated from y coordinates.
+ */
+struct FontPolygon {
+    x11: int, x12: int, y1: int,
+    xm1: int, xm2: int,
+    x21: int, x22: int, y2: int,
+}
 
 /// 8x16 resizable bitmap font.
 pub struct Font {
@@ -23,8 +46,8 @@ pub struct Font {
      *
      * - 1: the lower right triangle of the zoomed pixel should be drawn.
      * - 2: the lower left triangle of the zoomed pixel should be drawn.
-     * - 4: the upper left triangle of the zoomed pixel should be drawn.
-     * - 8: the upper right triangle of the zoomed pixel should be drawn.
+     * - 4: the upper right triangle of the zoomed pixel should be drawn.
+     * - 8: the upper left triangle of the zoomed pixel should be drawn.
      *
      * So for example, if the group bits read 3 (1+2), the zoomed pixel would be drawn
      * as follows (in the zoom factor 5):
@@ -43,7 +66,10 @@ pub struct Font {
     /// Precalculated zoomed font per zoom factor. It is three-dimensional array which indices
     /// are zoom factor, glyph number and row respectively. Assumes that each element has
     /// at least zoom factor times 8 (columns per row) bits. (C: `zoomfont`)
-    pixels: ~[~[~[ZoomedFontRow]]]
+    pixels: ~[~[~[ZoomedFontRow]]],
+
+    /// Precalculated polygons for glyphs.
+    polygons: ~[~[FontPolygon]],
 }
 
 /// An alignment mode of `Font::print_string`.
@@ -117,21 +143,106 @@ pub fn Font() -> Font {
         glyphs
     }
 
+    /// Calculates polygons for given glyph data.
+    fn calculate_polygons(rows: &[u16], width: uint) -> ~[FontPolygon] {
+        assert!(rows.len() % 2 == 0);
+
+        let mut polygons = ~[];
+        let mut y = 0;
+        while y < rows.len() {
+            let mut data = (rows[y] as u32 << 16) | (rows[y+1] as u32);
+            let y1 = y as int;
+            y += 2;
+
+            // optimization: if the row only consists of fully filled pixels, and the subsequent
+            // rows are identical, then we treat them as one row.
+            if (data & 0x11111111) * 0xf == data {
+                while y < rows.len() && data == (rows[y] as u32 << 16) | (rows[y+1] as u32) {
+                    y += 2;
+                }
+            }
+            let y2 = y as int;
+
+            // the algorithm operates a per-row basis, and extracts runs of valid `FontPolygon`s
+            // from given row data. (polygons may overlap, this is fine for our purpose.)
+            let mut cur: Option<FontPolygon> = None;
+            for int::range_step(0, (width + 1) * 2 as int, 2) |x| { // with a sentinel
+                let mut v = data & 15;
+                data >>= 4;
+
+                if v & (1|8) == (1|8) || v & (2|4) == (2|4) { // completely filled
+                    if cur.is_some() {
+                        let mut polygon = cur.swap_unwrap();
+                        polygon.x12 += 2;
+                        polygon.xm2 += 2;
+                        polygon.x22 += 2;
+                        cur = Some(polygon);
+                    } else {
+                        cur = Some(FontPolygon { x11: x, x12: x + 2, y1: y1,
+                                                 xm1: x, xm2: x + 2,
+                                                 x21: x, x22: x + 2, y2: y2 });
+                    }
+                } else {
+                    if v & (2|8) != 0 && cur.is_some() { // has left-side edge
+                        let dx12 = if v & 8 != 0 {2} else {0};
+                        let dxm2 = 1;
+                        let dx22 = if v & 2 != 0 {2} else {0};
+                        if cur.is_some() {
+                            let mut polygon = cur.swap_unwrap();
+                            polygon.x12 += dx12;
+                            polygon.xm2 += dxm2;
+                            polygon.x22 += dx22;
+                            polygons.push(polygon);
+                        } else {
+                            // this polygon can't connect to the right side anyway,
+                            // so flush immediately.
+                            polygons.push(FontPolygon { x11: x, x12: x + dx12, y1: y1,
+                                                        xm1: x, xm2: x + dxm2,
+                                                        x21: x, x22: x + dx22, y2: y2 });
+                        }
+                        v &= !(2|8);
+                    }
+
+                    // now we have cleared the left side, any remaining polygon should be flushed.
+                    if cur.is_some() {
+                        polygons.push(cur.swap_unwrap());
+                    }
+
+                    if v & (1|4) != 0 { // has right-side edge, add a new polygon
+                        let dx11 = if v & 4 != 0 {0} else {2};
+                        let dxm1 = 1;
+                        let dx21 = if v & 1 != 0 {0} else {2};
+                        cur = Some(FontPolygon { x11: x + dx11, x12: x + 2, y1: y1,
+                                                 xm1: x + dxm1, xm2: x + 2,
+                                                 x21: x + dx21, x22: x + 2, y2: y2 });
+                    }
+                }
+            }
+        }
+
+        polygons
+    }
+
     let glyphs = decompress(dwords, indices);
     assert!(glyphs.len() == 3072);
-    Font { glyphs: glyphs, pixels: ~[] }
+
+    let mut polygons = ~[];
+    for uint::range_step(0, glyphs.len(), NROWS * 2 as int) |base| {
+        polygons.push(calculate_polygons(glyphs.slice(base, base + NROWS * 2), NCOLUMNS));
+    }
+
+    Font { glyphs: glyphs, pixels: ~[], polygons: polygons }
 }
 
 impl Font {
     /// Creates a zoomed font of scale `zoom`. (C: `fontprocess`)
     pub fn create_zoomed_font(&mut self, zoom: uint) {
         assert!(zoom > 0);
-        assert!(zoom <= (8 * ::std::sys::size_of::<ZoomedFontRow>()) / 8);
+        assert!(zoom <= (8 * ::std::sys::size_of::<ZoomedFontRow>()) / NCOLUMNS);
         if zoom < self.pixels.len() && !self.pixels[zoom].is_empty() { return; }
 
-        let nrows = 16;
-        let nglyphs = self.glyphs.len() / nrows / 2;
-        let mut pixels = vec::from_elem(nglyphs, vec::from_elem(zoom*nrows, 0));
+        let nglyphs = self.glyphs.len() / (NROWS * 2);
+        let mut pixels = vec::from_elem(nglyphs, vec::from_elem(zoom * NROWS, 0));
 
         let put_zoomed_pixel = |glyph: uint, row: uint, col: uint, v: u32| {
             let zoomrow = row * zoom;
@@ -156,10 +267,10 @@ impl Font {
 
         let mut i = 0;
         for uint::range(0, nglyphs) |glyph| {
-            for uint::range(0, nrows) |row| {
+            for uint::range(0, NROWS) |row| {
                 let data = (self.glyphs[i] as u32 << 16) | (self.glyphs[i+1] as u32);
                 i += 2;
-                for uint::range(0, 8) |col| {
+                for uint::range(0, NCOLUMNS) |col| {
                     let v = (data >> (4 * col)) & 15;
                     put_zoomed_pixel(glyph, row, col, v);
                 }
@@ -174,12 +285,61 @@ impl Font {
     pub fn print_glyph<ColorT:Blend+Copy>(&self, pixels: &mut SurfacePixels, x: uint, y: uint,
                                           zoom: uint, glyph: uint, color: ColorT) { // XXX #3984
         assert!(!self.pixels[zoom].is_empty());
-        for uint::range(0, 16 * zoom) |iy| {
+        for uint::range(0, NROWS * zoom) |iy| {
             let row = self.pixels[zoom][glyph][iy];
-            let rowcolor = color.blend(iy as int, 16 * zoom as int);
+            let rowcolor = color.blend(iy as int, NROWS * zoom as int);
             for uint::range(0, 8 * zoom) |ix| {
                 if ((row >> ix) & 1) != 0 {
                     put_pixel(pixels, x + ix, y + iy, rowcolor); // XXX incorrect lifetime
+                }
+            }
+        }
+    }
+
+    /// Draws a glyph with given position and color (possibly gradient). This method is
+    /// distinct from `draw_glyph` since the glyph #95 is used for the tick marker
+    /// (character code -1 in C). (C: `printchar`)
+    pub fn draw_glyph<ColorT:Blend+Copy>(&self, d: &mut glutil::ShadedDrawing, x: f32, y: f32,
+                                         zoom: f32, glyph: uint, color: ColorT) { // XXX #3984
+        assert!(zoom > 0.0);
+        assert!(d.prim == gl::TRIANGLES);
+        let zoom = zoom * 0.5;
+        for self.polygons[glyph].iter().advance |&polygon| {
+            let flat1 = (polygon.x11 == polygon.xm1 && polygon.xm1 == polygon.x21);
+            let flat2 = (polygon.x12 == polygon.xm2 && polygon.xm2 == polygon.x22);
+            let x11 = x + polygon.x11 as f32 * zoom;
+            let x12 = x + polygon.x12 as f32 * zoom;
+            let x21 = x + polygon.x21 as f32 * zoom;
+            let x22 = x + polygon.x22 as f32 * zoom;
+            let y1 = y + polygon.y1 as f32 * zoom;
+            let y2 = y + polygon.y2 as f32 * zoom;
+            let cy1 = to_rgba(color.blend(polygon.y1, NROWS * 2 as int));
+            let cy2 = to_rgba(color.blend(polygon.y2, NROWS * 2 as int));
+            if flat1 && flat2 {
+                d.point_rgba(x11,y1,cy1); d.point_rgba(x12,y1,cy1); d.point_rgba(x22,y2,cy2);
+                d.point_rgba(x11,y1,cy1); d.point_rgba(x22,y2,cy2); d.point_rgba(x21,y2,cy2);
+            } else {
+                let ym_ = (polygon.y1 + polygon.y2) / 2;
+                let ym = y + ym_ as f32 * zoom;
+                let cym = to_rgba(color.blend(ym_, NROWS * 2 as int));
+                if flat1 {
+                    assert!(!flat2);
+                    let xm2 = x + polygon.xm2 as f32 * zoom - 0.125;
+                    d.point_rgba(x11,y1,cy1); d.point_rgba(x12,y1,cy1); d.point_rgba(xm2,ym,cym);
+                    d.point_rgba(x11,y1,cy1); d.point_rgba(xm2,ym,cym); d.point_rgba(x21,y2,cy2);
+                    d.point_rgba(xm2,ym,cym); d.point_rgba(x22,y2,cy2); d.point_rgba(x21,y2,cy2);
+                } else if flat2 {
+                    let xm1 = x + polygon.xm1 as f32 * zoom + 0.125;
+                    d.point_rgba(x11,y1,cy1); d.point_rgba(x12,y1,cy1); d.point_rgba(xm1,ym,cym);
+                    d.point_rgba(x12,y1,cy1); d.point_rgba(x22,y2,cy2); d.point_rgba(xm1,ym,cym);
+                    d.point_rgba(xm1,ym,cym); d.point_rgba(x22,y2,cy2); d.point_rgba(x21,y2,cy2);
+                } else {
+                    let xm1 = x + polygon.xm1 as f32 * zoom + 0.125;
+                    let xm2 = x + polygon.xm2 as f32 * zoom - 0.125;
+                    d.point_rgba(x11,y1,cy1); d.point_rgba(x12,y1,cy1); d.point_rgba(xm2,ym,cym);
+                    d.point_rgba(x11,y1,cy1); d.point_rgba(xm2,ym,cym); d.point_rgba(xm1,ym,cym);
+                    d.point_rgba(xm1,ym,cym); d.point_rgba(xm2,ym,cym); d.point_rgba(x22,y2,cy2);
+                    d.point_rgba(xm1,ym,cym); d.point_rgba(x22,y2,cy2); d.point_rgba(x21,y2,cy2);
                 }
             }
         }
@@ -195,20 +355,45 @@ impl Font {
         }
     }
 
+    /// Draws a character with given position and color.
+    pub fn draw_char<ColorT:Blend+Copy>(&self, d: &mut glutil::ShadedDrawing, x: f32, y: f32,
+                                        zoom: f32, c: char, color: ColorT) { // XXX #3984
+        if !c.is_whitespace() {
+            let c = c as uint;
+            let glyph = if 32 <= c && c < 126 {c-32} else {0};
+            self.draw_glyph(d, x, y, zoom, glyph, color);
+        }
+    }
+
     /// Prints a string with given position, alignment and color. (C: `printstr`)
     pub fn print_string<ColorT:Blend+Copy>(&self, pixels: &mut SurfacePixels, x: uint, y: uint,
                                            zoom: uint, align: Alignment, s: &str,
                                            color: ColorT) { // XXX #3984
         let mut x = match align {
             LeftAligned  => x,
-            Centered     => x - s.char_len() * (8 * zoom) / 2,
-            RightAligned => x - s.char_len() * (8 * zoom),
+            Centered     => x - s.char_len() * (NCOLUMNS * zoom) / 2,
+            RightAligned => x - s.char_len() * (NCOLUMNS * zoom),
         };
         for s.iter().advance |c| {
-            let nextx = x + 8 * zoom;
+            let nextx = x + NCOLUMNS * zoom;
             if nextx >= pixels.width { break; }
             self.print_char(pixels, x, y, zoom, c, copy color);
             x = nextx;
+        }
+    }
+
+    /// Draws a string with given position, alignment and color. (C: `printstr`)
+    pub fn draw_string<ColorT:Blend+Copy>(&self, d: &mut glutil::ShadedDrawing, x: f32, y: f32,
+                                          zoom: f32, align: Alignment, s: &str,
+                                          color: ColorT) { // XXX #3984
+        let mut x = match align {
+            LeftAligned  => x,
+            Centered     => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom) / 2.0,
+            RightAligned => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom),
+        };
+        for s.iter().advance |c| {
+            self.draw_char(d, x, y, zoom, c, copy color);
+            x += NCOLUMNS as f32 * zoom;
         }
     }
 }

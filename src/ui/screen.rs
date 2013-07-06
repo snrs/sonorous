@@ -152,6 +152,7 @@ impl Screen {
         let glstate = earlyexit!(GLState::new());
 
         gl::enable(gl::BLEND);
+        gl::enable(gl::POLYGON_SMOOTH);
         gl::blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         gl::clear_color(0.0, 0.0, 0.0, 0.0);
 
@@ -195,21 +196,33 @@ impl Screen {
         gl::clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     }
 
+    /// Draws shaded primitives to the screen. The block receives a mutable reference to
+    /// `util::gl::ShadedDrawing`, to which it should add points.
+    pub fn draw_shaded_prim(&self, prim: gl::GLenum, f: &fn(&mut glutil::ShadedDrawing)) {
+        let mut drawing = ~glutil::ShadedDrawing::new(prim);
+        f(&mut *drawing);
+        drawing.draw_prim(&self.program_for_shades, &self.buffer);
+    }
+
     /// Draws shaded triangles to the screen. The block receives a mutable reference to
     /// `util::gl::ShadedDrawing`, to which it should add points.
-    pub fn draw_shaded(&self, prim: gl::GLenum, f: &fn(&mut glutil::ShadedDrawing)) {
-        let mut drawing = ~glutil::ShadedDrawing::new();
+    pub fn draw_shaded(&self, f: &fn(&mut glutil::ShadedDrawing)) {
+        self.draw_shaded_prim(gl::TRIANGLES, f)
+    }
+
+    /// Draws textured primitives to the screen. The block receives a mutable reference to
+    /// `util::gl::TexturedDrawing`, to which it should add points.
+    pub fn draw_textured_prim(&self, prim: gl::GLenum, texture: &glutil::Texture,
+                              f: &fn(&mut glutil::TexturedDrawing)) {
+        let mut drawing = ~glutil::TexturedDrawing::new(prim, texture);
         f(&mut *drawing);
-        drawing.draw_prim(&self.program_for_shades, &self.buffer, prim);
+        drawing.draw_prim(&self.program_for_textures, &self.buffer, texture);
     }
 
     /// Draws textured triangles to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
-    pub fn draw_textured(&self, prim: gl::GLenum, texture: &glutil::Texture,
-                     f: &fn(&mut glutil::TexturedDrawing)) {
-        let mut drawing = ~glutil::TexturedDrawing::new(texture);
-        f(&mut *drawing);
-        drawing.draw_prim(&self.program_for_textures, &self.buffer, texture, prim);
+    pub fn draw_textured(&self, texture: &glutil::Texture, f: &fn(&mut glutil::TexturedDrawing)) {
+        self.draw_textured_prim(gl::TRIANGLES, texture, f)
     }
 }
 

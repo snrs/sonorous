@@ -4,7 +4,6 @@
 
 //! Graphic utilities.
 
-use std::{int, num};
 use sdl::Rect;
 pub use sdl::video::*;
 
@@ -214,8 +213,14 @@ impl SurfaceAreaUtil for Surface {
 // color
 
 /// Extracts red, green, blue components from given color.
-fn to_rgb(c: Color) -> (u8, u8, u8) {
+pub fn to_rgb(c: Color) -> (u8, u8, u8) {
     match c { RGB(r, g, b) | RGBA(r, g, b, _) => (r, g, b) }
+}
+
+/// Extracts red, green, blue and alpha components from given color. A color without alpha is
+/// assumed to be totally opaque.
+pub fn to_rgba(c: Color) -> (u8, u8, u8, u8) {
+    match c { RGB(r, g, b) => (r, g, b, 255), RGBA(r, g, b, a) => (r, g, b, a) }
 }
 
 /// Linear color gradient.
@@ -335,94 +340,6 @@ impl<'self> SurfacePixels<'self> {
     /// Sets or blends (if `c` is `RGBA`) a pixel to given position. (C: `putblendedpixel`)
     pub fn put_blended_pixel(&mut self, x: uint, y: uint, c: Color) {
         put_blended_pixel(self, x, y, c)
-    }
-}
-
-/// A scaling factor for the calculation of convolution kernel.
-static FP_SHIFT1: int = 11;
-/// A scaling factor for the summation of weighted pixels.
-static FP_SHIFT2: int = 16;
-
-/// Returns `2^FP_SHIFT * W(x/y)` where `W(x)` is a bicubic kernel function. `y` should be
-/// positive. (C: `bicubic_kernel`)
-fn bicubic_kernel(x: int, y: int) -> int {
-    let x = num::abs(x);
-    if x < y {
-        // W(x/y) = 1/2 (2 - 5(x/y)^2 + 3(x/y)^3)
-        ((2*y*y - 5*x*x + 3*x*x/y*x) << (FP_SHIFT1-1)) / (y*y)
-    } else if x < y * 2 {
-        // W(x/y) = 1/2 (4 - 8(x/y) + 5(x/y)^2 - (x/y)^3)
-        ((4*y*y - 8*x*y + 5*x*x - x*x/y*x) << (FP_SHIFT1-1)) / (y*y)
-    } else {
-        0
-    }
-}
-
-/**
- * Performs the bicubic interpolation. `dest` should be initialized to the target dimension
- * before calling this function. This function should be used only for the upscaling; it can do
- * the downscaling somehow but technically its result is incorrect. (C: `bicubic_interpolation`)
- *
- * Well, this function is one of the ugliest functions in Angolmois, especially since it is
- * a complicated (in terms of code complexity) and still poor (we normally use the matrix form
- * instead) implementation of the algorithm. In fact, the original version of `bicubic_kernel`
- * had even a slightly incorrect curve (`1/2 - x^2 + 1/2 x^3` instead of `1 - 5/2 x^2 +
- * 3/2 x^3`). This function still remains here only because we don't use OpenGL...
- */
-pub fn bicubic_interpolation(src: &SurfacePixels, dest: &mut SurfacePixels) {
-    let w = dest.width as int - 1;
-    let h = dest.height as int - 1;
-    let ww = src.width as int - 1;
-    let hh = src.height as int - 1;
-
-    let mut dx = 0;
-    let mut x = 0;
-    for int::range(0, w + 1) |i| {
-        let mut dy = 0;
-        let mut y = 0;
-        for int::range(0, h + 1) |j| {
-            let mut r = 0;
-            let mut g = 0;
-            let mut b = 0;
-            let a0 = [bicubic_kernel((x-1) * w - i * ww, w),
-                      bicubic_kernel( x    * w - i * ww, w),
-                      bicubic_kernel((x+1) * w - i * ww, w),
-                      bicubic_kernel((x+2) * w - i * ww, w)];
-            let a1 = [bicubic_kernel((y-1) * h - j * hh, h),
-                      bicubic_kernel( y    * h - j * hh, h),
-                      bicubic_kernel((y+1) * h - j * hh, h),
-                      bicubic_kernel((y+2) * h - j * hh, h)];
-            for int::range(0, 4) |k0| {
-                for int::range(0, 4) |k1| {
-                    let xx = x + k0 - 1;
-                    let yy = y + k1 - 1;
-                    if 0 <= xx && xx <= ww && 0 <= yy && yy <= hh {
-                        let (r2,g2,b2) = to_rgb(src.get_pixel(xx as uint, yy as uint));
-                        let d = (a0[k0] * a1[k1]) >> (FP_SHIFT1*2 - FP_SHIFT2);
-                        r += r2 as int * d;
-                        g += g2 as int * d;
-                        b += b2 as int * d;
-                    }
-                }
-            }
-
-            let r = ::util::std::cmp::clamp(0, r >> FP_SHIFT2, 255) as u8;
-            let g = ::util::std::cmp::clamp(0, g >> FP_SHIFT2, 255) as u8;
-            let b = ::util::std::cmp::clamp(0, b >> FP_SHIFT2, 255) as u8;
-            put_pixel(dest, i as uint, j as uint, RGB(r, g, b)); // XXX incorrect lifetime
-
-            dy += hh;
-            if dy > h {
-                y += 1;
-                dy -= h;
-            }
-        }
-
-        dx += ww;
-        if dx > w {
-            x += 1;
-            dx -= w;
-        }
     }
 }
 

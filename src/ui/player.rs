@@ -16,6 +16,7 @@ use sdl::mixer::*;
 use ext::sdl::mixer::*;
 use ext::sdl::mpeg::*;
 use format::bms::*;
+use util::gl::{Texture};
 use util::gfx::*;
 use util::bmfont::*;
 use util::filesearch::resolve_relative_path;
@@ -394,6 +395,16 @@ impl BGAStateOps for BGAState {
 //----------------------------------------------------------------------------------------------
 // loading
 
+pub struct LoadingScene {
+    showinfo: bool,
+    meta: ~str,
+    title: ~str,
+    genre: ~str,
+    artist: ~str,
+    stagefile_path: Option<Path>,
+    stagefile_tex: Option<Texture>,
+}
+
 /// Returns the interface string common to the graphical and textual loading screen.
 fn displayed_info(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec) -> (~str, ~str, ~str, ~str) {
     let meta = fmt!("Level %d | BPM %.2f%s | %d note%s [%uKEY%s]",
@@ -406,53 +417,76 @@ fn displayed_info(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec) -> (~str, ~str,
     (meta, title, genre, artist)
 }
 
-/// Renders the graphical loading screen by blitting BMS #STAGEFILE image (if any) and showing
-/// the metadata. (C: `play_show_stagefile` when `opt_mode < EXCLUSIVE_MODE`)
-pub fn show_stagefile_screen(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec, opts: &Options,
-                             screen: &Surface, font: &Font) {
-    let (meta, title, genre, artist) = displayed_info(bms, infos, keyspec);
-
-    do screen.with_pixels |pixels| {
-        font.print_string(pixels, SCREENW/2, SCREENH/2-16, 2, Centered, "loading bms file...",
-                          Gradient(RGB(0x80,0x80,0x80), RGB(0x20,0x20,0x20)));
+impl LoadingScene {
+    /// Creates a state required for rendering the graphical loading screen.
+    pub fn new(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec, opts: &Options) -> LoadingScene {
+        let (meta, title, genre, artist) = displayed_info(bms, infos, keyspec);
+        let basedir = get_basedir(bms);
+        let stagefile_path = do bms.stagefile.chain_ref |&path| {
+            resolve_relative_path(&basedir, path, IMAGE_EXTS)
+        };
+        LoadingScene { showinfo: opts.showinfo, meta: meta, title: title, genre: genre,
+                       artist: artist, stagefile_path: stagefile_path, stagefile_tex: None }
     }
-    screen.flip();
 
-    do screen.with_pixels |pixels| {
-        for bms.stagefile.iter().advance |&path| {
-            let basedir = get_basedir(bms);
-            let resolved = resolve_relative_path(&basedir, path, IMAGE_EXTS); // XXX #3511
-            for resolved.iter().advance |&path| {
-                match img::load(&path).chain(|s| s.display_format()) {
-                    Ok(surface) => {
-                        do surface.with_pixels |srcpixels| {
-                            bicubic_interpolation(srcpixels, pixels);
-                        }
-                    }
-                    Err(_) => {}
-                }
+    /// Loads the BMS #STAGEFILE image and creates an OpenGL texture for it.
+    pub fn load_stagefile(&mut self) {
+        let path = match self.stagefile_path {
+            Some(ref path) => path.clone(),
+            None => { return; }
+        };
+
+        self.stagefile_tex = match img::load(&path) {
+            Ok(surface) => match Texture::from_owned_surface(surface, false, false) {
+                Ok(tex) => Some(tex),
+                Err(_) => None
+            },
+            Err(_) => None
+        };
+        if self.stagefile_tex.is_none() {
+            warn!("failed to load image #STAGEFILE (%s)", path.to_str());
+        }
+    }
+
+    /// Renders the graphical loading screen by blitting BMS #STAGEFILE image (if any) and showing
+    /// the metadata.
+    pub fn render(&self, screen: &Screen, font: &Font, msg: Option<~str>) {
+        let msg = msg.get_or_default(~"loading...");
+
+        screen.clear();
+
+        let W = SCREENW as f32;
+        let H = SCREENH as f32;
+
+        do screen.draw_shaded() |d| {
+            font.draw_string(d, W/2.0, H/2.0-16.0, 2.0, Centered, "loading bms file...",
+                             Gradient(RGB(0x80,0x80,0x80), RGB(0x20,0x20,0x20)));
+        }
+
+        if self.stagefile_tex.is_some() {
+            let tex = self.stagefile_tex.get_ref();
+            do screen.draw_textured(tex) |d| {
+                d.rect(0.0, 0.0, W, H);
             }
         }
 
-        if opts.showinfo {
-            let bg = RGBA(0x10,0x10,0x10,0x40);
+        if self.showinfo {
+            let bg = RGBA(0x10,0x10,0x10,0xc0);
             let fg = Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80));
-            for uint::range(0, SCREENW) |i| {
-                for uint::range(0, 42) |j| {
-                    put_blended_pixel(pixels, i, j, bg); // XXX incorrect lifetime
-                }
-                for uint::range(SCREENH-20, SCREENH) |j| {
-                    put_blended_pixel(pixels, i, j, bg); // XXX incorrect lifetime
-                }
+            do screen.draw_shaded() |d| {
+                d.rect(0.0, 0.0, W, 42.0, bg);
+                d.rect(0.0, H-20.0, W, H, bg);
+                font.draw_string(d, 6.0, 4.0, 2.0, LeftAligned, self.title, fg);
+                font.draw_string(d, W-8.0, 4.0, 1.0, RightAligned, self.genre, fg);
+                font.draw_string(d, W-8.0, 20.0, 1.0, RightAligned, self.artist, fg);
+                font.draw_string(d, 3.0, H-18.0, 1.0, LeftAligned, self.meta, fg);
+                font.draw_string(d, W-3.0, H-18.0, 1.0, RightAligned, msg,
+                                 Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x80,0x80,0x80)));
             }
-            font.print_string(pixels, 6, 4, 2, LeftAligned, title, fg);
-            font.print_string(pixels, SCREENW-8, 4, 1, RightAligned, genre, fg);
-            font.print_string(pixels, SCREENW-8, 20, 1, RightAligned, artist, fg);
-            font.print_string(pixels, 3, SCREENH-18, 1, LeftAligned, meta, fg);
         }
-    }
 
-    screen.flip();
+        screen.swap_buffers();
+    }
 }
 
 /// Renders the textual loading screen by printing the metadata.
@@ -501,19 +535,9 @@ pub fn load_resource(bms: &Bms, opts: &Options,
     (sndres, imgres)
 }
 
-/// Saves a portion of the screen for the use in `graphic_update_status`.
-pub fn save_screen_for_loading(screen: &Surface) -> ~Surface {
-    let saved_screen = match new_surface(SCREENW, 20) {
-        Ok(surface) => surface,
-        Err(err) => die!("new_surface failed: %s", err)
-    };
-    saved_screen.blit_area(screen, (0,SCREENH-20), (0,0), (SCREENW,20));
-    saved_screen
-}
-
 /// A callback template for `load_resource` with the graphical loading screen.
 /// (C: `resource_loaded`)
-pub fn graphic_update_status(path: Option<~str>, screen: &Surface, saved_screen: &Surface,
+pub fn graphic_update_status(path: Option<~str>, screen: &Screen, scene: &LoadingScene,
                              font: &Font, ticker: &mut Ticker, atexit: &fn()) {
     // Rust: `on_tick` calls the closure at most once so `path` won't be referenced twice,
     //       but the analysis can't reason that. (#4654) an "option dance" via
@@ -521,13 +545,7 @@ pub fn graphic_update_status(path: Option<~str>, screen: &Surface, saved_screen:
     let mut path = path; // XXX #4654
     do ticker.on_tick(get_ticks()) {
         let path = ::std::util::replace(&mut path, None); // XXX #4654
-        let msg = path.get_or_default(~"loading...");
-        screen.blit_at(saved_screen, 0, (SCREENH-20) as i16);
-        do screen.with_pixels |pixels| {
-            font.print_string(pixels, SCREENW-3, SCREENH-18, 1, RightAligned, msg,
-                              Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x80,0x80,0x80)));
-        }
-        screen.flip();
+        scene.render(screen, font, path);
     }
     check_exit(atexit);
 }

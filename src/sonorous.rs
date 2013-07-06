@@ -104,9 +104,9 @@ pub fn exename() -> ~str {
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop. (C: `play`)
 pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
-    use util::gfx;
     use format::bms;
     use ui::player;
+    use ui::screen::Screen;
 
     // parses the file and sanitizes it
     let mut r = std::rand::rng();
@@ -165,18 +165,21 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
 
         // render the loading screen
         let mut ticker = ui::common::Ticker();
-        let mut saved_screen = None; // XXX should be in a trait actually
-        let _ = saved_screen; // Rust: avoids incorrect warning. (#3796)
+        let mut loading_scene = None; // XXX should be in a trait actually
+        let _ = loading_scene; // Rust: avoids incorrect warning. (#3796)
         let update_status;
         if !opts.is_exclusive() {
-            let screen_: &gfx::Surface = screen.get_ref().sdl_surface;
-            player::show_stagefile_screen(bms, infos, keyspec, opts, screen_, font);
+            let screen_: &Screen = screen.get_ref();
+            let mut scene = player::LoadingScene::new(bms, infos, keyspec, opts);
+            scene.render(screen_, font, None);
+            scene.load_stagefile();
+            scene.render(screen_, font, None);
             if opts.showinfo {
-                saved_screen = Some(player::save_screen_for_loading(screen_));
+                loading_scene = Some(scene);
                 update_status = |path| {
-                    let screen: &gfx::Surface = screen.get_ref().sdl_surface;
-                    let saved_screen: &gfx::Surface = *saved_screen.get_ref();
-                    player::graphic_update_status(path, screen, saved_screen,
+                    let screen: &Screen = screen.get_ref();
+                    let loading_scene: &player::LoadingScene = loading_scene.get_ref();
+                    player::graphic_update_status(path, screen, loading_scene,
                                                   font, &mut ticker, || atexit()) // XXX #7363
                 };
             } else {
