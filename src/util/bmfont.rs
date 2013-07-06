@@ -4,6 +4,7 @@
 
 //! Bitmap font.
 
+use std::{uint, vec};
 use util::gfx::*;
 
 /// Bit vector which represents one row of zoomed font.
@@ -88,8 +89,8 @@ pub fn Font() -> Font {
     /// Decompresses a font data from `dwords` and `indices`. (C: `fontdecompress`)
     fn decompress(dwords: &[u16], indices: &str) -> ~[u16] {
         let mut words = ~[0];
-        for dwords.each |&delta| {
-            let last = {*words.last()}; // XXX #4666
+        for dwords.iter().advance |&delta| {
+            let last = *words.last();
             words.push(last + delta);
         }
 
@@ -121,11 +122,11 @@ pub fn Font() -> Font {
     Font { glyphs: glyphs, pixels: ~[] }
 }
 
-pub impl Font {
+impl Font {
     /// Creates a zoomed font of scale `zoom`. (C: `fontprocess`)
-    fn create_zoomed_font(&mut self, zoom: uint) {
+    pub fn create_zoomed_font(&mut self, zoom: uint) {
         assert!(zoom > 0);
-        assert!(zoom <= (8 * sys::size_of::<ZoomedFontRow>()) / 8);
+        assert!(zoom <= (8 * ::std::sys::size_of::<ZoomedFontRow>()) / 8);
         if zoom < self.pixels.len() && !self.pixels[zoom].is_empty() { return; }
 
         let nrows = 16;
@@ -187,7 +188,7 @@ pub impl Font {
     /// Prints a character with given position and color.
     pub fn print_char<ColorT:Blend+Copy>(&self, pixels: &mut SurfacePixels, x: uint, y: uint,
                                          zoom: uint, c: char, color: ColorT) { // XXX #3984
-        if !char::is_whitespace(c) {
+        if !c.is_whitespace() {
             let c = c as uint;
             let glyph = if 32 <= c && c < 126 {c-32} else {0};
             self.print_glyph(pixels, x, y, zoom, glyph, color);
@@ -203,11 +204,10 @@ pub impl Font {
             Centered     => x - s.char_len() * (8 * zoom) / 2,
             RightAligned => x - s.char_len() * (8 * zoom),
         };
-        // Rust: `s.each_char` is ambiguous here.
-        for str::each_char(s) |c| {
+        for s.iter().advance |c| {
             let nextx = x + 8 * zoom;
             if nextx >= pixels.width { break; }
-            self.print_char(pixels, x, y, zoom, c, color);
+            self.print_char(pixels, x, y, zoom, c, copy color);
             x = nextx;
         }
     }

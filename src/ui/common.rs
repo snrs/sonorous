@@ -9,16 +9,16 @@
 /// Immediately terminates the program with given exit code.
 pub fn exit(exitcode: int) -> ! {
     // Rust: `os::set_exit_status` doesn't immediately terminate the program.
-    unsafe { libc::exit(exitcode as libc::c_int); }
+    unsafe { ::std::libc::exit(exitcode as ::std::libc::c_int); }
 }
 
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(target_os = "win32")]
 pub fn die(s: ~str) -> ! {
-    use util::core::str::as_utf16_c_str;
-    do as_utf16_c_str(::exename()) |caption| {
-        do as_utf16_c_str(s) |text| {
-            unsafe { ::ext::win32::ll::MessageBoxW(ptr::mut_null(), text, caption, 0); }
+    use util::std::str::StrUtil;
+    do ::exename().as_utf16_c_str() |caption| {
+        do s.as_utf16_c_str() |text| {
+            unsafe { ::ext::win32::ll::MessageBoxW(::std::ptr::mut_null(), text, caption, 0); }
         }
     }
     exit(1)
@@ -27,13 +27,13 @@ pub fn die(s: ~str) -> ! {
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(not(target_os = "win32"))]
 pub fn die(s: ~str) -> ! {
-    ::core::io::stderr().write_line(fmt!("%s: %s", ::exename(), s));
+    ::std::io::stderr().write_line(fmt!("%s: %s", ::exename(), s));
     exit(1)
 }
 
 /// Prints an warning message. Internally used in the `warn!` macro below.
 pub fn warn(s: ~str) {
-    ::core::io::stderr().write_line(fmt!("*** Warning: %s", s));
+    ::std::io::stderr().write_line(fmt!("*** Warning: %s", s));
 }
 
 // Exits with a formatted error message. (C: `die`)
@@ -52,8 +52,8 @@ macro_rules! warn(
 /// refused to do so or the platform is unsupported. (C: `filedialog`)
 #[cfg(target_os = "win32")]
 pub fn get_path_from_dialog() -> Option<~str> {
-    use core::{str, vec};
-    use util::core::str::as_utf16_c_str;
+    use std::ptr::{null, mut_null};
+    use util::std::str::StrUtil;
     use ext::win32;
 
     let filter =
@@ -63,28 +63,29 @@ pub fn get_path_from_dialog() -> Option<~str> {
          Longnote Be-Music Source File (*.bml)\x00*.bml\x00\
          Po-Mu Source File (*.pms)\x00*.pms\x00\
          All Files (*.*)\x00*.*\x00";
-    do as_utf16_c_str(filter) |filter| {
-        do as_utf16_c_str("Choose a file to play") |title| {
+    do filter.as_utf16_c_str() |filter| {
+        do "Choose a file to play".as_utf16_c_str() |title| {
             let mut buf = [0u16, ..512];
-            let ret = do vec::as_mut_buf(buf) |buf, bufsize| {
+            let ret = do ::std::vec::as_mut_buf(buf) |buf, bufsize| {
+                let ofnsz = ::std::sys::size_of::<win32::ll::OPENFILENAMEW>();
                 let ofn = win32::ll::OPENFILENAMEW {
-                    lStructSize: sys::size_of::<win32::ll::OPENFILENAMEW>() as libc::DWORD,
+                    lStructSize: ofnsz as ::std::libc::DWORD,
                     lpstrFilter: filter,
                     lpstrFile: buf,
-                    nMaxFile: bufsize as libc::DWORD,
+                    nMaxFile: bufsize as ::std::libc::DWORD,
                     lpstrTitle: title,
                     Flags: win32::ll::OFN_HIDEREADONLY,
 
                     // zero-initialized fields
-                    hwndOwner: ptr::mut_null(), hInstance: ptr::mut_null(),
-                    lpstrCustomFilter: ptr::mut_null(), nMaxCustFilter: 0, nFilterIndex: 0,
-                    lpstrFileTitle: ptr::mut_null(), nMaxFileTitle: 0,
-                    lpstrInitialDir: ptr::null(), nFileOffset: 0, nFileExtension: 0,
-                    lpstrDefExt: ptr::null(), lCustData: 0, lpfnHook: ptr::null(),
-                    lpTemplateName: ptr::null(), pvReserved: ptr::null(),
+                    hwndOwner: mut_null(), hInstance: mut_null(),
+                    lpstrCustomFilter: mut_null(), nMaxCustFilter: 0, nFilterIndex: 0,
+                    lpstrFileTitle: mut_null(), nMaxFileTitle: 0,
+                    lpstrInitialDir: null(), nFileOffset: 0, nFileExtension: 0,
+                    lpstrDefExt: null(), lCustData: 0, lpfnHook: null(),
+                    lpTemplateName: null(), pvReserved: null(),
                     dwReserved: 0, FlagsEx: 0,
                 };
-                unsafe {win32::ll::GetOpenFileNameW(cast::transmute(&ofn))}
+                unsafe {win32::ll::GetOpenFileNameW(::std::cast::transmute(&ofn))}
             };
             if ret != 0 {
                 let path: &[u16] = match buf.position_elem(&0) {
@@ -92,7 +93,7 @@ pub fn get_path_from_dialog() -> Option<~str> {
                     // Rust: why can't we cast `&[u16, ..512]` to `&[u16]`?!
                     None => buf.slice(0, buf.len())
                 };
-                Some(str::from_utf16(path))
+                Some(::std::str::from_utf16(path))
             } else {
                 None
             }
@@ -125,10 +126,10 @@ pub fn Ticker() -> Ticker {
     Ticker { interval: INFO_INTERVAL, lastinfo: None }
 }
 
-pub impl Ticker {
+impl Ticker {
     /// Calls `f` only when required milliseconds have passed after the last display.
     /// `now` should be a return value from `sdl::get_ticks`.
-    fn on_tick(&mut self, now: uint, f: &fn()) {
+    pub fn on_tick(&mut self, now: uint, f: &fn()) {
         if self.lastinfo.map_default(true, |&t| now - t >= self.interval) {
             self.lastinfo = Some(now);
             f();
@@ -136,7 +137,7 @@ pub impl Ticker {
     }
 
     /// Lets the next call to `on_tick` always call the callback.
-    fn reset(&mut self) {
+    pub fn reset(&mut self) {
         self.lastinfo = None;
     }
 }

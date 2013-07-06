@@ -34,8 +34,8 @@
  * - `Measure [-> e2]`: Consumes exactly three digits and optionally saves it to `e2`.
  *   (C: `%1[0123456789]%1[0123456789]%1[0123456789]` followed by a call to `atoi`)
  */
-// Rust: - there is no `libc::sscanf` due to the varargs. maybe regex support will make this
-//         obsolete in the future, but not now.
+// Rust: - there is no `std::libc::sscanf` due to the varargs. maybe regex support will make
+//         this obsolete in the future, but not now.
 //       - multiple statements do not expand correctly. (#4375)
 //       - it is desirable to have a matcher only accepts an integer literal or string literal,
 //         not a generic expression.
@@ -51,11 +51,11 @@ macro_rules! lex(
 
     ($e:expr; int -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        // Rust: num::from_str_bytes_common does not recognize a number followed by garbage,
-        //       so we need to parse it ourselves.
+        // Rust: `std::num::from_str_bytes_common` does not recognize a number followed
+        //        by garbage, so we need to parse it ourselves.
         do _line.scan_int().map_default(false) |&_endpos| {
             let _prefix = _line.slice(0, _endpos);
-            do int::from_str(_prefix).map_default(false) |&_value| {
+            do ::std::int::from_str(_prefix).map_default(false) |&_value| {
                 $dst = _value;
                 lex!(_line.slice_to_end(_endpos); $($tail)*)
             }
@@ -65,7 +65,7 @@ macro_rules! lex(
         let _line: &str = $e;
         do _line.scan_uint().map_default(false) |&_endpos| {
             let _prefix = _line.slice(0, _endpos);
-            do uint::from_str(_prefix).map_default(false) |&_value| {
+            do ::std::uint::from_str(_prefix).map_default(false) |&_value| {
                 $dst = _value;
                 lex!(_line.slice_to_end(_endpos); $($tail)*)
             }
@@ -75,7 +75,7 @@ macro_rules! lex(
         let _line: &str = $e;
         do _line.scan_float().map_default(false) |&_endpos| {
             let _prefix = _line.slice(0, _endpos);
-            do float::from_str(_prefix).map_default(false) |&_value| {
+            do ::std::float::from_str(_prefix).map_default(false) |&_value| {
                 $dst = _value;
                 lex!(_line.slice_to_end(_endpos); $($tail)*)
             }
@@ -113,9 +113,9 @@ macro_rules! lex(
     ($e:expr; char -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
         if !_line.is_empty() {
-            let _charrange = ::core::str::char_range_at(_line, 0);
-            $dst = _charrange.ch;
-            lex!(_line.slice_to_end(_charrange.next); $($tail)*)
+            let _range = _line.char_range_at(0);
+            $dst = _range.ch;
+            lex!(_line.slice_to_end(_range.next); $($tail)*)
         } else {
             false
         }
@@ -134,7 +134,7 @@ macro_rules! lex(
         // Rust: this is plain annoying.
         if _line.len() >= 3 && _isdigit(_line.char_at(0)) && _isdigit(_line.char_at(1)) &&
                 _isdigit(_line.char_at(2)) {
-            $dst = uint::from_str(_line.slice(0u, 3u)).unwrap();
+            $dst = ::std::uint::from_str(_line.slice(0u, 3u)).unwrap();
             lex!(_line.slice_to_end(3u); $($tail)*)
         } else {
             false
@@ -144,7 +144,7 @@ macro_rules! lex(
 
     ($e:expr; ws, $($tail:tt)*) => ({
         let _line: &str = $e;
-        if !_line.is_empty() && char::is_whitespace(_line.char_at(0)) {
+        if !_line.is_empty() && _line.char_at(0).is_whitespace() {
             lex!(_line.trim_left(); $($tail)*)
         } else {
             false
@@ -219,4 +219,3 @@ macro_rules! lex(
     // end Angolmois-specific
     ($e:expr; $lit:expr) => (lex!($e; $lit, ))
 )
-

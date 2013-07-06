@@ -21,9 +21,9 @@ pub struct GLState {
 }
 
 #[cfg(target_os="win32")]
-pub impl GLState {
+impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
-    fn new() -> Result<GLState,~str> {
+    pub fn new() -> Result<GLState,~str> {
         use ext::win32::ll::*;
 
         macro_rules! return_on_err(
@@ -36,7 +36,7 @@ pub impl GLState {
         )
 
         // we need to preload this before initializing EGL
-        do str::as_c_str("d3dcompiler_43.dll") |dllname| {
+        do "d3dcompiler_43.dll".as_c_str() |dllname| {
             unsafe { LoadLibraryA(dllname); }
         }
 
@@ -79,17 +79,17 @@ pub impl GLState {
     }
 
     /// Returns true if SDL's OpenGL support is in use.
-    fn uses_sdl_ogl_support() -> bool { false }
+    pub fn uses_sdl_ogl_support() -> bool { false }
 
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
-    fn swap_buffers(&self) {
+    pub fn swap_buffers(&self) {
         egl::swap_buffers(self.egl_display, self.egl_surface);
     }
 }
 
 #[cfg(target_os="win32")]
 impl Drop for GLState {
-    fn finalize(&self) {
+    fn drop(&self) {
         match egl::terminate(self.egl_display) {
             Ok(()) => {}
             Err(err) => fail!(fmt!("EGL error 0x%x", err as uint))
@@ -103,13 +103,13 @@ impl Drop for GLState {
 pub struct GLState;
 
 #[cfg(not(target_os="win32"))]
-pub impl GLState {
+impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
-    fn new() -> Result<GLState,~str> { Ok(GLState) }
+    pub fn new() -> Result<GLState,~str> { Ok(GLState) }
     /// Returns true if SDL's OpenGL support is in use.
-    fn uses_sdl_ogl_support() -> bool { true }
+    pub fn uses_sdl_ogl_support() -> bool { true }
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
-    fn swap_buffers(&self) { video::swap_buffers(); }
+    pub fn swap_buffers(&self) { video::swap_buffers(); }
 }
 
 /// Abstracted graphical screen.
@@ -130,9 +130,9 @@ pub struct Screen {
     program_for_textures: glutil::ProgramForTextures,
 }
 
-pub impl Screen {
+impl Screen {
     /// Creates a new screen with given parameters.
-    fn new(width: uint, height: uint, fullscreen: bool) -> Result<Screen,~str> {
+    pub fn new(width: uint, height: uint, fullscreen: bool) -> Result<Screen,~str> {
         let mut surfaceflags;
         let mut videoflags;
         if fullscreen {
@@ -155,7 +155,9 @@ pub impl Screen {
         gl::blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         gl::clear_color(0.0, 0.0, 0.0, 0.0);
 
-        let l = 0.0, r = width as f32, t = 0.0, b = height as f32, f = 1.0, n = -1.0;
+        let (l, r) = (0.0, width as f32);
+        let (t, b) = (0.0, height as f32);
+        let (f, n) = (1.0, -1.0);
         let projection = [
             2.0/(r-l),    0.0,          0.0,          0.0,
             0.0,          2.0/(t-b),    0.0,          0.0,
@@ -186,16 +188,16 @@ pub impl Screen {
     }
 
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
-    fn swap_buffers(&self) { self.glstate.swap_buffers(); }
+    pub fn swap_buffers(&self) { self.glstate.swap_buffers(); }
 
     /// Clears the whole screen.
-    fn clear(&self) {
+    pub fn clear(&self) {
         gl::clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     }
 
     /// Draws shaded triangles to the screen. The block receives a mutable reference to
     /// `util::gl::ShadedDrawing`, to which it should add points.
-    fn draw_shaded(&self, prim: gl::GLenum, f: &fn(&mut glutil::ShadedDrawing)) {
+    pub fn draw_shaded(&self, prim: gl::GLenum, f: &fn(&mut glutil::ShadedDrawing)) {
         let mut drawing = ~glutil::ShadedDrawing::new();
         f(&mut *drawing);
         drawing.draw_prim(&self.program_for_shades, &self.buffer, prim);
@@ -203,7 +205,7 @@ pub impl Screen {
 
     /// Draws textured triangles to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
-    fn draw_textured(&self, prim: gl::GLenum, texture: &glutil::Texture,
+    pub fn draw_textured(&self, prim: gl::GLenum, texture: &glutil::Texture,
                      f: &fn(&mut glutil::TexturedDrawing)) {
         let mut drawing = ~glutil::TexturedDrawing::new(texture);
         f(&mut *drawing);

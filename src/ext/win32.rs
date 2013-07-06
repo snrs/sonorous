@@ -7,8 +7,8 @@
 #[cfg(target_os = "win32")];
 
 pub mod ll {
-    use core::libc::{c_int, c_uint, c_void};
-    use core::libc::{BOOL, CHAR, WORD, DWORD, HANDLE, LPCSTR, LPWSTR, LPCWSTR};
+    use std::libc::{c_int, c_uint, c_void};
+    use std::libc::{BOOL, CHAR, WORD, DWORD, HANDLE, LPCSTR, LPWSTR, LPCWSTR};
 
     pub type HWND = HANDLE;
     pub type HDC = HANDLE;

@@ -30,36 +30,40 @@ pub struct Shader {
 /// Location for attributes (per-vertex additional data used by the shader).
 pub struct AttribLoc(GLint);
 
-pub impl AttribLoc {
+impl AttribLoc {
     /// Enables the use of vertex attribute array.
-    fn enable_array(&self) {
+    pub fn enable_array(&self) {
         gl::enable_vertex_attrib_array(**self as GLuint);
     }
 
     /// Disables the use of vertex attribute array.
-    fn disable_array(&self) {
+    pub fn disable_array(&self) {
         gl::disable_vertex_attrib_array(**self as GLuint);
     }
 
     /// Specifies that the vertex attribute is an array of `size` f32 values, which start at
     /// the byte offset of `offset`, `offset+stride`, `offset+stride*2` etc. (`stride` is set to
     /// the size of each value when given 0.)
-    fn define_pointer_f32(&self, size: GLint, normalized: bool, stride: GLsizei, offset: GLuint) {
+    pub fn define_pointer_f32(&self, size: GLint, normalized: bool,
+                              stride: GLsizei, offset: GLuint) {
         gl::vertex_attrib_pointer_f32(**self as GLuint, size, normalized, stride, offset);
     }
 
     /// Same as `define_pointer_f32` but the array consists of `size` i8 values instead.
-    fn define_pointer_i8(&self, size: GLint, normalized: bool, stride: GLsizei, offset: GLuint) {
+    pub fn define_pointer_i8(&self, size: GLint, normalized: bool,
+                             stride: GLsizei, offset: GLuint) {
         gl::vertex_attrib_pointer_i8(**self as GLuint, size, normalized, stride, offset);
     }
 
     /// Same as `define_pointer_f32` but the array consists of `size` i32 values instead.
-    fn define_pointer_i32(&self, size: GLint, normalized: bool, stride: GLsizei, offset: GLuint) {
+    pub fn define_pointer_i32(&self, size: GLint, normalized: bool,
+                              stride: GLsizei, offset: GLuint) {
         gl::vertex_attrib_pointer_i32(**self as GLuint, size, normalized, stride, offset);
     }
 
     /// Same as `define_pointer_f32` but the array consists of `size` u8 values instead.
-    fn define_pointer_u8(&self, size: GLint, normalized: bool, stride: GLsizei, offset: GLuint) {
+    pub fn define_pointer_u8(&self, size: GLint, normalized: bool,
+                             stride: GLsizei, offset: GLuint) {
         gl::vertex_attrib_pointer_u8(**self as GLuint, size, normalized, stride, offset);
     }
 }
@@ -67,53 +71,56 @@ pub impl AttribLoc {
 /// Location for uniform variables (shared additional data used by the shader).
 pub struct UniformLoc(GLint);
 
-pub impl UniformLoc {
+impl UniformLoc {
     /// Sets a uniform variable to a float.
-    fn set_1f(&self, x: GLfloat) { gl::uniform_1f(**self, x); }
+    pub fn set_1f(&self, x: GLfloat) { gl::uniform_1f(**self, x); }
     /// Sets a uniform variable to a 2D vector of floats. (e.g. coordinates)
-    fn set_2f(&self, x: GLfloat, y: GLfloat) { gl::uniform_2f(**self, x, y); }
+    pub fn set_2f(&self, x: GLfloat, y: GLfloat) { gl::uniform_2f(**self, x, y); }
     /// Sets a uniform variable to a 3D vector of floats. (e.g. RGB colors)
-    fn set_3f(&self, x: GLfloat, y: GLfloat, z: GLfloat) { gl::uniform_3f(**self, x, y, z); }
+    pub fn set_3f(&self, x: GLfloat, y: GLfloat, z: GLfloat) { gl::uniform_3f(**self, x, y, z); }
     /// Sets a uniform variable to a 4D vector of floats. (e.g. RGBA colors)
-    fn set_4f(&self, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat) {
+    pub fn set_4f(&self, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat) {
         gl::uniform_4f(**self, x, y, z, w);
     }
 
     /// Sets a uniform variable to an integer. (e.g. samplers)
-    fn set_1i(&self, x: GLint) { gl::uniform_1i(**self, x); }
+    pub fn set_1i(&self, x: GLint) { gl::uniform_1i(**self, x); }
     /// Sets a uniform variable to a 2D vector of integers.
-    fn set_2i(&self, x: GLint, y: GLint) { gl::uniform_2i(**self, x, y); }
+    pub fn set_2i(&self, x: GLint, y: GLint) { gl::uniform_2i(**self, x, y); }
     /// Sets a uniform variable to a 3D vector of integers.
-    fn set_3i(&self, x: GLint, y: GLint, z: GLint) { gl::uniform_3i(**self, x, y, z); }
+    pub fn set_3i(&self, x: GLint, y: GLint, z: GLint) { gl::uniform_3i(**self, x, y, z); }
     /// Sets a uniform variable to a 4D vector of integers.
-    fn set_4i(&self, x: GLint, y: GLint, z: GLint, w: GLint) { gl::uniform_4i(**self, x, y, z, w); }
+    pub fn set_4i(&self, x: GLint, y: GLint, z: GLint, w: GLint) {
+        gl::uniform_4i(**self, x, y, z, w);
+    }
 
     /// Sets a uniform variable to a 2x2 matrix of floats. If `transpose` is set the matrix is row
     /// major, otherwise it's column major.
-    fn set_matrix_2f(&self, transpose: bool, value: &[GLfloat]) {
+    pub fn set_matrix_2f(&self, transpose: bool, value: &[GLfloat]) {
         gl::uniform_matrix_2fv(**self, transpose, value);
     }
     /// Sets a uniform variable to a 3x3 matrix of floats. If `transpose` is set the matrix is row
     /// major, otherwise it's column major.
-    fn set_matrix_3f(&self, transpose: bool, value: &[GLfloat]) {
+    pub fn set_matrix_3f(&self, transpose: bool, value: &[GLfloat]) {
         gl::uniform_matrix_3fv(**self, transpose, value);
     }
     /// Sets a uniform variable to a 4x4 matrix of floats. If `transpose` is set the matrix is row
     /// major, otherwise it's column major.
-    fn set_matrix_4f(&self, transpose: bool, value: &[GLfloat]) {
+    pub fn set_matrix_4f(&self, transpose: bool, value: &[GLfloat]) {
         gl::uniform_matrix_4fv(**self, transpose, value);
     }
 }
 
-pub impl Shader {
+impl Shader {
     /// Creates a shader from given string.
-    fn from_str(shader_type: ShaderType, code: &str) -> Result<Shader,~str> {
+    pub fn from_str(shader_type: ShaderType, code: &str) -> Result<Shader,~str> {
         let shader = gl::create_shader(shader_type as GLenum);
         if shader == 0 {
             return Err(fmt!("GL error 0x%x", gl::get_error() as uint));
         }
 
-        gl::shader_source(shader, ["#version 100\n".to_bytes(), code.to_bytes()]);
+        gl::shader_source(shader, ["#version 100\n".as_bytes().to_owned(),
+                                   code.as_bytes().to_owned()]);
         gl::compile_shader(shader);
         if gl::get_shader_iv(shader, gl::COMPILE_STATUS) != 0 {
             Ok(Shader { shader_type: shader_type, index: shader })
@@ -125,15 +132,15 @@ pub impl Shader {
     }
 
     /// Creates a shader from given file path.
-    fn from_file(shader_type: ShaderType, path: &Path) -> Result<Shader,~str> {
-        do io::file_reader(path).chain |f| {
+    pub fn from_file(shader_type: ShaderType, path: &Path) -> Result<Shader,~str> {
+        do ::std::io::file_reader(path).chain |f| {
             Shader::from_str(shader_type, f.read_c_str())
         }
     }
 }
 
 impl Drop for Shader {
-    fn finalize(&self) {
+    fn drop(&self) {
         gl::delete_shader(self.index);
     }
 }
@@ -147,9 +154,9 @@ pub struct Program {
     index: GLuint,
 }
 
-pub impl Program {
+impl Program {
     /// Creates a new program from given vertex and fragment shader.
-    fn new(vertex_shader: Shader, fragment_shader: Shader) -> Result<Program,~str> {
+    pub fn new(vertex_shader: Shader, fragment_shader: Shader) -> Result<Program,~str> {
         assert!(vertex_shader.shader_type == VertexShader);
         assert!(fragment_shader.shader_type == FragmentShader);
 
@@ -170,21 +177,21 @@ pub impl Program {
     }
 
     /// Returns a location for given attribute name.
-    fn attrib_location(&self, attr: &str) -> Result<AttribLoc,~str> {
+    pub fn attrib_location(&self, attr: &str) -> Result<AttribLoc,~str> {
         let loc = gl::get_attrib_location(self.index, attr.to_owned());
         if loc == -1 { return Err(fmt!("no attrib location: %s", attr)); }
         Ok(AttribLoc(loc))
     }
 
     /// Returns a location for given uniform variable name.
-    fn uniform_location(&self, uniform: &str) -> Result<UniformLoc,~str> {
+    pub fn uniform_location(&self, uniform: &str) -> Result<UniformLoc,~str> {
         let loc = gl::get_uniform_location(self.index, uniform.to_owned());
         if loc == -1 { return Err(fmt!("no uniform location: %s", uniform)); }
         Ok(UniformLoc(loc))
     }
 
     /// Activates the use of given program. This replaces the currently active program if any.
-    fn bind(&self) {
+    pub fn bind(&self) {
         gl::use_program(self.index);
     }
 }
@@ -203,9 +210,9 @@ pub struct ProgramForShades {
     projection: UniformLoc,
 }
 
-pub impl ProgramForShades {
+impl ProgramForShades {
     /// Compiles and links the program.
-    fn new() -> Result<ProgramForShades,~str> {
+    pub fn new() -> Result<ProgramForShades,~str> {
         let vertex_code = stringify!(
             attribute vec2 vertex_position_in;
             attribute vec4 color_in;
@@ -248,7 +255,7 @@ pub impl ProgramForShades {
     }
 
     /// Binds the program to the current OpenGL context.
-    fn bind(&self) {
+    pub fn bind(&self) {
         self.program.bind();
     }
 }
@@ -269,9 +276,9 @@ pub struct ProgramForTextures {
     sampler: UniformLoc,
 }
 
-pub impl ProgramForTextures {
+impl ProgramForTextures {
     /// Compiles and links the program.
-    fn new() -> Result<ProgramForTextures,~str> {
+    pub fn new() -> Result<ProgramForTextures,~str> {
         let vertex_code = stringify!(
             attribute vec2 vertex_position_in;
             attribute vec2 texture_coord_in;
@@ -317,7 +324,7 @@ pub impl ProgramForTextures {
     }
 
     /// Binds the program to the current OpenGL context.
-    fn bind(&self) {
+    pub fn bind(&self) {
         self.program.bind();
     }
 }
@@ -370,15 +377,15 @@ pub struct Texture {
 }
 
 impl Drop for Texture {
-    fn finalize(&self) {
+    fn drop(&self) {
         gl::delete_textures(&[self.index]);
     }
 }
 
-pub impl Texture {
+impl Texture {
     /// Creates a new texture with given intrinsic dimension, which is only used for convenience
     /// in `*Drawing` interfaces.
-    fn new(width: uint, height: uint) -> Result<Texture,~str> {
+    pub fn new(width: uint, height: uint) -> Result<Texture,~str> {
         let texture = gl::gen_textures(1)[0];
         Ok(Texture { index: texture, width: width, height: height })
     }
@@ -386,8 +393,8 @@ pub impl Texture {
     /// Creates a new texture from an SDL surface, which is destroyed after the upload. `xwrap` and
     /// `ywrap` specifies whether the texture should wrap in horizontal or vertical directions or
     /// not.
-    fn from_owned_surface(surface: ~video::Surface,
-                          xwrap: bool, ywrap: bool) -> Result<Texture,~str> {
+    pub fn from_owned_surface(surface: ~video::Surface,
+                              xwrap: bool, ywrap: bool) -> Result<Texture,~str> {
         let (width, height) = surface.get_size();
         let texture = earlyexit!(Texture::new(width as uint, height as uint));
         match texture.upload_surface(surface, xwrap, ywrap) {
@@ -397,7 +404,7 @@ pub impl Texture {
     }
 
     /// Binds the texture to the current OpenGL context.
-    fn bind(&self, target: int) {
+    pub fn bind(&self, target: int) {
         let texenum = gl::TEXTURE0 + target as GLenum;
         gl::active_texture(texenum);
         gl::bind_texture(gl::TEXTURE_2D, self.index);
@@ -406,7 +413,7 @@ pub impl Texture {
     /// Uploads an SDL surface, which may be converted to the suitable format. If the conversion
     /// fails the original surface is returned with an error string. `xwrap` and `ywrap` specifies
     /// whether the texture should wrap in horizontal or vertical directions or not.
-    fn upload_surface(&self, surface: ~video::Surface, xwrap: bool, ywrap: bool) ->
+    pub fn upload_surface(&self, surface: ~video::Surface, xwrap: bool, ywrap: bool) ->
                                     Result<~video::Surface,(~video::Surface,~str)> {
         let surface = earlyexit!(prepare_surface_for_texture(surface));
         let bpp = unsafe { (*(*surface.raw).format).BitsPerPixel };
@@ -415,7 +422,7 @@ pub impl Texture {
 
         gl::bind_texture(gl::TEXTURE_2D, self.index);
         do surface.with_lock |pixels| {
-            let pixels: &[u8] = unsafe { cast::transmute(pixels) };
+            let pixels: &[u8] = unsafe { ::std::cast::transmute(pixels) };
             gl::tex_image_2d(gl::TEXTURE_2D, 0, glpixfmt as GLint, width as GLsizei,
                              height as GLsizei, 0, glpixfmt, gl::UNSIGNED_BYTE, Some(pixels));
         }
@@ -437,25 +444,25 @@ pub struct Buffer {
 }
 
 impl Drop for Buffer {
-    fn finalize(&self) {
+    fn drop(&self) {
         gl::delete_buffers(&[self.index]);
     }
 }
 
-pub impl Buffer {
+impl Buffer {
     /// Creates a new vertex buffer object.
-    fn new() -> Buffer {
+    pub fn new() -> Buffer {
         let vbo = gl::gen_buffers(1)[0];
         Buffer { index: vbo }
     }
 
     /// Binds the VBO to the current OpenGL context.
-    fn bind(&self) {
+    pub fn bind(&self) {
         gl::bind_buffer(gl::ARRAY_BUFFER, self.index);
     }
 
     /// Uploads a data to the VBO.
-    fn upload<T>(&self, data: &[T], usage: GLenum) {
+    pub fn upload<T>(&self, data: &[T], usage: GLenum) {
         gl::buffer_data(gl::ARRAY_BUFFER, data, usage);
     }
 }
@@ -466,14 +473,14 @@ pub struct ShadedDrawing {
     vertices: ~[(f32,f32,u8,u8,u8,u8)],
 }
 
-pub impl ShadedDrawing {
+impl ShadedDrawing {
     /// Creates a new state.
-    fn new() -> ShadedDrawing {
+    pub fn new() -> ShadedDrawing {
         ShadedDrawing { vertices: ~[] }
     }
 
     /// Adds a point to the state.
-    fn point(&mut self, x: f32, y: f32, c: video::Color) {
+    pub fn point(&mut self, x: f32, y: f32, c: video::Color) {
         let (r, g, b, a) = match c {
             video::RGB(r,g,b) => (r, g, b, 255),
             video::RGBA(r,g,b,a) => (r, g, b, a)
@@ -482,13 +489,13 @@ pub impl ShadedDrawing {
     }
 
     /// Draws specified primitives. The suitable program and scratch VBO should be supplied.
-    fn draw_prim(~self, program: &ProgramForShades, buffer: &Buffer, prim: GLenum) {
+    pub fn draw_prim(~self, program: &ProgramForShades, buffer: &Buffer, prim: GLenum) {
         program.bind();
         buffer.bind();
 
         // TODO there is no `offsetof` or similar
-        let rowsize = sys::size_of::<(f32,f32,u8,u8,u8,u8)>() as GLint;
-        let coloroffset = sys::size_of::<(f32,f32)>() as GLuint;
+        let rowsize = ::std::sys::size_of::<(f32,f32,u8,u8,u8,u8)>() as GLint;
+        let coloroffset = ::std::sys::size_of::<(f32,f32)>() as GLuint;
         program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
         program.color.define_pointer_u8(4, true, rowsize, coloroffset);
 
@@ -505,44 +512,46 @@ pub struct TexturedDrawing {
     vertices: ~[(f32,f32,f32,f32)],
 }
 
-pub impl TexturedDrawing {
+impl TexturedDrawing {
     /// Creates a new state. A texture is required for pixel specification.
-    fn new(texture: &Texture) -> TexturedDrawing {
+    pub fn new(texture: &Texture) -> TexturedDrawing {
         let width_recip = 1.0 / (texture.width as f32);
         let height_recip = 1.0 / (texture.height as f32);
         TexturedDrawing { width_recip: width_recip, height_recip: height_recip, vertices: ~[] }
     }
 
     /// Adds a point to the state.
-    fn point(&mut self, x: f32, y: f32, s: f32, t: f32) {
+    pub fn point(&mut self, x: f32, y: f32, s: f32, t: f32) {
         self.vertices.push((x, y, s * self.width_recip, t * self.height_recip));
     }
 
     /// Adds four points of the rectangle to the state.
-    fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, s1: f32, t1: f32, s2: f32, t2: f32) {
-        let s1 = s1 * self.width_recip, t1 = t1 * self.height_recip;
-        let s2 = s2 * self.width_recip, t2 = t2 * self.height_recip;
+    pub fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, s1: f32, t1: f32, s2: f32, t2: f32) {
+        let s1 = s1 * self.width_recip;
+        let s2 = s2 * self.width_recip;
+        let t1 = t1 * self.height_recip;
+        let t2 = t2 * self.height_recip;
         self.vertices.push_all([(x1, y1, s1, t1), (x1, y2, s1, t2),
                                 (x2, y2, s2, t2), (x2, y1, s2, t1)]);
     }
 
     /// Adds four points of the rectangle to the state, where the whole texture is used for that
     /// rectangle.
-    fn rect_whole(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+    pub fn rect_whole(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
         self.vertices.push_all([(x1, y1, 0.0, 0.0), (x1, y2, 0.0, 1.0),
                                 (x2, y2, 1.0, 1.0), (x2, y1, 1.0, 0.0)]);
     }
 
     /// Draws specified primitives with given texture. The suitable program and scratch VBO
     /// should be supplied.
-    fn draw_prim(~self, program: &ProgramForTextures, buffer: &Buffer, texture: &Texture,
-                 prim: GLenum) {
+    pub fn draw_prim(~self, program: &ProgramForTextures, buffer: &Buffer, texture: &Texture,
+                     prim: GLenum) {
         program.bind();
         buffer.bind();
 
         // TODO there is no `offsetof` or similar
-        let rowsize = sys::size_of::<(f32,f32,f32,f32)>() as GLint;
-        let texoffset = sys::size_of::<(f32,f32)>() as GLuint;
+        let rowsize = ::std::sys::size_of::<(f32,f32,f32,f32)>() as GLint;
+        let texoffset = ::std::sys::size_of::<(f32,f32)>() as GLuint;
         program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
         program.texture_coord.define_pointer_f32(2, false, rowsize, texoffset);
         program.sampler.set_1i(0);

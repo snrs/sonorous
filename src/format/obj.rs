@@ -35,12 +35,12 @@ pub static NLAYERS: uint = 4;
 #[deriving(Eq)]
 pub struct BPM(float);
 
-pub impl BPM {
+impl BPM {
     /// Converts a measure to a millisecond. (C: `MEASURE_TO_MSEC`)
-    fn measure_to_msec(self, measure: float) -> float { measure * 240000.0 / *self }
+    pub fn measure_to_msec(self, measure: float) -> float { measure * 240000.0 / *self }
 
     /// Converts a millisecond to a measure. (C: `MSEC_TO_MEASURE`)
-    fn msec_to_measure(self, msec: float) -> float { msec * *self / 240000.0 }
+    pub fn msec_to_measure(self, msec: float) -> float { msec * *self / 240000.0 }
 }
 
 /// A duration from the particular point. It may be specified in measures or seconds. Used in
@@ -48,9 +48,9 @@ pub impl BPM {
 #[deriving(Eq)]
 pub enum Duration { Seconds(float), Measures(float) }
 
-pub impl Duration {
+impl Duration {
     /// Calculates the actual milliseconds from the current BPM.
-    fn to_msec(&self, bpm: BPM) -> float {
+    pub fn to_msec(&self, bpm: BPM) -> float {
         match *self {
             Seconds(secs) => secs * 1000.0,
             Measures(measures) => bpm.measure_to_msec(measures)
@@ -313,55 +313,55 @@ pub struct Obj<SoundRef,ImageRef> {
     data: ObjData<SoundRef,ImageRef>
 }
 
-pub impl<SoundRef:Copy,ImageRef:Copy> Obj<SoundRef,ImageRef> {
+impl<SoundRef:Copy,ImageRef:Copy> Obj<SoundRef,ImageRef> {
     /// Creates a `Visible` object.
-    fn Visible(time: float, lane: Lane, sref: Option<SoundRef>) -> Obj<SoundRef,ImageRef> {
+    pub fn Visible(time: float, lane: Lane, sref: Option<SoundRef>) -> Obj<SoundRef,ImageRef> {
         Obj { time: time, data: Visible(lane, sref) }
     }
 
     /// Creates an `Invisible` object.
-    fn Invisible(time: float, lane: Lane, sref: Option<SoundRef>) -> Obj<SoundRef,ImageRef> {
+    pub fn Invisible(time: float, lane: Lane, sref: Option<SoundRef>) -> Obj<SoundRef,ImageRef> {
         Obj { time: time, data: Invisible(lane, sref) }
     }
 
     /// Creates an `LNStart` object.
-    fn LNStart(time: float, lane: Lane, sref: Option<SoundRef>) -> Obj<SoundRef,ImageRef> {
+    pub fn LNStart(time: float, lane: Lane, sref: Option<SoundRef>) -> Obj<SoundRef,ImageRef> {
         Obj { time: time, data: LNStart(lane, sref) }
     }
 
     /// Creates an `LNDone` object.
-    fn LNDone(time: float, lane: Lane, sref: Option<SoundRef>) -> Obj<SoundRef,ImageRef> {
+    pub fn LNDone(time: float, lane: Lane, sref: Option<SoundRef>) -> Obj<SoundRef,ImageRef> {
         Obj { time: time, data: LNDone(lane, sref) }
     }
 
     /// Creates a `Bomb` object.
-    fn Bomb(time: float, lane: Lane, sref: Option<SoundRef>,
+    pub fn Bomb(time: float, lane: Lane, sref: Option<SoundRef>,
             damage: Damage) -> Obj<SoundRef,ImageRef> {
         Obj { time: time, data: Bomb(lane, sref, damage) }
     }
 
     /// Creates a `BGM` object.
-    fn BGM(time: float, sref: SoundRef) -> Obj<SoundRef,ImageRef> {
+    pub fn BGM(time: float, sref: SoundRef) -> Obj<SoundRef,ImageRef> {
         Obj { time: time, data: BGM(sref) }
     }
 
     /// Creates a `SetBGA` object.
-    fn SetBGA(time: float, layer: BGALayer, iref: Option<ImageRef>) -> Obj<SoundRef,ImageRef> {
+    pub fn SetBGA(time: float, layer: BGALayer, iref: Option<ImageRef>) -> Obj<SoundRef,ImageRef> {
         Obj { time: time, data: SetBGA(layer, iref) }
     }
 
     /// Creates a `SetBPM` object.
-    fn SetBPM(time: float, bpm: BPM) -> Obj<SoundRef,ImageRef> {
+    pub fn SetBPM(time: float, bpm: BPM) -> Obj<SoundRef,ImageRef> {
         Obj { time: time, data: SetBPM(bpm) }
     }
 
     /// Creates a `Stop` object.
-    fn Stop(time: float, duration: Duration) -> Obj<SoundRef,ImageRef> {
+    pub fn Stop(time: float, duration: Duration) -> Obj<SoundRef,ImageRef> {
         Obj { time: time, data: Stop(duration) }
     }
 
     /// Returns the number of a measure containing this object.
-    fn measure(&self) -> int { self.time.floor() as int }
+    pub fn measure(&self) -> int { self.time.floor() as int }
 }
 
 impl<SoundRef:Copy,ImageRef:Copy> Ord for Obj<SoundRef,ImageRef> {

@@ -4,7 +4,6 @@
 
 //! Key kinds and specification.
 
-use compat::core::iter;
 use format::obj::{Lane, NLANES, Deleted, ObjQueryOps};
 use format::bms::{Bms, Key, DoublePlay, CouplePlay, remove_or_replace_note};
 
@@ -52,18 +51,18 @@ pub enum KeyKind {
     Button5,
 }
 
-pub impl KeyKind {
+impl KeyKind {
     /// Returns a list of all supported key kinds.
     //
     // Rust: can this method be generated on the fly?
-    fn all() -> &'static [KeyKind] {
+    pub fn all() -> &'static [KeyKind] {
         &[WhiteKey, WhiteKeyAlt, BlackKey, Scratch, FootPedal,
           Button1, Button2, Button3, Button4, Button5]
     }
 
     /// Converts a mnemonic character to an appropriate key kind. Used for parsing a key
     /// specification (see also `KeySpec`).
-    fn from_char(c: char) -> Option<KeyKind> {
+    pub fn from_char(c: char) -> Option<KeyKind> {
         match c {
             'a' => Some(WhiteKey),
             'y' => Some(WhiteKeyAlt),
@@ -81,7 +80,7 @@ pub impl KeyKind {
 
     /// Converts an appropriate key kind to a mnemonic character. Used for environment variables
     /// (see also `read_keymap`).
-    fn to_char(self) -> char {
+    pub fn to_char(self) -> char {
         match self {
             WhiteKey    => 'a',
             WhiteKeyAlt => 'y',
@@ -103,7 +102,7 @@ pub impl KeyKind {
      * practice of counting "keys" in many games (e.g. Beatmania IIDX has 8 lanes including one
      * scratch but commonly said to have 7 "keys").
      */
-    fn counts_as_key(self) -> bool {
+    pub fn counts_as_key(self) -> bool {
         self != Scratch && self != FootPedal
     }
 }
@@ -122,36 +121,40 @@ pub struct KeySpec {
     kinds: ~[Option<KeyKind>]
 }
 
-pub impl KeySpec {
+impl KeySpec {
     /// Returns a number of lanes that count towards "keys". Notably scratches and pedals do not
     /// count as keys. (C: `nkeys`)
-    fn nkeys(&self) -> uint {
+    pub fn nkeys(&self) -> uint {
         let mut nkeys = 0;
-        for self.kinds.each_some |kind| {
+        for self.kinds.iter().filter_map(|kind| *kind).advance |kind| {
             if kind.counts_as_key() { nkeys += 1; }
         }
         nkeys
     }
 
     /// Iterates over lanes on the left side, from left to right.
-    fn each_left_lanes(&self, f: &fn(&Lane) -> bool) -> iter::Ret {
+    pub fn each_left_lanes(&self, f: &fn(&Lane) -> bool) -> bool {
         assert!(self.split <= self.order.len());
-        self.order.slice(0, self.split).each(f)
+        self.order.slice(0, self.split).iter().advance(f)
     }
 
     /// Iterates over lanes on the right side if any, from left to right.
-    fn each_right_lanes(&self, f: &fn(&Lane) -> bool) -> iter::Ret {
+    pub fn each_right_lanes(&self, f: &fn(&Lane) -> bool) -> bool {
         assert!(self.split <= self.order.len());
-        self.order.slice(self.split, self.order.len()).each(f)
+        self.order.slice(self.split, self.order.len()).iter().advance(f)
     }
 }
 
 /// Parses the key specification from the string. (C: `parse_key_spec`)
 pub fn parse_key_spec(s: &str) -> Option<~[(Lane, KeyKind)]> {
+    use util::std::str::StrUtil;
+
     let mut specs = ~[];
     let mut s = s.trim_left().to_owned();
     while !s.is_empty() {
-        let mut chan = Key(0), kind = '\x00', s2 = ~"";
+        let mut chan = Key(0);
+        let mut kind = '\x00';
+        let mut s2 = ~"";
         if !lex!(s; Key -> chan, char -> kind, ws*, str* -> s2, !) {
             return None;
         }
@@ -197,14 +200,17 @@ static PRESETS: &'static [(&'static str, &'static str, &'static str)] = &[
  * - `pms`: Selects one of two presets `9` and `9-bme`.
  */
 pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str)> {
+    use util::std::str::StrUtil;
+
     let mut present = [false, ..NLANES];
-    for bms.objs.each |&obj| {
-        for obj.object_lane().each |&Lane(lane)| {
+    for bms.objs.iter().advance |&obj| {
+        let lane = obj.object_lane(); // XXX #3511
+        for lane.iter().advance |&Lane(lane)| {
             present[lane] = true;
         }
     }
 
-    let preset = match preset.map(|s| s.to_lower()) {
+    let preset = match preset.map(|s| s.to_ascii_lower()) {
         None | Some(~"bms") | Some(~"bme") | Some(~"bml") => {
             let isbme = (present[8] || present[9] || present[36+8] || present[36+9]);
             let haspedal = (present[7] || present[36+7]);
@@ -212,7 +218,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
                 CouplePlay | DoublePlay => if isbme {~"14"} else {~"10"},
                 _                       => if isbme {~"7" } else {~"5" }
             };
-            if haspedal {nkeys + ~"/fp"} else {nkeys}
+            if haspedal {nkeys + "/fp"} else {nkeys}
         },
         Some(~"pms") => {
             let isbme = (present[6] || present[7] || present[8] || present[9]);
@@ -221,7 +227,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
         Some(preset) => preset
     };
 
-    for PRESETS.each |&(name, leftkeys, rightkeys)| {
+    for PRESETS.iter().advance |&(name, leftkeys, rightkeys)| {
         if name == preset {
             return Some((leftkeys.to_owned(), rightkeys.to_owned()));
         }
@@ -232,10 +238,12 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
 /// Parses a key specification from the options.
 pub fn key_spec(bms: &Bms, preset: Option<~str>,
                 leftkeys: Option<~str>, rightkeys: Option<~str>) -> Result<~KeySpec,~str> {
+    use util::std::str::StrUtil;
+
     let (leftkeys, rightkeys) =
         if leftkeys.is_none() && rightkeys.is_none() {
             let preset =
-                if preset.is_none() && bms.bmspath.to_lower().ends_with(".pms") {
+                if preset.is_none() && bms.bmspath.to_ascii_lower().ends_with(".pms") {
                     Some(~"pms")
                 } else {
                     preset
@@ -259,7 +267,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
         match parse_key_spec(keys) {
             None | Some([]) => None,
             Some(left) => {
-                for left.each |&(lane,kind)| {
+                for left.iter().advance |&(lane,kind)| {
                     if keyspec.kinds[*lane].is_some() { return None; }
                     keyspec.order.push(lane);
                     keyspec.kinds[*lane] = Some(kind);
@@ -291,8 +299,9 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
 /// Removes insignificant objects (i.e. not in visible lanes) and ensures that there is no
 /// `Deleted` object. (C: `analyze_and_compact_bms`)
 pub fn compact_bms(bms: &mut Bms, keyspec: &KeySpec) {
-    for vec::each_mut(bms.objs) |obj| {
-        for obj.object_lane().each |&Lane(lane)| {
+    for bms.objs.mut_iter().advance |obj| {
+        let lane = obj.object_lane(); // XXX #3511
+        for lane.iter().advance |&Lane(lane)| {
             if keyspec.kinds[lane].is_none() {
                 remove_or_replace_note(obj)
             }

@@ -12,10 +12,10 @@
 
 #[cfg(target_os = "win32")]
 pub mod syswm {
-    use core::libc::{HANDLE, INVALID_HANDLE_VALUE};
+    use std::libc::{HANDLE, INVALID_HANDLE_VALUE};
 
     pub mod ll {
-        use core::libc::{HANDLE, c_int};
+        use std::libc::{HANDLE, c_int};
 
         pub struct SDL_version {
             major: u8,
@@ -23,8 +23,8 @@ pub mod syswm {
             patch: u8
         }
 
-        pub impl SDL_version {
-            fn new() -> SDL_version {
+        impl SDL_version {
+            pub fn new() -> SDL_version {
                 SDL_version { major: 1, minor: 2, patch: 14 }
             }
         }
@@ -47,7 +47,7 @@ pub mod syswm {
             hglrc: INVALID_HANDLE_VALUE as HANDLE,
         };
         unsafe {
-            if ll::SDL_GetWMInfo(ptr::to_mut_unsafe_ptr(&mut wminfo)) == 0 {
+            if ll::SDL_GetWMInfo(::std::ptr::to_mut_unsafe_ptr(&mut wminfo)) == 0 {
                 None
             } else {
                 Some(wminfo)
@@ -57,10 +57,10 @@ pub mod syswm {
 }
 
 pub mod mixer {
-    use core::libc::c_int;
+    use std::libc::c_int;
 
     pub mod ll {
-        use core::libc::c_int;
+        use std::libc::c_int;
         pub extern {
             fn Mix_Volume(channel: c_int, volume: c_int) -> c_int;
             fn Mix_ReserveChannels(num: c_int) -> c_int;
@@ -71,9 +71,11 @@ pub mod mixer {
 
     pub fn num_playing(channel: Option<c_int>) -> c_int {
         use sdl::mixer;
-        match channel {
-            Some(channel) => mixer::ll::Mix_Playing(channel),
-            None => mixer::ll::Mix_Playing(-1)
+        unsafe {
+            match channel {
+                Some(channel) => mixer::ll::Mix_Playing(channel),
+                None => mixer::ll::Mix_Playing(-1)
+            }
         }
     }
 
@@ -113,12 +115,13 @@ pub mod mixer {
 }
 
 pub mod mpeg {
-    use core::libc::{c_int, c_float};
+    use std::libc::{c_int, c_float};
+    use std::ptr::null;
     use sdl::video::Surface;
     use self::ll::SMPEGstatus;
 
     pub mod ll {
-        use core::libc::{c_void, c_int, c_char, c_float, c_double};
+        use std::libc::{c_void, c_int, c_char, c_float, c_double};
         use sdl::video::ll::{SDL_RWops, SDL_Surface};
         use sdl::audio::ll::SDL_AudioSpec;
         pub struct SMPEG { priv opaque: () }
@@ -190,16 +193,16 @@ pub mod mpeg {
     }
 
     impl Drop for MPEG {
-        pub fn finalize(&self) {
+        pub fn drop(&self) {
             unsafe { ll::SMPEG_delete(self.raw); }
         }
     }
 
-    pub impl MPEG {
-        fn from_path(path: &Path) -> Result<~MPEG, ~str> {
+    impl MPEG {
+        pub fn from_path(path: &Path) -> Result<~MPEG, ~str> {
             let raw = unsafe {
-                do str::as_c_str(path.to_str()) |buf| {
-                    ll::SMPEG_new(buf, ptr::null(), 0)
+                do path.to_str().as_c_str() |buf| {
+                    ll::SMPEG_new(buf, null(), 0)
                 }
             };
 
@@ -207,79 +210,79 @@ pub mod mpeg {
             else { Ok(wrap_mpeg(raw)) }
         }
 
-        fn status(&self) -> SMPEGstatus {
+        pub fn status(&self) -> SMPEGstatus {
             unsafe { ll::SMPEG_status(self.raw) }
         }
 
-        fn set_volume(&self, volume: int) {
+        pub fn set_volume(&self, volume: int) {
             unsafe { ll::SMPEG_setvolume(self.raw, volume as c_int); }
         }
 
-        fn set_display(&self, surface: &Surface) {
+        pub fn set_display(&self, surface: &Surface) {
             unsafe {
-                ll::SMPEG_setdisplay(self.raw, surface.raw, ptr::null(), ptr::null());
+                ll::SMPEG_setdisplay(self.raw, surface.raw, null(), null());
             }
         }
 
-        fn enable_video(&self, enable: bool) {
+        pub fn enable_video(&self, enable: bool) {
             unsafe { ll::SMPEG_enablevideo(self.raw, enable as c_int); }
         }
 
-        fn enable_audio(&self, enable: bool) {
+        pub fn enable_audio(&self, enable: bool) {
             unsafe { ll::SMPEG_enableaudio(self.raw, enable as c_int); }
         }
 
-        fn set_loop(&self, repeat: bool) {
+        pub fn set_loop(&self, repeat: bool) {
             unsafe { ll::SMPEG_loop(self.raw, repeat as c_int); }
         }
 
-        fn resize(&self, width: int, height: int) {
+        pub fn resize(&self, width: int, height: int) {
             unsafe { ll::SMPEG_scaleXY(self.raw, width as c_int, height as c_int); }
         }
 
-        fn scale_by(&self, scale: int) {
+        pub fn scale_by(&self, scale: int) {
             unsafe { ll::SMPEG_scale(self.raw, scale as c_int); }
         }
 
-        fn move(&self, x: int, y: int) {
+        pub fn move(&self, x: int, y: int) {
             unsafe { ll::SMPEG_move(self.raw, x as c_int, y as c_int); }
         }
 
-        fn set_display_region(&self, x: int, y: int, w: int, h: int) {
+        pub fn set_display_region(&self, x: int, y: int, w: int, h: int) {
             unsafe {
                 ll::SMPEG_setdisplayregion(self.raw, x as c_int, y as c_int,
                                            w as c_int, h as c_int);
             }
         }
 
-        fn play(&self) {
+        pub fn play(&self) {
             unsafe { ll::SMPEG_play(self.raw); }
         }
 
-        fn pause(&self) {
+        pub fn pause(&self) {
             unsafe { ll::SMPEG_pause(self.raw); }
         }
 
-        fn stop(&self) {
+        pub fn stop(&self) {
             unsafe { ll::SMPEG_stop(self.raw); }
         }
 
-        fn rewind(&self) {
+        pub fn rewind(&self) {
             unsafe { ll::SMPEG_rewind(self.raw); }
         }
 
-        fn seek(&self, bytes: int) {
+        pub fn seek(&self, bytes: int) {
             unsafe { ll::SMPEG_seek(self.raw, bytes as c_int); }
         }
 
-        fn skip(&self, seconds: float) {
+        pub fn skip(&self, seconds: float) {
             unsafe { ll::SMPEG_skip(self.raw, seconds as c_float); }
         }
 
-        fn get_error(&self) -> ~str {
+        pub fn get_error(&self) -> ~str {
             unsafe {
                 let cstr = ll::SMPEG_error(self.raw);
-                str::raw::from_c_str(cast::transmute(&cstr))
+                ::std::str::raw::from_c_str(::std::cast::transmute(&cstr))
             }
         }
     }

@@ -4,7 +4,7 @@
 
 //! Mapping from actual inputs to virtual inputs.
 
-use compat::core::{hashmap, to_bytes};
+use std::{uint, to_bytes};
 
 use sdl::event;
 use format::obj::Lane;
@@ -25,19 +25,23 @@ pub enum Input {
 }
 
 impl IterBytes for Input {
-    fn iter_bytes(&self, lsb0: bool, f: to_bytes::Cb) -> to_bytes::Ret {
+    fn iter_bytes(&self, lsb0: bool, f: to_bytes::Cb) -> bool {
         match *self {
-            KeyInput(key) => to_bytes::iter_bytes_2(&0u8, &(key as uint), lsb0, f),
-            JoyAxisInput(axis) => to_bytes::iter_bytes_2(&1u8, &axis, lsb0, f),
-            JoyButtonInput(button) => to_bytes::iter_bytes_2(&2u8, &button, lsb0, f),
-            QuitInput => (3u8).iter_bytes(lsb0, f)
+            KeyInput(key) => // XXX #7363
+                0u8.iter_bytes(lsb0, |b| f(b)) && (key as uint).iter_bytes(lsb0, |b| f(b)),
+            JoyAxisInput(axis) => // XXX #7363
+                1u8.iter_bytes(lsb0, |b| f(b)) && axis.iter_bytes(lsb0, |b| f(b)),
+            JoyButtonInput(button) => // XXX #7363
+                2u8.iter_bytes(lsb0, |b| f(b)) && button.iter_bytes(lsb0, |b| f(b)),
+            QuitInput => // XXX #7363
+                3u8.iter_bytes(lsb0, |b| f(b))
         }
     }
 }
 
-pub impl Input {
+impl Input {
     /// Translates an SDL event to the (internal) actual input type and state.
-    fn from_event(event: event::Event) -> Option<(Input, InputState)> {
+    pub fn from_event(event: event::Event) -> Option<(Input, InputState)> {
         match event {
             event::QuitEvent | event::KeyEvent(event::EscapeKey,_,_,_) =>
                 Some((QuitInput, Positive)),
@@ -94,9 +98,9 @@ pub enum InputState {
     Negative = -1
 }
 
-pub impl VirtualInput {
+impl VirtualInput {
     /// Returns true if the virtual input has a specified key kind in the key specification.
-    fn active_in_key_spec(&self, kind: KeyKind, keyspec: &KeySpec) -> bool {
+    pub fn active_in_key_spec(&self, kind: KeyKind, keyspec: &KeySpec) -> bool {
         match *self {
             LaneInput(Lane(lane)) => keyspec.kinds[lane] == Some(kind),
             SpeedDownInput | SpeedUpInput => true
@@ -163,19 +167,21 @@ static KEYSETS: &'static [KeySet] = &[
 ];
 
 /// An input mapping, i.e. a mapping from the actual input to the virtual input.
-pub type KeyMap = hashmap::HashMap<Input,VirtualInput>;
+pub type KeyMap = ::std::hashmap::HashMap<Input,VirtualInput>;
 
 /// Reads an input mapping from the environment variables. (C: `read_keymap`)
 pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Result<KeyMap,~str> {
+    use util::std::str::StrUtil;
+
     /// Finds an SDL virtual key with the given name. Matching is done case-insensitively.
     fn sdl_key_from_name(name: &str) -> Option<event::Key> {
-        let name = name.to_lower();
+        let name = name.to_ascii_lower();
         unsafe {
             let firstkey = 0;
-            let lastkey = cast::transmute(event::LastKey);
+            let lastkey = ::std::cast::transmute(event::LastKey);
             for uint::range(firstkey, lastkey) |keyidx| {
-                let key = cast::transmute(keyidx);
-                let keyname = event::get_key_name(key).to_lower();
+                let key = ::std::cast::transmute(keyidx);
+                let keyname = event::get_key_name(key).to_ascii_lower();
                 if keyname == name { return Some(key); }
             }
         }
@@ -195,25 +201,25 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
         }
     }
 
-    let mut map = hashmap::HashMap::new();
+    let mut map = ::std::hashmap::HashMap::new();
     let add_mapping = |kind: Option<KeyKind>, input: Input, vinput: VirtualInput| {
         if kind.map_default(true, |&kind| vinput.active_in_key_spec(kind, keyspec)) {
             map.insert(input, vinput);
         }
     };
 
-    for KEYSETS.each |&keyset| {
+    for KEYSETS.iter().advance |&keyset| {
         let (envvar, default, mapping) = keyset; // XXX
         let spec = getenv(/*keyset.*/envvar);
         let spec = spec.get_or_default(/*keyset.*/default.to_owned());
 
         let mut i = 0;
-        for spec.each_split_char('|') |part| {
+        for spec.split_iter('|').advance |part| {
             let (kind, vinputs) = /*keyset.*/mapping[i];
-            for part.each_split_char('%') |s| {
+            for part.split_iter('%').advance |s| {
                 match parse_input(s) {
                     Some(input) => {
-                        for vinputs.each |&vinput| {
+                        for vinputs.iter().advance |&vinput| {
                             add_mapping(kind, input, vinput);
                         }
                     }
@@ -229,11 +235,12 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
         }
     }
 
-    for keyspec.order.each |&lane| {
+    for keyspec.order.iter().advance |&lane| {
         let key = Key(36 + *lane as int);
         let kind = keyspec.kinds[*lane].get();
         let envvar = fmt!("ANGOLMOIS_%s%c_KEY", key.to_str(), kind.to_char());
-        for getenv(envvar).each |&s| {
+        let val = getenv(envvar); // XXX #3511
+        for val.iter().advance |&s| {
             match parse_input(s) {
                 Some(input) => { add_mapping(Some(kind), input, LaneInput(lane)); }
                 None => { return Err(fmt!("Unknown key name in the environment variable %s: %s",

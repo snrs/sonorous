@@ -73,24 +73,23 @@ pub struct Options {
     playspeed: float,
 }
 
-pub impl Options {
+impl Options {
     /// Returns true if the exclusive mode is enabled. This enables a text-based interface.
     /// (C: `opt_mode >= EXCLUSIVE_MODE`)
-    fn is_exclusive(&self) -> bool { self.mode == ExclusiveMode }
+    pub fn is_exclusive(&self) -> bool { self.mode == ExclusiveMode }
 
     /// Returns true if the input is ignored. Escape key or speed-changing keys are still
     /// available as long as the graphical screen is enabled. (C: `!!opt_mode`)
-    fn is_autoplay(&self) -> bool { self.mode != PlayMode }
+    pub fn is_autoplay(&self) -> bool { self.mode != PlayMode }
 
     /// Returns true if the BGA is displayed. (C: `opt_bga < NO_BGA`)
-    fn has_bga(&self) -> bool { self.bga != NoBga }
+    pub fn has_bga(&self) -> bool { self.bga != NoBga }
 
     /// Returns true if the BGA movie is enabled. (C: `opt_bga < BGA_BUT_NO_MOVIE`)
-    fn has_movie(&self) -> bool { self.bga == BgaAndMovie }
+    pub fn has_movie(&self) -> bool { self.bga == BgaAndMovie }
 
     /// Returns true if the graphical screen is enabled.
     /// (C: `opt_mode < EXCLUSIVE_MODE || opt_bga < NO_BGA`)
-    fn has_screen(&self) -> bool { !self.is_exclusive() || self.has_bga() }
+    pub fn has_screen(&self) -> bool { !self.is_exclusive() || self.has_bga() }
 }
-
 

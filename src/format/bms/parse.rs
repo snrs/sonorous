@@ -4,8 +4,7 @@
 
 //! BMS parser.
 
-use compat::core::iter;
-
+use std::vec;
 use format::obj::{BPM, Duration, Seconds, Measures};
 use format::bms::types::{Key};
 use format::bms::{ImageRef, BlitCmd};
@@ -80,10 +79,12 @@ impl<'self> ToStr for BmsCommand<'self> {
     }
 }
 
-pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::Ret {
+pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> bool {
+    use util::std::str::StrUtil;
+
     let lines = vec::split(f.read_whole_stream(), |&ch| ch == 10u8);
-    for lines.each |&line0| {
-        let line0 = ::util::core::str::from_fixed_utf8_bytes(line0, |_| ~"\ufffd");
+    for lines.iter().advance |&line0| {
+        let line0 = ::util::std::str::from_fixed_utf8_bytes(line0, |_| ~"\ufffd");
         let line: &str = line0;
 
         // skip non-command lines
@@ -91,14 +92,14 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
         if !line.starts_with("#") { loop; }
         let line = line.slice_to_end(1);
 
-        let upperline = line.to_upper();
+        let upperline = line.to_ascii_upper();
 
         macro_rules! if_prefix(
             ($prefix:expr -> $constr:ident string) => (
                 if_prefix!($prefix {
                     let mut text = ~"";
                     if lex!(line; ws, str* -> text, ws*, !) {
-                        if !blk($constr(text)) { return iter::EarlyExit; }
+                        if !blk($constr(text)) { return false; }
                     }
                 })
             );
@@ -106,21 +107,22 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
                 if_prefix!($prefix {
                     let mut value = 0;
                     if lex!(line; ws, int -> value) {
-                        if !blk($constr(value)) { return iter::EarlyExit; }
+                        if !blk($constr(value)) { return false; }
                     }
                 })
             );
             ($prefix:expr -> $constr:ident path) => (
                 if_prefix!($prefix {
-                    let mut key = Key(-1), path = ~"";
+                    let mut key = Key(-1);
+                    let mut path = ~"";
                     if lex!(line; Key -> key, ws, str -> path, ws*, !) {
-                        if !blk($constr(key, path)) { return iter::EarlyExit; }
+                        if !blk($constr(key, path)) { return false; }
                     }
                 })
             );
             ($prefix:expr -> $constr:ident) => (
                 if_prefix!($prefix {
-                    if !blk($constr) { return iter::EarlyExit; }
+                    if !blk($constr) { return false; }
                 })
             );
             ($prefix:expr $blk:expr) => ({
@@ -141,11 +143,12 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
         if_prefix!("PATH_WAV"  -> BmsPathWAV   string)
 
         if_prefix!("BPM" { // #BPM <float> or #BPMxx <float>
-            let mut key = Key(-1), bpm = 0.0;
+            let mut key = Key(-1);
+            let mut bpm = 0.0;
             if lex!(line; Key -> key, ws, float -> bpm) {
-                if !blk(BmsExBPM(key, BPM(bpm))) { return iter::EarlyExit; }
+                if !blk(BmsExBPM(key, BPM(bpm))) { return false; }
             } else if lex!(line; ws, float -> bpm) {
-                if !blk(BmsBPM(BPM(bpm))) { return iter::EarlyExit; }
+                if !blk(BmsBPM(BPM(bpm))) { return false; }
             }
         })
 
@@ -157,7 +160,7 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
         if_prefix!("LNOBJ" { // #LNOBJ <key>
             let mut key = Key(-1);
             if lex!(line; ws, Key -> key) {
-                if !blk(BmsLNObj(key)) { return iter::EarlyExit; }
+                if !blk(BmsLNObj(key)) { return false; }
             }
         })
 
@@ -165,32 +168,36 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
         if_prefix!("BMP" -> BmsBMP path)
 
         if_prefix!("BGA" { // #BGAxx yy <int> <int> <int> <int> <int> <int>
-            let mut dst = Key(0), src = Key(0);
+            let mut dst = Key(0);
+            let mut src = Key(0);
             let mut bc = BlitCmd { dst: ImageRef(Key(0)), src: ImageRef(Key(0)),
                                    x1: 0, y1: 0, x2: 0, y2: 0, dx: 0, dy: 0 };
             if lex!(line; Key -> dst, ws, Key -> src, ws, int -> bc.x1, ws, int -> bc.y1, ws,
                     int -> bc.x2, ws, int -> bc.y2, ws, int -> bc.dx, ws, int -> bc.dy) {
                 bc.src = ImageRef(src);
                 bc.dst = ImageRef(dst);
-                if !blk(BmsBGA(bc)) { return iter::EarlyExit; }
+                if !blk(BmsBGA(bc)) { return false; }
             }
         })
 
         if_prefix!("STOP" { // #STOPxx <int>
-            let mut key = Key(-1), duration = 0;
+            let mut key = Key(-1);
+            let mut duration = 0;
             if lex!(line; Key -> key, ws, int -> duration) {
                 let duration = Measures(duration as float / 192.0);
-                if !blk(BmsStop(key, duration)) { return iter::EarlyExit; }
+                if !blk(BmsStop(key, duration)) { return false; }
             }
         })
 
         if_prefix!("STP" { // #STP<int>.<int> <int>
-            let mut measure = 0, frac = 0, duration = 0;
+            let mut measure = 0;
+            let mut frac = 0;
+            let mut duration = 0;
             if lex!(line; Measure -> measure, '.', uint -> frac, ws,
                     int -> duration) && duration > 0 {
                 let pos = measure as float + frac as float * 0.001;
                 let duration = Seconds(duration as float * 0.001);
-                if !blk(BmsStp(pos, duration)) { return iter::EarlyExit; }
+                if !blk(BmsStp(pos, duration)) { return false; }
             }
         })
 
@@ -204,22 +211,24 @@ pub fn each_bms_command(f: @io::Reader, blk: &fn(BmsCommand) -> bool) -> iter::R
         if_prefix!("ELSE"      -> BmsElse           )
         if_prefix!("END"       -> BmsEndIf          )
 
-        let mut measure = 0, chan = Key(0), data = ~"";
+        let mut measure = 0;
+        let mut chan = Key(0);
+        let mut data = ~"";
         if lex!(line; Measure -> measure, Key -> chan, ':', ws*, str -> data, ws*, !) {
             if chan == Key(2) { // #xxx02:<float>
                 let mut shorten = 0.0;
                 if lex!(data; ws*, float -> shorten) {
-                    if !blk(BmsShorten(measure, shorten)) { return iter::EarlyExit; }
+                    if !blk(BmsShorten(measure, shorten)) { return false; }
                     loop;
                 }
             } else {
-                if !blk(BmsData(measure, chan, data)) { return iter::EarlyExit; }
+                if !blk(BmsData(measure, chan, data)) { return false; }
                 loop;
             }
         }
 
-        if !blk(BmsUnknown(line)) { return iter::EarlyExit; }
+        if !blk(BmsUnknown(line)) { return false; }
     }
-    iter::Finished
+    true
 }
 

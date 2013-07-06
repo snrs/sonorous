@@ -18,9 +18,7 @@
  * and MIT license. Also note that:
  *
  * - This code is known to compile with the following combinations of rustc and rust-sdl:
- *     - rustc 0.6 + rust-sdl `999abbc` 2013-04-13, with `--cfg legacy` option
- *     - rustc 0.6 `510d0f2` 2013-05-25 (pre-0.7) + rust-sdl `efa4b24` 2013-05-12 (an unmerged
- *       branch from sstewartgallus/rust-sdl) + `s/core::/std::/g` in rust-sdl
+ *     - rustc 0.7 + rust-sdl `48cb490` 2013-07-02 (an unmerged branch from rossmurray/rust-sdl)
  *
  * - Unlike the original Angolmois code (which sacrifices most comments due to code size concerns),
  *   the Rust version has much more comments which can be beneficial for understanding Angolmois
@@ -35,6 +33,15 @@
  *   issue number like #1234.
  * * XXX - should be fixed as soon as Rust issue is gone.
  * * TODO - other problems unrelated to Rust.
+ *
+ * # Common Issues
+ *
+ * Those issues are common enough that they have to be discussed before the source code.
+ *
+ * * #3511 - iterator needs to ensure its underlying object available but rvalue lifetime is too
+ *           short for it. rooting the underlying object is necessary for now.
+ * * #7363 - implicit borrowing of stack closures is currently disabled due to the soundness issue.
+ *           can be worked around by wrapping a reference to the closure to another closure.
  */
 
 #[link(name = "sonorous",
@@ -45,26 +52,20 @@
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
 
-// Rust: core/std in 0.6 are named to std/extra in 0.7. fortunately we can alias the external crate
-//       to consistent names, which are in this case core/extra.
-#[cfg(legacy)] extern mod extra (name = "std");
-#[cfg(not(legacy))] extern mod extra;
-#[cfg(not(legacy))] extern mod core (name = "std");
+extern mod extra;
 extern mod sdl;
 extern mod opengles;
 
-use core::num::Round;
+use std::{char, uint, float, str};
+use std::num::Round;
 
 // see below for specifics.
-use self::util::core::str::*;
-use self::util::core::option::*;
-use self::util::core::iter::*;
-use self::util::core::io::*;
-use self::compat::core::str::*;
+use self::util::std::str::*;
+use self::util::std::option::*;
+use self::util::std::io::*;
 
-pub mod compat;
 #[macro_escape] pub mod util {
-    pub mod core;
+    pub mod std;
     pub mod macros;
     pub mod lex;
     pub mod gfx;
@@ -96,7 +97,7 @@ pub fn version() -> ~str { ~"Angolmois 2.0.0 alpha 2 (rust edition)" }
 
 /// Returns an executable name used in the command line if any. (C: `argv0`)
 pub fn exename() -> ~str {
-    let args = os::args();
+    let args = std::os::args();
     if args.is_empty() {~"angolmois"} else {args[0].clone()}
 }
 
@@ -108,7 +109,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     use ui::player;
 
     // parses the file and sanitizes it
-    let mut r = compat::core::rand::Rng();
+    let mut r = std::rand::rng();
     let mut bms = match bms::parse_bms(bmspath, &mut r) {
         Ok(bms) => ~bms,
         Err(err) => die!("Couldn't load BMS file: %s", err)
@@ -125,14 +126,14 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     let infos = ~bms::analyze_bms(bms);
 
     // applies the modifier if any
-    for opts.modf.each |&modf| {
+    for opts.modf.iter().advance |&modf| {
         player::apply_modf(bms, modf, &mut r, keyspec, 0, keyspec.split);
         if keyspec.split < keyspec.order.len() {
             player::apply_modf(bms, modf, &mut r, keyspec, keyspec.split, keyspec.order.len());
         }
     }
 
-    let (port, chan) = comm::stream();
+    let (port, chan) = std::comm::stream();
     chan.send(~(opts, bms, infos, keyspec));
 
     do ::sdl::start {
@@ -140,10 +141,10 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
 
         // initialize SDL
         player::init_sdl();
-        for opts.joystick.each |&joyidx| { player::init_joystick(joyidx); }
+        for opts.joystick.iter().advance |&joyidx| { player::init_joystick(joyidx); }
 
         // read the input mapping (dependent to the SDL initialization)
-        let keymap = match engine::input::read_keymap(keyspec, os::getenv) {
+        let keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
             Ok(map) => ~map,
             Err(err) => die!("%s", err)
         };
@@ -160,9 +161,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
             screen = Some(player::init_video(opts.is_exclusive(), opts.fullscreen));
         }
 
-        // Rust: `|| { if opts.is_exclusive() { update_line(~""); } }` segfaults due to
-        //       the moved `opts`. (#2202)
-        let atexit = if opts.is_exclusive() { || player::update_line("") } else { || {} };
+        let atexit = || { if opts.is_exclusive() { player::update_line(""); } };
 
         // render the loading screen
         let mut ticker = ui::common::Ticker();
@@ -178,26 +177,29 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
                     let screen: &gfx::Surface = screen.get_ref().sdl_surface;
                     let saved_screen: &gfx::Surface = *saved_screen.get_ref();
                     player::graphic_update_status(path, screen, saved_screen,
-                                                  font, &mut ticker, atexit)
+                                                  font, &mut ticker, || atexit()) // XXX #7363
                 };
             } else {
                 update_status = |_path| {};
             }
         } else if opts.showinfo {
             player::show_stagefile_noscreen(bms, infos, keyspec, opts);
-            update_status = |path| player::text_update_status(path, &mut ticker, atexit);
+            update_status = |path| {
+                player::text_update_status(path, &mut ticker, || atexit()) // XXX #7363
+            };
         } else {
             update_status = |_path| {};
         }
 
         // wait for resources
         let start = ::sdl::get_ticks() + 3000;
-        let (sndres, imgres) = player::load_resource(bms, opts, update_status);
+        let (sndres, imgres) =
+            player::load_resource(bms, opts, |msg| update_status(msg)); // XXX #7363
         if opts.showinfo {
             ticker.reset(); // force update
             update_status(None);
         }
-        while ::sdl::get_ticks() < start { player::check_exit(atexit); }
+        while ::sdl::get_ticks() < start { player::check_exit(|| atexit()); } // XXX #7363
 
         // create the player and transfer ownership of other resources to it
         let duration = bms::bms_duration(bms, infos.originoffset,
@@ -243,7 +245,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
 /// Prints the usage. (C: `usage`)
 pub fn usage() {
     // Rust: this is actually a good use case of `include_str!`...
-    io::stderr().write_str(fmt!("\
+    std::io::stderr().write_str(fmt!("\
 %s -- the simple BMS player
 http://mearie.org/projects/angolmois/
 https://github.com/lifthrasiir/angolmois-rust/
@@ -295,8 +297,9 @@ Environment Variables:
 /// (C: `main`)
 pub fn main() {
     use ui::options::*;
+    use util::std::str::StrUtil;
 
-    let longargs = util::core::hashmap::map_from_vec([
+    let longargs = util::std::hashmap::map_from_vec([
         (~"--help", 'h'), (~"--version", 'V'), (~"--speed", 'a'),
         (~"--autoplay", 'v'), (~"--exclusive", 'x'), (~"--sound-only", 'X'),
         (~"--windowed", 'w'), (~"--no-fullscreen", 'w'),
@@ -307,7 +310,7 @@ pub fn main() {
         (~"--movie", ' '), (~"--no-movie", 'M'), (~"--joystick", 'j'),
     ]);
 
-    let args = os::args();
+    let args = std::os::args();
     let nargs = args.len();
 
     let mut bmspath = None;
@@ -347,7 +350,7 @@ pub fn main() {
             let nshortargs = shortargs.len();
 
             let mut inside = true;
-            for shortargs.each_chari_byte |j, c| {
+            for shortargs.iter().enumerate().advance |(j, c)| {
                 // Reads the argument of the option. Option string should be consumed first.
                 let fetch_arg = |opt| {
                     let off = if inside {j+1} else {j};
@@ -371,7 +374,7 @@ pub fn main() {
 
                 match c {
                     'h' => { usage(); }
-                    'V' => { io::println(version()); return; }
+                    'V' => { println(version()); return; }
                     'v' => { mode = AutoPlayMode; }
                     'x' => { mode = ExclusiveMode; }
                     'X' => { mode = ExclusiveMode; bga = NoBga; }

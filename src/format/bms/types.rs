@@ -4,6 +4,7 @@
 
 //! Common types for BMS format.
 
+use std::str;
 use format::obj::Lane;
 
 /// Two-letter alphanumeric identifier used for virtually everything, including resource
@@ -24,9 +25,9 @@ fn getdigit(n: char) -> Option<int> {
     }
 }
 
-pub impl Key {
+impl Key {
     /// Converts the first two letters of `s` to a `Key`. (C: `key2index`)
-    fn from_chars(s: &[char]) -> Option<Key> {
+    pub fn from_chars(s: &[char]) -> Option<Key> {
         if s.len() < 2 { return None; }
         do getdigit(s[0]).chain |a| {
             do getdigit(s[1]).map |&b| { Key(a * 36 + b) }
@@ -34,11 +35,11 @@ pub impl Key {
     }
 
     /// Converts the first two letters of `s` to a `Key`. (C: `key2index`)
-    fn from_str(s: &str) -> Option<Key> {
+    pub fn from_str(s: &str) -> Option<Key> {
         if s.len() < 2 { return None; }
-        let str::CharRange {ch:c1, next:p1} = str::char_range_at(s, 0);
+        let str::CharRange {ch:c1, next:p1} = s.char_range_at(0);
         do getdigit(c1).chain |a| {
-            let str::CharRange {ch:c2, next:p2} = str::char_range_at(s, p1);
+            let str::CharRange {ch:c2, next:p2} = s.char_range_at(p1);
             do getdigit(c2).map |&b| {
                 assert!(p2 == 2); // both characters should be in ASCII
                 Key(a * 36 + b)
@@ -48,19 +49,20 @@ pub impl Key {
 
     /// Returns if the alphanumeric key is in the proper range. Angolmois supports the full
     /// range of 00-ZZ (0-1295) for every case.
-    fn is_valid(self) -> bool {
+    pub fn is_valid(self) -> bool {
         0 <= *self && *self < MAXKEY
     }
 
     /// Re-reads the alphanumeric key as a hexadecimal number if possible. This is required
     /// due to handling of channel #03 (BPM is expected to be in hexadecimal).
-    fn to_hex(self) -> Option<int> {
-        let sixteens = *self / 36, ones = *self % 36;
+    pub fn to_hex(self) -> Option<int> {
+        let sixteens = *self / 36;
+        let ones = *self % 36;
         if sixteens < 16 && ones < 16 {Some(sixteens * 16 + ones)} else {None}
     }
 
     /// Converts the channel number to the lane number.
-    fn to_lane(self) -> Lane {
+    pub fn to_lane(self) -> Lane {
         let player = match *self / 36 {
             1 | 3 | 5 | 0xD => 0,
             2 | 4 | 6 | 0xE => 1,

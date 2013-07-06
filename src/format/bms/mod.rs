@@ -31,7 +31,8 @@
  * command memo](http://hitkey.nekokan.dyndns.info/cmds.htm).
  */
 
-use core::rand::*;
+use std::{int, uint, float, vec, cmp};
+use std::rand::*;
 
 pub use format::obj::{Lane, NLANES};
 pub use format::obj::{BGALayer, Layer1, Layer2, Layer3, PoorBGA, NLAYERS};
@@ -147,10 +148,10 @@ pub fn Bms() -> Bms {
           shortens: ~[], nmeasures: 0 }
 }
 
-pub impl Bms {
+impl Bms {
     /// Returns a scaling factor of given measure number. The default scaling factor is 1.0, and
     /// that value applies to any out-of-bound measures. (C: `shorten`)
-    fn shorten(&self, measure: int) -> float {
+    pub fn shorten(&self, measure: int) -> float {
         if measure < 0 || measure as uint >= self.shortens.len() {
             1.0
         } else {
@@ -161,7 +162,7 @@ pub impl Bms {
     /// Calculates the virtual time that is `offset` measures away from the virtual time `base`.
     /// This takes account of the scaling factor, so if first four measures are scaled by 1/4,
     /// then `adjust_object_time(0.0, 2.0)` results in `5.0`. (C: `adjust_object_time`)
-    fn adjust_object_time(&self, base: float, offset: float) -> float {
+    pub fn adjust_object_time(&self, base: float, offset: float) -> float {
         let basemeasure = base.floor() as int;
         let baseshorten = self.shorten(basemeasure);
         let basefrac = base - basemeasure as float;
@@ -203,7 +204,7 @@ pub impl Bms {
 // parsing
 
 /// Reads and parses the BMS file with given RNG from given reader.
-pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms,~str> {
+pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Result<Bms,~str> {
     let mut bms = Bms();
 
     /// The state of the block, for determining which lines should be processed.
@@ -311,10 +312,8 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
     let mut lnobj = None;
 
     for parse::each_bms_command(f) |cmd| {
-        // Rust: mutable loan and immutable loan cannot coexist in the same block (although
-        //       it's safe). (#4666)
         assert!(!blk.is_empty());
-        match (cmd, { blk.last().inactive() }) { // XXX #4666
+        match (cmd, blk.last().inactive()) {
             (parse::BmsTitle(s),           false) => { bms.title = Some(s.to_owned()); }
             (parse::BmsGenre(s),           false) => { bms.genre = Some(s.to_owned()); }
             (parse::BmsArtist(s),          false) => { bms.artist = Some(s.to_owned()); }
@@ -349,7 +348,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
 
                 // do not generate a random value if the entire block is skipped (but it
                 // still marks the start of block)
-                let inactive = {blk.last().inactive()}; // XXX #4666
+                let inactive = blk.last().inactive();
                 let generated = do val.chain |val| {
                     // Rust: there should be `Option<T>::chain` if `T` is copyable.
                     if setrandom {
@@ -383,14 +382,13 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
                 last.state = if last.state == Ignore {Process} else {NoFurther};
             }
             (parse::BmsEndIf, _) => {
-                for blk.rposition(|&i| i.state != Outside).each |&idx| {
+                let lastinside = blk.rposition(|&i| i.state != Outside); // XXX #3511
+                for lastinside.iter().advance |&idx| {
                     if idx > 0 { blk.truncate(idx + 1); }
                 }
 
-                { // XXX #4666
-                    let last = &mut blk[blk.len() - 1];
-                    last.state = Outside;
-                }
+                let last = &mut blk[blk.len() - 1];
+                last.state = Outside;
             }
 
             (_, _) => {}
@@ -433,7 +431,8 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
 
             // channel #03: BPM as an hexadecimal key
             3 => {
-                for v.to_hex().each |&v| {
+                let v = v.to_hex(); // XXX #3511
+                for v.iter().advance |&v| {
                     add(Obj::SetBPM(t, BPM(v as float)))
                 }
             }
@@ -464,7 +463,8 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
                 let lane = chan.to_lane();
                 if lnobj.is_some() && lnobj == Some(v) {
                     // change the last inserted visible object to the start of LN if any.
-                    for {lastvis[*lane]}.each |&pos| { // XXX #4666
+                    let lastvispos = lastvis[*lane];
+                    for lastvispos.iter().advance |&pos| {
                         assert!(bms.objs[pos].is_visible());
                         bms.objs[pos] = bms.objs[pos].to_lnstart();
                         add(Obj::LNDone(t, lane, Some(SoundRef(v))));
@@ -527,7 +527,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
                     1295 => Some(InstantDeath), // XXX 1295=MAXKEY-1
                     _ => None
                 };
-                for damage.each |&damage| {
+                for damage.iter().advance |&damage| {
                     add(Obj::Bomb(t, lane, Some(SoundRef(Key(0))), damage));
                 }
             }
@@ -541,14 +541,14 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
 
     // loops over the sorted bmslines
     ::extra::sort::tim_sort(bmsline);
-    for bmsline.each |line| {
+    for bmsline.iter().advance |line| {
         let measure = line.measure as float;
-        let data = str::to_chars(line.data);
+        let data: ~[char] = line.data.iter().collect();
         let max = data.len() / 2 * 2;
         let count = max as float;
         for uint::range_step(0, max, 2) |i| {
             let v = Key::from_chars(data.slice(i, i+2));
-            for v.each |&v| {
+            for v.iter().advance |&v| {
                 if v != Key(0) { // ignores 00
                     let t = measure + i as float / count;
                     let t2 = measure + (i + 2) as float / count;
@@ -576,7 +576,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @io::Reader, r: &mut R) -> Result<Bms
 
 /// Reads and parses the BMS file with given RNG. (C: `parse_bms`)
 pub fn parse_bms<R:RngUtil>(bmspath: &str, r: &mut R) -> Result<Bms,~str> {
-    do io::file_reader(&Path(bmspath)).chain |f| {
+    do ::std::io::file_reader(&Path(bmspath)).chain |f| {
         do parse_bms_from_reader(f, r).map |&bms| {
             let mut bms = bms;
             bms.bmspath = bmspath.to_owned();
@@ -611,7 +611,8 @@ pub fn sanitize_bms(bms: &mut Bms) {
             let mut j = i;
             while j < len && objs[j].time <= cur {
                 let obj = &mut objs[j];
-                for to_type(obj).each |&t| {
+                let ty = to_type(obj); // XXX #3511
+                for ty.iter().advance |&t| {
                     if (types & (1 << t)) != 0 {
                         // duplicate type
                         remove_or_replace_note(obj);
@@ -626,7 +627,8 @@ pub fn sanitize_bms(bms: &mut Bms) {
 
             while i < j {
                 let obj = &mut objs[i];
-                for to_type(obj).each |&t| {
+                let ty = to_type(obj); // XXX #3511
+                for ty.iter().advance |&t| {
                     if (types & (1 << t)) == 0 {
                         remove_or_replace_note(obj);
                     }
@@ -656,7 +658,7 @@ pub fn sanitize_bms(bms: &mut Bms) {
         };
 
         let mut inside = false;
-        do sanitize(bms.objs, to_type) |mut types| {
+        do sanitize(bms.objs, |obj| to_type(obj)) |mut types| { // XXX #7363
             static LNMASK: uint = (1 << LNSTART) | (1 << LNDONE);
 
             // remove overlapping LN endpoints altogether
@@ -737,7 +739,7 @@ pub fn analyze_bms(bms: &Bms) -> BmsInfo {
     let mut infos = BmsInfo { originoffset: 0.0, hasbpmchange: false, haslongnote: false,
                               nnotes: 0, maxscore: 0 };
 
-    for bms.objs.each |&obj| {
+    for bms.objs.iter().advance |&obj| {
         infos.haslongnote |= obj.is_lnstart();
         infos.hasbpmchange |= obj.is_setbpm();
 
@@ -761,9 +763,10 @@ pub fn bms_duration(bms: &Bms, originoffset: float,
                     sound_length: &fn(SoundRef) -> float) -> float {
     let mut pos = originoffset;
     let mut bpm = bms.initbpm;
-    let mut time = 0.0, sndtime = 0.0;
+    let mut time = 0.0;
+    let mut sndtime = 0.0;
 
-    for bms.objs.each |&obj| {
+    for bms.objs.iter().advance |&obj| {
         let delta = bms.adjust_object_position(pos, obj.time);
         time += bpm.measure_to_msec(delta);
         match obj.data {
@@ -781,7 +784,7 @@ pub fn bms_duration(bms: &Bms, originoffset: float,
                 }
             }
             Stop(duration) => {
-                time = duration.to_msec(bpm);
+                time += duration.to_msec(bpm);
             }
             _ => {}
         }
@@ -815,11 +818,12 @@ fn update_object_lane(obj: &mut BmsObj, f: &fn(Lane) -> Lane) {
 pub fn apply_mirror_modf(bms: &mut Bms, lanes: &[Lane]) {
     let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
     let rlanes = vec::reversed(lanes);
-    for vec::zip_slice(lanes, rlanes).each |&(Lane(from), to)| {
+    let assocs = vec::zip_slice(lanes, rlanes); // XXX #3511
+    for assocs.iter().advance |&(Lane(from), to)| {
         map[from] = to;
     }
 
-    for vec::each_mut(bms.objs) |obj| {
+    for bms.objs.mut_iter().advance |obj| {
         update_object_lane(obj, |Lane(lane)| map[lane]);
     }
 }
@@ -829,11 +833,12 @@ pub fn apply_mirror_modf(bms: &mut Bms, lanes: &[Lane]) {
 pub fn apply_shuffle_modf<R:RngUtil>(bms: &mut Bms, r: &mut R, lanes: &[Lane]) {
     let shuffled = r.shuffle(lanes);
     let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
-    for vec::zip_slice(lanes, shuffled).each |&(Lane(from), to)| {
+    let assocs = vec::zip_slice(lanes, shuffled); // XXX #3511
+    for assocs.iter().advance |&(Lane(from), to)| {
         map[from] = to;
     }
 
-    for vec::each_mut(bms.objs) |obj| {
+    for bms.objs.mut_iter().advance |obj| {
         update_object_lane(obj, |Lane(lane)| map[lane]);
     }
 }
@@ -847,7 +852,7 @@ pub fn apply_random_modf<R:RngUtil>(bms: &mut Bms, r: &mut R, lanes: &[Lane]) {
     let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
 
     let mut lasttime = float::neg_infinity;
-    for vec::each_mut(bms.objs) |obj| {
+    for bms.objs.mut_iter().advance |obj| {
         if obj.is_lnstart() {
             let lane = obj.object_lane().get();
             match movable.position_elem(&lane) {
@@ -858,7 +863,8 @@ pub fn apply_random_modf<R:RngUtil>(bms: &mut Bms, r: &mut R, lanes: &[Lane]) {
         if lasttime < obj.time { // reshuffle required
             lasttime = obj.time + 1e-4;
             let shuffled = r.shuffle(movable);
-            for vec::zip_slice(movable, shuffled).each |&(Lane(from), to)| {
+            let assocs = vec::zip_slice(movable, shuffled); // XXX #3511
+            for assocs.iter().advance |&(Lane(from), to)| {
                 map[from] = to;
             }
         }

@@ -20,8 +20,11 @@
  *    then a list of alternative extensions is applied with the same matching procedure.
  */
 pub fn resolve_relative_path(basedir: &Path, path: &str, exts: &[&str]) -> Option<Path> {
+    use std::os::{path_is_dir, list_dir};
+    use util::std::str::StrUtil;
+
     let mut parts = ~[];
-    for path.each_split(|c| c == '/' || c == '\\') |part| {
+    for path.split_iter(|c: char| c == '/' || c == '\\').advance |part| {
         if part.is_empty() { loop; }
         parts.push(part);
     }
@@ -29,15 +32,16 @@ pub fn resolve_relative_path(basedir: &Path, path: &str, exts: &[&str]) -> Optio
 
     let mut cur = basedir.clone();
     let lastpart = parts.pop();
-    for parts.each |part| {
+    for parts.iter().advance |part| {
         // early exit if the intermediate path does not exist or is not a directory
-        if !os::path_is_dir(&cur) { return None; }
+        if !path_is_dir(&cur) { return None; }
 
-        let part = part.to_upper();
+        let part = part.to_ascii_upper();
         let mut found = false;
-        for os::list_dir(&cur).each |&next| {
+        let entries = list_dir(&cur); // XXX #3511
+        for entries.iter().advance |&next| {
             if next == ~"." || next == ~".." { loop; }
-            if next.to_upper() == part {
+            if next.to_ascii_upper() == part {
                 cur = cur.push(next);
                 found = true;
                 break;
@@ -46,18 +50,19 @@ pub fn resolve_relative_path(basedir: &Path, path: &str, exts: &[&str]) -> Optio
         if !found { return None; }
     }
 
-    if !os::path_is_dir(&cur) { return None; }
+    if !path_is_dir(&cur) { return None; }
 
-    let lastpart = lastpart.to_upper();
-    for os::list_dir(&cur).each |&next| {
+    let lastpart = lastpart.to_ascii_upper();
+    let entries = list_dir(&cur); // XXX #3511
+    for entries.iter().advance |&next| {
         if next == ~"." || next == ~".." { loop; }
-        let next_ = next.to_upper();
+        let next_ = next.to_ascii_upper();
         let mut found = (next_ == lastpart);
         if !found {
-            match str::rfind_char(next_, '.') {
+            match next_.rfind('.') {
                 Some(idx) => {
                     let nextnoext = next_.slice(0, idx).to_owned();
-                    for exts.each |ext| {
+                    for exts.iter().advance |ext| {
                         if nextnoext + ext.to_owned() == lastpart {
                             found = true;
                             break;

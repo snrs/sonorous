@@ -4,6 +4,7 @@
 
 //! Graphic utilities.
 
+use std::{int, num};
 use sdl::Rect;
 pub use sdl::video::*;
 
@@ -128,22 +129,34 @@ define_ToInt16!(u64)
 
 impl<X:ToInt16+Copy,Y:ToInt16+Copy> XyOpt for (X,Y) {
     #[inline(always)]
-    fn xy_opt(&self) -> Option<(i16,i16)> { let (x, y) = *self; Some((x.to_i16(), y.to_i16())) }
+    fn xy_opt(&self) -> Option<(i16,i16)> {
+        let (x, y) = copy *self;
+        Some((x.to_i16(), y.to_i16()))
+    }
 }
 
 impl<X:ToInt16+Copy,Y:ToInt16+Copy> Xy for (X,Y) {
     #[inline(always)]
-    fn xy(&self) -> (i16,i16) { let (x, y) = *self; (x.to_i16(), y.to_i16()) }
+    fn xy(&self) -> (i16,i16) {
+        let (x, y) = copy *self;
+        (x.to_i16(), y.to_i16())
+    }
 }
 
 impl<W:ToInt16+Copy,H:ToInt16+Copy> WhOpt for (W,H) {
     #[inline(always)]
-    fn wh_opt(&self) -> Option<(u16,u16)> { let (w, h) = *self; Some((w.to_u16(), h.to_u16())) }
+    fn wh_opt(&self) -> Option<(u16,u16)> {
+        let (w, h) = copy *self;
+        Some((w.to_u16(), h.to_u16()))
+    }
 }
 
 impl<W:ToInt16+Copy,H:ToInt16+Copy> Wh for (W,H) {
     #[inline(always)]
-    fn wh(&self) -> (u16,u16) { let (w, h) = *self; (w.to_u16(), h.to_u16()) }
+    fn wh(&self) -> (u16,u16) {
+        let (w, h) = copy *self;
+        (w.to_u16(), h.to_u16())
+    }
 }
 
 /// Constructs an `sdl::Rect` from given point coordinates. Fills `w` and `h` fields to 0
@@ -234,7 +247,8 @@ impl Blend for Color {
 impl Blend for Gradient {
     fn blend(&self, num: int, denom: int) -> Color {
         fn mix(x: u8, y: u8, num: int, denom: int) -> u8 {
-            let x = x as int, y = y as int;
+            let x = x as int;
+            let y = y as int;
             (y + ((x - y) * num / denom)) as u8
         }
 
@@ -275,7 +289,7 @@ impl SurfacePixelsUtil for Surface {
         do self.with_lock |pixels| {
             let fmt = unsafe {(*self.raw).format};
             let pitch = unsafe {(*self.raw).pitch / 4 as uint};
-            let pixels = unsafe {cast::transmute(pixels)};
+            let pixels = unsafe {::std::cast::transmute(pixels)};
             let mut proxy = SurfacePixels { fmt: fmt, width: self.get_width() as uint,
                                             height: self.get_height() as uint,
                                             pitch: pitch, pixels: pixels };
@@ -361,11 +375,15 @@ pub fn bicubic_interpolation(src: &SurfacePixels, dest: &mut SurfacePixels) {
     let ww = src.width as int - 1;
     let hh = src.height as int - 1;
 
-    let mut dx = 0, x = 0;
+    let mut dx = 0;
+    let mut x = 0;
     for int::range(0, w + 1) |i| {
-        let mut dy = 0, y = 0;
+        let mut dy = 0;
+        let mut y = 0;
         for int::range(0, h + 1) |j| {
-            let mut r = 0, g = 0, b = 0;
+            let mut r = 0;
+            let mut g = 0;
+            let mut b = 0;
             let a0 = [bicubic_kernel((x-1) * w - i * ww, w),
                       bicubic_kernel( x    * w - i * ww, w),
                       bicubic_kernel((x+1) * w - i * ww, w),
@@ -376,7 +394,8 @@ pub fn bicubic_interpolation(src: &SurfacePixels, dest: &mut SurfacePixels) {
                       bicubic_kernel((y+2) * h - j * hh, h)];
             for int::range(0, 4) |k0| {
                 for int::range(0, 4) |k1| {
-                    let xx = x + k0 - 1, yy = y + k1 - 1;
+                    let xx = x + k0 - 1;
+                    let yy = y + k1 - 1;
                     if 0 <= xx && xx <= ww && 0 <= yy && yy <= hh {
                         let (r2,g2,b2) = to_rgb(src.get_pixel(xx as uint, yy as uint));
                         let d = (a0[k0] * a1[k1]) >> (FP_SHIFT1*2 - FP_SHIFT2);
@@ -387,9 +406,9 @@ pub fn bicubic_interpolation(src: &SurfacePixels, dest: &mut SurfacePixels) {
                 }
             }
 
-            let r = ::util::core::cmp::clamp(0, r >> FP_SHIFT2, 255) as u8;
-            let g = ::util::core::cmp::clamp(0, g >> FP_SHIFT2, 255) as u8;
-            let b = ::util::core::cmp::clamp(0, b >> FP_SHIFT2, 255) as u8;
+            let r = ::util::std::cmp::clamp(0, r >> FP_SHIFT2, 255) as u8;
+            let g = ::util::std::cmp::clamp(0, g >> FP_SHIFT2, 255) as u8;
+            let b = ::util::std::cmp::clamp(0, b >> FP_SHIFT2, 255) as u8;
             put_pixel(dest, i as uint, j as uint, RGB(r, g, b)); // XXX incorrect lifetime
 
             dy += hh;
