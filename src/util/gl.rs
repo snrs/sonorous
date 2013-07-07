@@ -330,7 +330,8 @@ impl ProgramForTextures {
     }
 }
 
-/// Internally used pixel format for opaque textures.
+/// Internally used pixel format (three bytes R, G, B for one pixel) for opaque textures.
+#[cfg(target_endian="little")]
 static RGB_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
     palette: None, bpp: 24,
     r_loss: 0, g_loss: 0, b_loss: 0, a_loss: 0,
@@ -339,7 +340,18 @@ static RGB_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
     color_key: 0, alpha: 255,
 };
 
-/// Internally used pixel format for transparent textures.
+/// Internally used pixel format (three bytes R, G, B for one pixel) for opaque textures.
+#[cfg(target_endian="big")]
+static RGB_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
+    palette: None, bpp: 24,
+    r_loss: 0, g_loss: 0, b_loss: 0, a_loss: 0,
+    r_shift: 16, g_shift: 8, b_shift: 0, a_shift: 0,
+    r_mask: 0x00ff0000, g_mask: 0x0000ff00, b_mask: 0x000000ff, a_mask: 0,
+    color_key: 0, alpha: 255,
+};
+
+/// Internally used pixel format (four bytes R, G, B, A for one pixel) for transparent textures.
+#[cfg(target_endian="little")]
 static RGBA_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
     palette: None, bpp: 32,
     r_loss: 0, g_loss: 0, b_loss: 0, a_loss: 0,
@@ -348,22 +360,41 @@ static RGBA_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
     color_key: 0, alpha: 255,
 };
 
+/// Internally used pixel format (four bytes R, G, B, A for one pixel) for transparent textures.
+#[cfg(target_endian="big")]
+static RGBA_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
+    palette: None, bpp: 32,
+    r_loss: 0, g_loss: 0, b_loss: 0, a_loss: 0,
+    r_shift: 24, g_shift: 16, b_shift: 8, a_shift: 0,
+    r_mask: 0xff000000, g_mask: 0x00ff0000, b_mask: 0x0000ff00, a_mask: 0x000000ff,
+    color_key: 0, alpha: 255,
+};
+
 /// Converts the surface to the suitable format for OpenGL. In particular, color key is converted
 /// to alpha channel. Deallocates the original surface as needed.
 fn prepare_surface_for_texture(surface: ~video::Surface)
                             -> Result<~video::Surface,(~video::Surface,~str)> {
     let format = unsafe { &*(*surface.raw).format };
-    if format.BitsPerPixel != 24 && format.BitsPerPixel != 32 {
-        let hasalpha = unsafe { ((*surface.raw).flags & video::SrcColorKey as u32) != 0 ||
-                                format.Amask != 0 };
 
-        let newfmt = if hasalpha {RGBA_PIXEL_FORMAT} else {RGB_PIXEL_FORMAT};
-        match surface.convert(newfmt, [video::SWSurface]) {
-            Ok(surface_) => Ok(surface_),
-            Err(err) => Err((surface, err))
-        }
-    } else {
-        Ok(surface)
+    let prepared =
+        if format.BitsPerPixel == 24 {
+            // we still have to ensure that it has a proper byte order
+            format.Rmask == RGB_PIXEL_FORMAT.r_mask && format.Gmask == RGB_PIXEL_FORMAT.g_mask &&
+            format.Bmask == RGB_PIXEL_FORMAT.b_mask && format.Amask == RGB_PIXEL_FORMAT.a_mask
+        } else if format.BitsPerPixel == 32 {
+            format.Rmask == RGBA_PIXEL_FORMAT.r_mask && format.Gmask == RGBA_PIXEL_FORMAT.g_mask &&
+            format.Bmask == RGBA_PIXEL_FORMAT.b_mask && format.Amask == RGBA_PIXEL_FORMAT.a_mask
+        } else {
+            false
+        };
+    if prepared { return Ok(surface); }
+
+    let hasalpha = unsafe { ((*surface.raw).flags & video::SrcColorKey as u32) != 0 ||
+                            format.Amask != 0 };
+    let newfmt = if hasalpha {RGBA_PIXEL_FORMAT} else {RGB_PIXEL_FORMAT};
+    match surface.convert(newfmt, [video::SWSurface]) {
+        Ok(surface_) => Ok(surface_),
+        Err(err) => Err((surface, err))
     }
 }
 

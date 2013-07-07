@@ -152,7 +152,6 @@ impl Screen {
         let glstate = earlyexit!(GLState::new());
 
         gl::enable(gl::BLEND);
-        gl::enable(gl::POLYGON_SMOOTH);
         gl::blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         gl::clear_color(0.0, 0.0, 0.0, 0.0);
 
