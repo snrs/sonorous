@@ -153,7 +153,7 @@ impl Screen {
 
         gl::enable(gl::BLEND);
         gl::blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        gl::clear_color(0.0, 0.0, 0.0, 0.0);
+        gl::clear_color(0.0, 0.0, 0.0, 1.0);
 
         let (l, r) = (0.0, width as f32);
         let (t, b) = (0.0, height as f32);
