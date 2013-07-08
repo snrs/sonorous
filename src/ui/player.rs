@@ -436,15 +436,18 @@ impl LoadingScene {
             None => { return; }
         };
 
-        self.stagefile_tex = match img::load(&path) {
-            Ok(surface) => match Texture::from_owned_surface(surface, false, false) {
-                Ok(tex) => Some(tex),
-                Err(_) => None
-            },
-            Err(_) => None
+        let tex_or_err = do img::load(&path).chain |surface| {
+            // in principle we don't need this, but some STAGEFILEs mistakenly uses alpha channel
+            // or SDL_image fails to read them (cf. http://bugzilla.libsdl.org/show_bug.cgi?id=1943)
+            // so we need to force STAGEFILEs to ignore alpha channels.
+            do surface.display_format().chain |surface| {
+                Texture::from_owned_surface(surface, false, false)
+            }
         };
-        if self.stagefile_tex.is_none() {
-            warn!("failed to load image #STAGEFILE (%s)", path.to_str());
+
+        match tex_or_err {
+            Ok(tex) => { self.stagefile_tex = Some(tex); }
+            Err(_err) => { warn!("failed to load image #STAGEFILE (%s)", path.to_str()); }
         }
     }
 
