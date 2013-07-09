@@ -370,31 +370,100 @@ static RGBA_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
     color_key: 0, alpha: 255,
 };
 
-/// Converts the surface to the suitable format for OpenGL. In particular, color key is converted
-/// to alpha channel. Deallocates the original surface as needed.
-fn prepare_surface_for_texture(surface: ~video::Surface)
-                            -> Result<~video::Surface,(~video::Surface,~str)> {
+/// Checks if the surface is in the appropriate format for uploading via OpenGL.
+fn is_surface_prepared_for_texture(surface: &video::Surface) -> bool {
     let format = unsafe { &*(*surface.raw).format };
+    if format.BitsPerPixel == 24 {
+        // we still have to ensure that it has a proper byte order
+        format.Rmask == RGB_PIXEL_FORMAT.r_mask && format.Gmask == RGB_PIXEL_FORMAT.g_mask &&
+        format.Bmask == RGB_PIXEL_FORMAT.b_mask && format.Amask == RGB_PIXEL_FORMAT.a_mask
+    } else if format.BitsPerPixel == 32 {
+        format.Rmask == RGBA_PIXEL_FORMAT.r_mask && format.Gmask == RGBA_PIXEL_FORMAT.g_mask &&
+        format.Bmask == RGBA_PIXEL_FORMAT.b_mask && format.Amask == RGBA_PIXEL_FORMAT.a_mask
+    } else {
+        false
+    }
+}
 
-    let prepared =
-        if format.BitsPerPixel == 24 {
-            // we still have to ensure that it has a proper byte order
-            format.Rmask == RGB_PIXEL_FORMAT.r_mask && format.Gmask == RGB_PIXEL_FORMAT.g_mask &&
-            format.Bmask == RGB_PIXEL_FORMAT.b_mask && format.Amask == RGB_PIXEL_FORMAT.a_mask
-        } else if format.BitsPerPixel == 32 {
-            format.Rmask == RGBA_PIXEL_FORMAT.r_mask && format.Gmask == RGBA_PIXEL_FORMAT.g_mask &&
-            format.Bmask == RGBA_PIXEL_FORMAT.b_mask && format.Amask == RGBA_PIXEL_FORMAT.a_mask
-        } else {
-            false
-        };
-    if prepared { return Ok(surface); }
-
+/// Converts the surface to the suitable format for OpenGL. In particular, color key is converted
+/// to alpha channel. The original surface is kept as is.
+fn prepare_surface_for_texture(surface: &video::Surface) -> Result<~video::Surface,~str> {
     let hasalpha = unsafe { ((*surface.raw).flags & video::SrcColorKey as u32) != 0 ||
-                            format.Amask != 0 };
+                            (*(*surface.raw).format).Amask != 0 };
     let newfmt = if hasalpha {RGBA_PIXEL_FORMAT} else {RGB_PIXEL_FORMAT};
-    match surface.convert(newfmt, [video::SWSurface]) {
-        Ok(surface_) => Ok(surface_),
-        Err(err) => Err((surface, err))
+    surface.convert(newfmt, [video::SWSurface])
+}
+
+/// Calls `f` with the OpenGL-compatible parameters of the prepared surface.
+fn with_prepared_surface<R>(
+        surface: &video::Surface,
+        f: &fn(w: GLsizei, h: GLsizei, fmt: GLenum, ty: GLenum, data: &[u8]) -> R) -> R {
+    assert!(is_surface_prepared_for_texture(surface));
+    let bpp = unsafe { (*(*surface.raw).format).BitsPerPixel };
+    let glpixfmt = if bpp == 24 {gl::RGB} else {gl::RGBA};
+    let (width, height) = surface.get_size();
+    do surface.with_lock |pixels| {
+        f(width as GLsizei, height as GLsizei, glpixfmt, gl::UNSIGNED_BYTE,
+          unsafe {::std::cast::transmute(pixels)})
+    }
+}
+
+/// An SDL surface prepared for uploading to OpenGL.
+pub struct PreparedSurface(~video::Surface); // so normal surface methods are available
+
+impl PreparedSurface {
+    /// Creates a new SDL surface suitable for direct uploading to OpenGL.
+    pub fn new(width: uint, height: uint, transparent: bool) -> Result<PreparedSurface,~str> {
+        let newfmt = if transparent {RGBA_PIXEL_FORMAT} else {RGB_PIXEL_FORMAT};
+        let surface =
+            video::Surface::new([video::SWSurface], width as int, height as int, newfmt.bpp as int,
+                                newfmt.r_mask, newfmt.g_mask, newfmt.b_mask, newfmt.a_mask);
+        match surface {
+            Ok(surface) => Ok(PreparedSurface(surface)),
+            Err(err) => Err(err)
+        }
+    }
+
+    /// Converts an existing SDL surface to the format suitable for uploading to OpenGL.
+    pub fn from_surface(surface: &video::Surface) -> Result<PreparedSurface,~str> {
+        match prepare_surface_for_texture(surface) {
+            Ok(surface) => Ok(PreparedSurface(surface)),
+            Err(err) => Err(err)
+        }
+    }
+
+    /// Converts an existing SDL surface to the format suitable for uploading to OpenGL.
+    /// If the surface already had the suitable format no copying occurs. If the conversion fails
+    /// the original surface is kept as is.
+    pub fn from_owned_surface(surface: ~video::Surface)
+                                    -> Result<PreparedSurface,(~video::Surface,~str)> {
+        if is_surface_prepared_for_texture(surface) {
+            Ok(PreparedSurface(surface)) // no conversion required
+        } else {
+            match prepare_surface_for_texture(surface) {
+                Ok(surface) => Ok(PreparedSurface(surface)),
+                Err(err) => Err((surface, err))
+            }
+        }
+    }
+
+    /// Checks if the associated surface is suitable for uploading to OpenGL.
+    pub fn valid(&self) -> bool {
+        is_surface_prepared_for_texture(**self)
+    }
+
+    /// Calls `glTexImage2D` with the associated surface.
+    pub fn tex_image_2d(&self, target: GLenum, level: GLint) {
+        do with_prepared_surface(**self) |w, h, fmt, ty, data| {
+            gl::tex_image_2d(target, level, fmt as GLint, w, h, 0, fmt, ty, Some(data))
+        }
+    }
+
+    /// Calls `glTexSubImage2D` with the associated surface.
+    pub fn tex_sub_image_2d(&self, target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint) {
+        do with_prepared_surface(**self) |w, h, fmt, ty, data| {
+            gl::tex_sub_image_2d(target, level, xoffset, yoffset, w, h, fmt, ty, Some(data))
+        }
     }
 }
 
@@ -422,6 +491,16 @@ impl Texture {
         Ok(Texture { index: texture, width: width, height: height })
     }
 
+    /// Creates a new texture from a prepared SDL surface. `xwrap` and `ywrap` specifies whether
+    /// the texture should wrap in horizontal or vertical directions or not.
+    pub fn from_prepared_surface(prepared: &PreparedSurface,
+                                 xwrap: bool, ywrap: bool) -> Result<Texture,~str> {
+        let (width, height) = prepared.get_size();
+        let texture = earlyexit!(Texture::new(width as uint, height as uint));
+        texture.upload_surface(prepared, xwrap, ywrap);
+        Ok(texture)
+    }
+
     /// Creates a new texture from an SDL surface, which is destroyed after the upload. `xwrap` and
     /// `ywrap` specifies whether the texture should wrap in horizontal or vertical directions or
     /// not.
@@ -429,8 +508,11 @@ impl Texture {
                               xwrap: bool, ywrap: bool) -> Result<Texture,~str> {
         let (width, height) = surface.get_size();
         let texture = earlyexit!(Texture::new(width as uint, height as uint));
-        match texture.upload_surface(surface, xwrap, ywrap) {
-            Ok(_surface) => Ok(texture),
+        match PreparedSurface::from_owned_surface(surface) {
+            Ok(prepared) => {
+                texture.upload_surface(&prepared, xwrap, ywrap);
+                Ok(texture)
+            }
             Err((_surface,err)) => Err(err)
         }
     }
@@ -442,30 +524,17 @@ impl Texture {
         gl::bind_texture(gl::TEXTURE_2D, self.index);
     }
 
-    /// Uploads an SDL surface, which may be converted to the suitable format. If the conversion
-    /// fails the original surface is returned with an error string. `xwrap` and `ywrap` specifies
-    /// whether the texture should wrap in horizontal or vertical directions or not.
-    pub fn upload_surface(&self, surface: ~video::Surface, xwrap: bool, ywrap: bool) ->
-                                    Result<~video::Surface,(~video::Surface,~str)> {
-        let surface = earlyexit!(prepare_surface_for_texture(surface));
-        let bpp = unsafe { (*(*surface.raw).format).BitsPerPixel };
-        let glpixfmt = if bpp == 24 {gl::RGB} else {gl::RGBA};
-        let (width, height) = surface.get_size();
-
+    /// Uploads a prepared SDL surface. `xwrap` and `ywrap` specifies whether the texture should
+    /// wrap in horizontal or vertical directions or not.
+    pub fn upload_surface(&self, prepared: &PreparedSurface, xwrap: bool, ywrap: bool) {
         gl::bind_texture(gl::TEXTURE_2D, self.index);
-        do surface.with_lock |pixels| {
-            let pixels: &[u8] = unsafe { ::std::cast::transmute(pixels) };
-            gl::tex_image_2d(gl::TEXTURE_2D, 0, glpixfmt as GLint, width as GLsizei,
-                             height as GLsizei, 0, glpixfmt, gl::UNSIGNED_BYTE, Some(pixels));
-        }
+        prepared.tex_image_2d(gl::TEXTURE_2D, 0);
         gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S,
                             if xwrap {gl::REPEAT} else {gl::CLAMP_TO_EDGE} as GLint);
         gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T,
                             if ywrap {gl::REPEAT} else {gl::CLAMP_TO_EDGE} as GLint);
         gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
         gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as GLint);
-
-        Ok(surface)
     }
 }
 

@@ -16,7 +16,7 @@ use sdl::mixer::*;
 use ext::sdl::mixer::*;
 use ext::sdl::mpeg::*;
 use format::bms::*;
-use util::gl::{Texture, ShadedDrawing, TexturedDrawing};
+use util::gl::{PreparedSurface, Texture, ShadedDrawing, TexturedDrawing};
 use util::gfx::*;
 use util::bmfont::*;
 use util::filesearch::resolve_relative_path;
@@ -216,19 +216,37 @@ enum ImageResource {
     NoImage,
     /// A static image is associated. The surface may have a transparency which is already
     /// handled by `load_image`.
-    Image(@~Surface), // XXX borrowck
+    Image(@PreparedSurface), // XXX borrowck
     /// A movie is associated. A playback starts when `start_movie` method is called, and stops
     /// when `stop_movie` is called. An associated surface is updated from the separate thread
     /// during the playback.
-    Movie(@~Surface, @~MPEG) // XXX borrowck
+    Movie(@PreparedSurface, @~MPEG) // XXX borrowck
 }
 
 impl ImageResource {
     /// Returns an associated surface if any.
-    pub fn surface(&self) -> Option<@~Surface> {
+    pub fn surface(&self) -> Option<@PreparedSurface> {
         match *self {
             NoImage => None,
             Image(surface) | Movie(surface,_) => Some(surface)
+        }
+    }
+
+    /// Uploads an associated surface to the texture if any.
+    pub fn upload_to_texture(&self, texture: &Texture) {
+        match *self {
+            NoImage => {}
+            Image(surface) | Movie(surface,_) => {
+                texture.upload_surface(surface, false, false);
+            }
+        }
+    }
+
+    /// Returns true if the resource should be updated continuously (i.e. movies or animations).
+    pub fn should_always_upload(&self) -> bool {
+        match *self {
+            NoImage | Image(_) => false,
+            Movie(_,mpeg) => mpeg.status() == SMPEG_PLAYING
         }
     }
 
@@ -256,20 +274,19 @@ fn load_image(key: Key, path: &str, opts: &Options, basedir: &Path) -> ImageReso
 
     /// Converts a surface to the native display format, while preserving a transparency or
     /// setting a color key if required.
-    fn to_display_format(surface: ~Surface) -> Result<~Surface,~str> {
-        if unsafe {(*(*surface.raw).format).Amask} != 0 {
-            let res = surface.display_format_alpha();
-            // Rust: `|&surface|` causes an unchecked copy. (#3224)
-            do res.iter |surface| { // XXX #3224
-                (*&surface).set_alpha([SrcAlpha, RLEAccel], 255);
-            }
-            res
+    fn to_display_format(surface: ~Surface) -> Result<PreparedSurface,~str> {
+        let surface = if unsafe {(*(*surface.raw).format).Amask} != 0 {
+            let surface = earlyexit!(surface.display_format_alpha());
+            surface.set_alpha([SrcAlpha, RLEAccel], 255);
+            surface
         } else {
-            let res = surface.display_format();
-            do res.iter |surface| { // XXX #3224
-                (*&surface).set_color_key([SrcColorKey, RLEAccel], RGB(0,0,0));
-            }
-            res
+            let surface = earlyexit!(surface.display_format());
+            surface.set_color_key([SrcColorKey, RLEAccel], RGB(0,0,0));
+            surface
+        };
+        match PreparedSurface::from_owned_surface(surface) {
+            Ok(prepared) => Ok(prepared),
+            Err((_surface,err)) => Err(err)
         }
     }
 
@@ -281,13 +298,13 @@ fn load_image(key: Key, path: &str, opts: &Options, basedir: &Path) -> ImageReso
             };
             match res {
                 Ok(movie) => {
-                    let surface = match new_surface(BGAW, BGAH) {
+                    let surface = match PreparedSurface::new(BGAW, BGAH, false) {
                         Ok(surface) => @surface,
-                        Err(err) => die!("new_surface failed: %s", err)
+                        Err(err) => die!("PreparedSurface::new failed: %s", err)
                     };
                     movie.enable_video(true);
                     movie.set_loop(true);
-                    movie.set_display(*surface);
+                    movie.set_display(**surface);
                     return Movie(surface, @movie);
                 }
                 Err(_) => { warn!("failed to load image #BMP%s (%s)", key.to_str(), path); }
@@ -297,8 +314,8 @@ fn load_image(key: Key, path: &str, opts: &Options, basedir: &Path) -> ImageReso
         let res = match resolve_relative_path(basedir, path, IMAGE_EXTS) {
             Some(fullpath) =>
                 do img::load(&fullpath).chain |surface| {
-                    do to_display_format(surface).chain |surface| {
-                        Ok(Image(@surface))
+                    do to_display_format(surface).chain |prepared| {
+                        Ok(Image(@prepared))
                     }
                 },
             None => Err(~"not found")
@@ -313,16 +330,16 @@ fn load_image(key: Key, path: &str, opts: &Options, basedir: &Path) -> ImageReso
 
 /// Applies the blit command to given list of image resources. (C: a part of `load_resource`)
 fn apply_blitcmd(imgres: &mut [ImageResource], bc: &BlitCmd) {
-    let origin: @~Surface = match imgres[**bc.src] {
+    let origin: @PreparedSurface = match imgres[**bc.src] {
         Image(src) => src,
         _ => { return; }
     };
-    let target: @~Surface = match imgres[**bc.dst] {
+    let target: @PreparedSurface = match imgres[**bc.dst] {
         Image(dst) => dst,
         NoImage => {
-            let surface = match new_surface(BGAW, BGAH) {
+            let surface = match PreparedSurface::new(BGAW, BGAH, false) {
                 Ok(surface) => @surface,
-                Err(err) => die!("new_surface failed: %s", err)
+                Err(err) => die!("PreparedSurface::new failed: %s", err)
             };
             surface.fill(RGB(0, 0, 0));
             surface.set_color_key([SrcColorKey, RLEAccel], RGB(0, 0, 0));
@@ -336,12 +353,18 @@ fn apply_blitcmd(imgres: &mut [ImageResource], bc: &BlitCmd) {
     let y1 = cmp::max(bc.y1, 0);
     let x2 = cmp::min(bc.x2, bc.x1 + BGAW as int);
     let y2 = cmp::min(bc.y2, bc.y1 + BGAH as int);
-    target.blit_area(*origin, (x1,y1), (x2,y2), (x2-x1,y2-y1));
+    target.blit_area(**origin, (x1,y1), (x2,y2), (x2-x1,y2-y1));
 }
 
 /// A list of image references displayed in BGA layers (henceforth the BGA state). Not all image
 /// referenced here is directly rendered, but the references themselves are kept.
 type BGAState = [Option<ImageRef>, ..NLAYERS];
+
+/// Similar to `BGAState` but also has a set of textures used to render the BGA.
+struct BGARenderState {
+    state: BGAState,
+    textures: ~[Texture]
+}
 
 /// Returns the initial BGA state. Note that merely setting a particular layer doesn't start
 /// the movie playback; `poorbgafix` in `parser::parse` function handles it.
@@ -349,43 +372,56 @@ fn initial_bga_state() -> BGAState {
     [None, None, None, Some(ImageRef(Key(0)))]
 }
 
-/// A trait for BGA state.
-trait BGAStateOps {
-    /// Updates the BGA state. This method prepares given image resources for the next
-    /// rendering, notably by starting and stopping the movie playback.
-    fn update(&mut self, current: &BGAState, imgres: &[ImageResource]);
-    /// Renders the image resources for the specified layers to the specified region of
-    /// `screen`.
-    fn render(&self, screen: &Surface, layers: &[BGALayer], imgres: &[ImageResource],
-              x: uint, y: uint);
-}
+impl BGARenderState {
+    /// Creates an initial state and textures.
+    pub fn new(imgres: &[ImageResource]) -> BGARenderState {
+        let state = initial_bga_state();
+        let textures = do state.map |&iref| {
+            let texture = match Texture::new(BGAW, BGAH) {
+                Ok(texture) => texture,
+                Err(err) => die!("Texture::new failed: %s", err)
+            };
+            for iref.iter().advance |&iref| {
+                imgres[**iref].upload_to_texture(&texture);
+            }
+            texture
+        };
+        BGARenderState { state: state, textures: textures }
+    }
 
-impl BGAStateOps for BGAState {
-    fn update(&mut self, current: &BGAState, imgres: &[ImageResource]) {
+    /// Updates the BGA state. This method prepares given image resources for the next rendering,
+    /// notably by starting and stopping the movie playback and uploading textures as needed.
+    pub fn update(&mut self, current: &BGAState, imgres: &[ImageResource]) {
         for uint::range(0, NLAYERS) |layer| {
             // TODO this design can't handle the case that a BGA layer is updated to the same
             // image reference, which should rewind the movie playback. the original Angolmois
             // does handle it.
-            if self[layer] != current[layer] {
-                for self[layer].iter().advance |&iref| {
+            if self.state[layer] != current[layer] {
+                for self.state[layer].iter().advance |&iref| {
                     imgres[**iref].stop_movie();
                 }
                 for current[layer].iter().advance |&iref| {
                     imgres[**iref].start_movie();
+                    imgres[**iref].upload_to_texture(&self.textures[layer]);
+                }
+            } else {
+                for self.state[layer].iter().advance |&iref| {
+                    if imgres[**iref].should_always_upload() {
+                        imgres[**iref].upload_to_texture(&self.textures[layer]);
+                    }
                 }
             }
         }
-        *self = *current;
+        self.state = *current;
     }
 
-    fn render(&self, screen: &Surface, layers: &[BGALayer], imgres: &[ImageResource],
-              x: uint, y: uint) {
-        screen.fill_area((x,y), (256,256), RGB(0,0,0));
+    /// Renders the image resources for the specified layers to the specified region of `screen`.
+    pub fn render(&self, screen: &Screen, layers: &[BGALayer], x: f32, y: f32) {
+        // the BGA area should have been already filled to black.
         for layers.iter().advance |&layer| {
-            for self[layer as uint].iter().advance |&iref| {
-                let surface = imgres[**iref].surface(); // XXX #3511
-                for surface.iter().advance |&surface| {
-                    screen.blit_area(&**surface, (0,0), (x,y), (256,256));
+            if self.state[layer as uint].is_some() {
+                do screen.draw_textured(&self.textures[layer as uint]) |d| {
+                    d.rect(x, y, x + BGAW as f32, y + BGAH as f32);
                 }
             }
         }
@@ -1527,7 +1563,7 @@ pub struct GraphicDisplay {
     /// this timestamp. (C: `gradetime`)
     gradelimit: Option<uint>,
     /// Currently known state of BGAs.
-    lastbga: BGAState,
+    lastbga: BGARenderState,
 }
 
 /// Creates a new graphic display from the options, key specification, pre-allocated (usually
@@ -1543,11 +1579,12 @@ pub fn GraphicDisplay(opts: &Options, keyspec: &KeySpec, screen: Screen, font: ~
     let bgax = leftmost + (centerwidth - BGAW) / 2;
     let bgay = (SCREENH - BGAH) / 2;
     let sprite = create_sprite(opts, leftmost, rightmost, styles);
+    let bgastate = BGARenderState::new(imgres);
 
     let display = GraphicDisplay {
         sprite: sprite, screen: screen, font: font, imgres: imgres,
         leftmost: leftmost, rightmost: rightmost, lanestyles: styles, bgax: bgax, bgay: bgay,
-        poorlimit: None, gradelimit: None, lastbga: initial_bga_state(),
+        poorlimit: None, gradelimit: None, lastbga: bgastate,
     };
 
     Ok(display)
@@ -1588,13 +1625,13 @@ impl Display for GraphicDisplay {
         *&mut self.poorlimit = poorlimit;
         *&mut self.gradelimit = gradelimit;
 
+        self.screen.clear();
+
         // render BGAs (should render before the lanes since lanes can overlap with BGAs)
         if player.opts.has_bga() {
             let layers = if poorlimit.is_some() {&[PoorBGA]} else {&[Layer1, Layer2, Layer3]};
-            self.lastbga.render(self.screen.sdl_surface, layers, self.imgres, self.bgax, self.bgay);
+            self.lastbga.render(&self.screen, layers, self.bgax as f32, self.bgay as f32);
         }
-
-        self.screen.clear();
 
         do self.screen.draw_shaded |d| {
             // fill the lanes to the border color
@@ -1810,23 +1847,24 @@ pub struct BGAOnlyDisplay {
     /// Image resources. (C: `imgres`)
     imgres: ~[ImageResource],
     /// Currently known state of BGAs.
-    lastbga: BGAState,
+    lastbga: BGARenderState,
 }
 
 /// Creates a new BGA-only display from the pre-created screen (usually by `init_video`) and
 /// pre-loaded image resources.
 pub fn BGAOnlyDisplay(screen: Screen, imgres: ~[ImageResource]) -> BGAOnlyDisplay {
-    BGAOnlyDisplay { textdisplay: TextDisplay(), screen: screen,
-                     imgres: imgres, lastbga: initial_bga_state() }
+    let bgastate = BGARenderState::new(imgres);
+    BGAOnlyDisplay { textdisplay: TextDisplay(), screen: screen, imgres: imgres, lastbga: bgastate }
 }
 
 impl Display for BGAOnlyDisplay {
     fn render(&mut self, player: &Player) {
+        self.screen.clear();
         self.lastbga.update(&player.bga, self.imgres);
 
         let layers = &[Layer1, Layer2, Layer3];
-        self.lastbga.render(self.screen.sdl_surface, layers, self.imgres, 0, 0);
-        self.screen.sdl_surface.flip();
+        self.lastbga.render(&self.screen, layers, 0.0, 0.0);
+        self.screen.swap_buffers();
 
         self.textdisplay.render(player);
     }

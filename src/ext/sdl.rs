@@ -118,7 +118,7 @@ pub mod mpeg {
     use std::libc::{c_int, c_float};
     use std::ptr::null;
     use sdl::video::Surface;
-    use self::ll::SMPEGstatus;
+    pub use self::ll::{SMPEGstatus, SMPEG_ERROR, SMPEG_STOPPED, SMPEG_PLAYING};
 
     pub mod ll {
         use std::libc::{c_void, c_int, c_char, c_float, c_double};
@@ -139,6 +139,7 @@ pub mod mpeg {
             current_time: c_double,
             total_time: c_double
         }
+        #[deriving(Eq, Clone)]
         pub enum SMPEGstatus {
             SMPEG_ERROR = -1,
             SMPEG_STOPPED = 0,
