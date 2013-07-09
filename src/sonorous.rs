@@ -161,7 +161,9 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
             screen = Some(player::init_video(opts.is_exclusive(), opts.fullscreen));
         }
 
-        let atexit = || { if opts.is_exclusive() { player::update_line(""); } };
+        // Rust: `|| { if opts.is_exclusive() { update_line(~""); } }` segfaults due to
+        //       the moved `opts`. (#2202)
+        let atexit = if opts.is_exclusive() { || player::update_line("") } else { || {} };
 
         // render the loading screen
         let mut ticker = ui::common::Ticker();
