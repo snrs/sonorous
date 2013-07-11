@@ -84,6 +84,7 @@ pub mod format {
 pub mod engine {
     pub mod keyspec;
     pub mod input;
+    pub mod resource;
 }
 #[macro_escape] pub mod ui {
     pub mod common;

@@ -16,15 +16,17 @@ use sdl::mixer::*;
 use ext::sdl::mixer::*;
 use ext::sdl::mpeg::*;
 use format::bms::*;
-use util::gl::{PreparedSurface, Texture, ShadedDrawing, TexturedDrawing};
+use util::gl::{Texture, ShadedDrawing, TexturedDrawing};
 use util::gfx::*;
 use util::bmfont::*;
-use util::filesearch::resolve_relative_path;
 use engine::keyspec::*;
 use engine::input::{Input, KeyInput, JoyAxisInput, JoyButtonInput, QuitInput};
 use engine::input::{LaneInput, SpeedUpInput, SpeedDownInput};
 use engine::input::{InputState, Positive, Neutral, Negative};
 use engine::input::{KeyMap};
+use engine::resource::{BGAW, BGAH, SAMPLERATE};
+use engine::resource::{SoundResource, NoSound, ImageResource, NoImage, Image, Movie};
+use engine::resource::{get_basedir, load_sound, load_image, apply_blitcmd};
 use ui::common::{Ticker};
 use ui::screen::Screen;
 use ui::options::*;
@@ -33,10 +35,6 @@ use ui::options::*;
 pub static SCREENW: uint = 800;
 /// The height of screen, unless the exclusive mode.
 pub static SCREENH: uint = 600;
-/// The width of BGA, or the width of screen for the exclusive mode.
-pub static BGAW: uint = 256;
-/// The height of BGA, or the height of screen for the exclusive mode.
-pub static BGAH: uint = 256;
 
 //----------------------------------------------------------------------------------------------
 // bms utilities
@@ -90,13 +88,6 @@ pub fn update_line(s: &str) {
 //----------------------------------------------------------------------------------------------
 // initialization
 
-/// An internal sampling rate for SDL_mixer. Every chunk loaded is first converted to
-/// this sampling rate for the purpose of mixing.
-static SAMPLERATE: i32 = 44100;
-
-/// The number of bytes in the chunk converted to an internal sampling rate.
-static BYTESPERSEC: i32 = SAMPLERATE * 2 * 2; // stereo, 16 bits/sample
-
 /// Creates a small screen for BGAs (`BGAW` by `BGAH` pixels) if `exclusive` is set,
 /// or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise. `fullscreen` is ignored
 /// when `exclusive` is set. (C: `init_video`)
@@ -141,220 +132,7 @@ pub fn init_joystick(joyidx: uint) -> ~joy::Joystick {
 }
 
 //----------------------------------------------------------------------------------------------
-// resource management
-
-/// Alternative file extensions for sound resources. (C: `SOUND_EXTS`)
-static SOUND_EXTS: &'static [&'static str] = &[".WAV", ".OGG", ".MP3"];
-/// Alternative file extensions for image resources. (C: `IMAGE_EXTS`)
-static IMAGE_EXTS: &'static [&'static str] = &[".BMP", ".PNG", ".JPG", ".JPEG", ".GIF"];
-
-/// Returns a specified or implied resource directory from the BMS file.
-fn get_basedir(bms: &Bms) -> Path {
-    // TODO this logic assumes that #PATH_WAV is always interpreted as a native path, which
-    // the C version doesn't assume. this difference barely makes the practical issue though.
-    match bms.basepath {
-        Some(ref basepath) => { let basepath: &str = *basepath; Path(basepath) }
-        None => Path(bms.bmspath).dir_path()
-    }
-}
-
-/// Sound resource associated to `SoundRef`. It contains the actual SDL_mixer chunk that can be
-/// readily played. (C: the type of `sndres`)
-enum SoundResource {
-    /// No sound resource is associated, or error occurred while loading.
-    NoSound,
-    /// Sound resource is associated.
-    //
-    // Rust: ideally this should be just a ~-ptr, but the current borrowck is very constrained
-    //       in this aspect. after several attempts I finally sticked to delegate the ownership
-    //       to a managed box.
-    Sound(@~Chunk) // XXX borrowck
-}
-
-impl SoundResource {
-    /// Returns the associated chunk if any.
-    pub fn chunk(&self) -> Option<@~Chunk> {
-        match *self {
-            NoSound => None,
-            Sound(chunk) => Some(chunk)
-        }
-    }
-
-    /// Returns the length of associated sound chunk in seconds. This is used for determining
-    /// the actual duration of the song in presence of key and background sounds, so it may
-    /// return 0.0 if no sound is present.
-    pub fn duration(&self) -> float {
-        match *self {
-            NoSound => 0.0,
-            Sound(chunk) => {
-                let chunk = chunk.to_ll_chunk();
-                (unsafe {(*chunk).alen} as float) / (BYTESPERSEC as float)
-            }
-        }
-    }
-}
-
-/// Loads a sound resource.
-fn load_sound(key: Key, path: &str, basedir: &Path) -> SoundResource {
-    let res = match resolve_relative_path(basedir, path, SOUND_EXTS) {
-        Some(fullpath) => Chunk::from_wav(&fullpath),
-        None => Err(~"not found")
-    };
-    match res {
-        Ok(res) => Sound(@res),
-        Err(_) => {
-            warn!("failed to load sound #WAV%s (%s)", key.to_str(), path);
-            NoSound
-        }
-    }
-}
-
-/// Image resource associated to `ImageRef`. It can be either a static image or a movie, and
-/// both contains an SDL surface that can be blitted to the screen. (C: the type of `imgres`)
-enum ImageResource {
-    /// No image resource is associated, or error occurred while loading.
-    NoImage,
-    /// A static image is associated. The surface may have a transparency which is already
-    /// handled by `load_image`.
-    Image(@PreparedSurface), // XXX borrowck
-    /// A movie is associated. A playback starts when `start_movie` method is called, and stops
-    /// when `stop_movie` is called. An associated surface is updated from the separate thread
-    /// during the playback.
-    Movie(@PreparedSurface, @~MPEG) // XXX borrowck
-}
-
-impl ImageResource {
-    /// Returns an associated surface if any.
-    pub fn surface(&self) -> Option<@PreparedSurface> {
-        match *self {
-            NoImage => None,
-            Image(surface) | Movie(surface,_) => Some(surface)
-        }
-    }
-
-    /// Uploads an associated surface to the texture if any.
-    pub fn upload_to_texture(&self, texture: &Texture) {
-        match *self {
-            NoImage => {}
-            Image(surface) | Movie(surface,_) => {
-                texture.upload_surface(surface, false, false);
-            }
-        }
-    }
-
-    /// Returns true if the resource should be updated continuously (i.e. movies or animations).
-    pub fn should_always_upload(&self) -> bool {
-        match *self {
-            NoImage | Image(_) => false,
-            Movie(_,mpeg) => mpeg.status() == SMPEG_PLAYING
-        }
-    }
-
-    /// Stops the movie playback if possible.
-    pub fn stop_movie(&self) {
-        match *self {
-            NoImage | Image(_) => {}
-            Movie(_,mpeg) => { mpeg.stop(); }
-        }
-    }
-
-    /// Starts (or restarts, if the movie was already being played) the movie playback
-    /// if possible.
-    pub fn start_movie(&self) {
-        match *self {
-            NoImage | Image(_) => {}
-            Movie(_,mpeg) => { mpeg.rewind(); mpeg.play(); }
-        }
-    }
-}
-
-/// Loads an image resource.
-fn load_image(key: Key, path: &str, opts: &Options, basedir: &Path) -> ImageResource {
-    use util::std::str::StrUtil;
-
-    /// Converts a surface to the native display format, while preserving a transparency or
-    /// setting a color key if required.
-    fn to_display_format(surface: ~Surface) -> Result<PreparedSurface,~str> {
-        let surface = if unsafe {(*(*surface.raw).format).Amask} != 0 {
-            let surface = earlyexit!(surface.display_format_alpha());
-            surface.set_alpha([SrcAlpha, RLEAccel], 255);
-            surface
-        } else {
-            let surface = earlyexit!(surface.display_format());
-            surface.set_color_key([SrcColorKey, RLEAccel], RGB(0,0,0));
-            surface
-        };
-        match PreparedSurface::from_owned_surface(surface) {
-            Ok(prepared) => Ok(prepared),
-            Err((_surface,err)) => Err(err)
-        }
-    }
-
-    if path.to_ascii_lower().ends_with(".mpg") {
-        if opts.has_movie() {
-            let res = match resolve_relative_path(basedir, path, []) {
-                Some(fullpath) => MPEG::from_path(&fullpath),
-                None => Err(~"not found")
-            };
-            match res {
-                Ok(movie) => {
-                    let surface = match PreparedSurface::new(BGAW, BGAH, false) {
-                        Ok(surface) => @surface,
-                        Err(err) => die!("PreparedSurface::new failed: %s", err)
-                    };
-                    movie.enable_video(true);
-                    movie.set_loop(true);
-                    movie.set_display(**surface);
-                    return Movie(surface, @movie);
-                }
-                Err(_) => { warn!("failed to load image #BMP%s (%s)", key.to_str(), path); }
-            }
-        }
-    } else if opts.has_bga() {
-        let res = match resolve_relative_path(basedir, path, IMAGE_EXTS) {
-            Some(fullpath) =>
-                do img::load(&fullpath).chain |surface| {
-                    do to_display_format(surface).chain |prepared| {
-                        Ok(Image(@prepared))
-                    }
-                },
-            None => Err(~"not found")
-        };
-        match res {
-            Ok(res) => { return res; },
-            Err(_) => { warn!("failed to load image #BMP%s (%s)", key.to_str(), path); }
-        }
-    }
-    NoImage
-}
-
-/// Applies the blit command to given list of image resources. (C: a part of `load_resource`)
-fn apply_blitcmd(imgres: &mut [ImageResource], bc: &BlitCmd) {
-    let origin: @PreparedSurface = match imgres[**bc.src] {
-        Image(src) => src,
-        _ => { return; }
-    };
-    let target: @PreparedSurface = match imgres[**bc.dst] {
-        Image(dst) => dst,
-        NoImage => {
-            let surface = match PreparedSurface::new(BGAW, BGAH, false) {
-                Ok(surface) => @surface,
-                Err(err) => die!("PreparedSurface::new failed: %s", err)
-            };
-            surface.fill(RGB(0, 0, 0));
-            surface.set_color_key([SrcColorKey, RLEAccel], RGB(0, 0, 0));
-            imgres[**bc.dst] = Image(surface);
-            surface
-        },
-        _ => { return; }
-    };
-
-    let x1 = cmp::max(bc.x1, 0);
-    let y1 = cmp::max(bc.y1, 0);
-    let x2 = cmp::min(bc.x2, bc.x1 + BGAW as int);
-    let y2 = cmp::min(bc.y2, bc.y1 + BGAH as int);
-    target.blit_area(**origin, (x1,y1), (x2,y2), (x2-x1,y2-y1));
-}
+// BGA states
 
 /// A list of image references displayed in BGA layers (henceforth the BGA state). Not all image
 /// referenced here is directly rendered, but the references themselves are kept.
@@ -370,6 +148,31 @@ struct BGARenderState {
 /// the movie playback; `poorbgafix` in `parser::parse` function handles it.
 fn initial_bga_state() -> BGAState {
     [None, None, None, Some(ImageRef(Key(0)))]
+}
+
+trait Uploadable {
+    /// Uploads an associated surface to the texture if any.
+    pub fn upload_to_texture(&self, texture: &Texture);
+    /// Returns true if the resource should be updated continuously (i.e. movies or animations).
+    pub fn should_always_upload(&self) -> bool;
+}
+
+impl Uploadable for ImageResource {
+    pub fn upload_to_texture(&self, texture: &Texture) {
+        match *self {
+            NoImage => {}
+            Image(surface) | Movie(surface,_) => {
+                texture.upload_surface(surface, false, false);
+            }
+        }
+    }
+
+    pub fn should_always_upload(&self) -> bool {
+        match *self {
+            NoImage | Image(_) => false,
+            Movie(_,mpeg) => mpeg.status() == SMPEG_PLAYING
+        }
+    }
 }
 
 impl BGARenderState {
@@ -437,7 +240,7 @@ pub struct LoadingScene {
     title: ~str,
     genre: ~str,
     artist: ~str,
-    stagefile_path: Option<Path>,
+    stagefile_path: Option<(Path,~str)>, // basedir, path
     stagefile_tex: Option<Texture>,
 }
 
@@ -457,30 +260,31 @@ impl LoadingScene {
     /// Creates a state required for rendering the graphical loading screen.
     pub fn new(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec, opts: &Options) -> LoadingScene {
         let (meta, title, genre, artist) = displayed_info(bms, infos, keyspec);
-        let basedir = get_basedir(bms);
-        let stagefile_path = do bms.stagefile.chain_ref |&path| {
-            resolve_relative_path(&basedir, path, IMAGE_EXTS)
-        };
+        let stagefile_path = do bms.stagefile.map |&path| { (get_basedir(bms), path) };
         LoadingScene { showinfo: opts.showinfo, meta: meta, title: title, genre: genre,
                        artist: artist, stagefile_path: stagefile_path, stagefile_tex: None }
     }
 
     /// Loads the BMS #STAGEFILE image and creates an OpenGL texture for it.
     pub fn load_stagefile(&mut self) {
-        let path = match self.stagefile_path {
-            Some(ref path) => path.clone(),
+        let (basedir, path) = match self.stagefile_path {
+            Some((ref basedir, ref path)) => (basedir, path),
             None => { return; }
         };
 
-        let tex_or_err = do img::load(&path).chain |surface| {
-            // in principle we don't need this, but some STAGEFILEs mistakenly uses alpha channel
-            // or SDL_image fails to read them (cf. http://bugzilla.libsdl.org/show_bug.cgi?id=1943)
-            // so we need to force STAGEFILEs to ignore alpha channels.
-            do surface.display_format().chain |surface| {
-                Texture::from_owned_surface(surface, false, false)
+        let tex_or_err = do load_image(*path, basedir, false).chain |res| {
+            match res {
+                Image(surface) => {
+                    // in principle we don't need this, but some STAGEFILEs mistakenly uses alpha
+                    // channel or SDL_image fails to read them so we need to force STAGEFILEs to
+                    // ignore alpha channels. (cf. http://bugzilla.libsdl.org/show_bug.cgi?id=1943)
+                    do surface.display_format().chain |surface| {
+                        Texture::from_owned_surface(surface, false, false)
+                    }
+                },
+                _ => Err(~"unexpected")
             }
         };
-
         match tex_or_err {
             Ok(tex) => { self.stagefile_tex = Some(tex); }
             Err(_err) => { warn!("failed to load image #STAGEFILE (%s)", path.to_str()); }
@@ -552,17 +356,30 @@ pub fn load_resource(bms: &Bms, opts: &Options,
             match path {
                 Some(path) => {
                     callback(Some(path.clone()));
-                    load_sound(Key(i as int), path, &basedir)
+                    match load_sound(path, &basedir) {
+                        Ok(res) => res,
+                        Err(_) => {
+                            warn!("failed to load sound #WAV%s (%s)", Key(i as int).to_str(), path);
+                            NoSound
+                        }
+                    }
                 },
                 None => NoSound
             }
         }.collect();
     let mut imgres: ~[ImageResource] =
         do bms.imgpath.iter().enumerate().transform |(i, &path)| {
+            let path = if opts.has_bga() {path} else {None}; // skip loading BGAs if requested
             match path {
                 Some(path) => {
                     callback(Some(path.clone()));
-                    load_image(Key(i as int), path, opts, &basedir)
+                    match load_image(path, &basedir, opts.has_movie()) {
+                        Ok(res) => res,
+                        Err(_) => {
+                            warn!("failed to load image #BMP%s (%s)", Key(i as int).to_str(), path);
+                            NoImage
+                        }
+                    }
                 },
                 None => NoImage
             }
