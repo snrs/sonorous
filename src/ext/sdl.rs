@@ -58,6 +58,7 @@ pub mod syswm {
 
 pub mod mixer {
     use std::libc::c_int;
+    pub use sdl::mixer::*;
 
     pub mod ll {
         use std::libc::c_int;

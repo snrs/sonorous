@@ -56,9 +56,6 @@ extern mod extra;
 extern mod sdl;
 extern mod opengles;
 
-use std::{char, uint, float, str};
-use std::num::Round;
-
 // see below for specifics.
 use self::util::std::str::*;
 use self::util::std::option::*;
@@ -90,6 +87,8 @@ pub mod engine {
     pub mod common;
     pub mod options;
     pub mod screen;
+    pub mod init;
+    pub mod loading;
     pub mod player;
 }
 
@@ -106,7 +105,8 @@ pub fn exename() -> ~str {
 /// loop. (C: `play`)
 pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     use format::bms;
-    use ui::player;
+    use ui::{init, player, loading};
+    use ui::common::{check_exit, update_line};
     use ui::screen::Screen;
 
     // parses the file and sanitizes it
@@ -141,8 +141,8 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         let ~(opts, bms, infos, keyspec) = port.recv();
 
         // initialize SDL
-        player::init_sdl();
-        for opts.joystick.iter().advance |&joyidx| { player::init_joystick(joyidx); }
+        init::init_sdl();
+        for opts.joystick.iter().advance |&joyidx| { init::init_joystick(joyidx); }
 
         // read the input mapping (dependent to the SDL initialization)
         let keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
@@ -159,12 +159,12 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         // initialize the screen if required
         let mut screen = None;
         if opts.has_screen() {
-            screen = Some(player::init_video(opts.is_exclusive(), opts.fullscreen));
+            screen = Some(init::init_video(opts.is_exclusive(), opts.fullscreen));
         }
 
         // Rust: `|| { if opts.is_exclusive() { update_line(~""); } }` segfaults due to
         //       the moved `opts`. (#2202)
-        let atexit = if opts.is_exclusive() { || player::update_line("") } else { || {} };
+        let atexit = if opts.is_exclusive() { || update_line("") } else { || {} };
 
         // render the loading screen
         let mut ticker = ui::common::Ticker();
@@ -173,7 +173,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         let update_status;
         if !opts.is_exclusive() {
             let screen_: &Screen = screen.get_ref();
-            let mut scene = player::LoadingScene::new(bms, infos, keyspec, opts);
+            let mut scene = loading::LoadingScene::new(bms, infos, keyspec, opts);
             scene.render(screen_, font, None);
             scene.load_stagefile();
             scene.render(screen_, font, None);
@@ -181,17 +181,17 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
                 loading_scene = Some(scene);
                 update_status = |path| {
                     let screen: &Screen = screen.get_ref();
-                    let loading_scene: &player::LoadingScene = loading_scene.get_ref();
-                    player::graphic_update_status(path, screen, loading_scene,
-                                                  font, &mut ticker, || atexit()) // XXX #7363
+                    let loading_scene: &loading::LoadingScene = loading_scene.get_ref();
+                    loading::graphic_update_status(path, screen, loading_scene,
+                                                   font, &mut ticker, || atexit()) // XXX #7363
                 };
             } else {
                 update_status = |_path| {};
             }
         } else if opts.showinfo {
-            player::show_stagefile_noscreen(bms, infos, keyspec, opts);
+            loading::show_stagefile_noscreen(bms, infos, keyspec, opts);
             update_status = |path| {
-                player::text_update_status(path, &mut ticker, || atexit()) // XXX #7363
+                loading::text_update_status(path, &mut ticker, || atexit()) // XXX #7363
             };
         } else {
             update_status = |_path| {};
@@ -200,12 +200,12 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         // wait for resources
         let start = ::sdl::get_ticks() + 3000;
         let (sndres, imgres) =
-            player::load_resource(bms, opts, |msg| update_status(msg)); // XXX #7363
+            loading::load_resource(bms, opts, |msg| update_status(msg)); // XXX #7363
         if opts.showinfo {
             ticker.reset(); // force update
             update_status(None);
         }
-        while ::sdl::get_ticks() < start { player::check_exit(|| atexit()); } // XXX #7363
+        while ::sdl::get_ticks() < start { check_exit(|| atexit()); } // XXX #7363
 
         // create the player and transfer ownership of other resources to it
         let duration = bms::bms_duration(bms, infos.originoffset,
@@ -303,139 +303,13 @@ Environment Variables:
 /// (C: `main`)
 pub fn main() {
     use ui::options::*;
-    use util::std::str::StrUtil;
-
-    let longargs = util::std::hashmap::map_from_vec([
-        (~"--help", 'h'), (~"--version", 'V'), (~"--speed", 'a'),
-        (~"--autoplay", 'v'), (~"--exclusive", 'x'), (~"--sound-only", 'X'),
-        (~"--windowed", 'w'), (~"--no-fullscreen", 'w'),
-        (~"--fullscreen", ' '), (~"--info", ' '), (~"--no-info", 'q'),
-        (~"--mirror", 'm'), (~"--shuffle", 's'), (~"--shuffle-ex", 'S'),
-        (~"--random", 'r'), (~"--random-ex", 'R'), (~"--preset", 'k'),
-        (~"--key-spec", 'K'), (~"--bga", ' '), (~"--no-bga", 'B'),
-        (~"--movie", ' '), (~"--no-movie", 'M'), (~"--joystick", 'j'),
-    ]);
-
     let args = std::os::args();
-    let nargs = args.len();
-
-    let mut bmspath = None;
-    let mut mode = PlayMode;
-    let mut modf = None;
-    let mut bga = BgaAndMovie;
-    let mut showinfo = true;
-    let mut fullscreen = true;
-    let mut joystick = None;
-    let mut preset = None;
-    let mut leftkeys = None;
-    let mut rightkeys = None;
-    let mut playspeed = 1.0;
-
-    let mut i = 1;
-    while i < nargs {
-        if !args[i].starts_with("-") {
-            if bmspath.is_none() {
-                bmspath = Some(args[i].clone());
-            }
-        } else if args[i] == ~"--" {
-            i += 1;
-            if bmspath.is_none() && i < nargs {
-                bmspath = Some(args[i].clone());
-            }
-            break;
-        } else {
-            let shortargs =
-                if args[i].starts_with("--") {
-                    match longargs.find(&args[i]) {
-                        Some(&c) => str::from_char(c),
-                        None => die!("Invalid option: %s", args[i])
-                    }
-                } else {
-                    args[i].slice_to_end(1).to_owned()
-                };
-            let nshortargs = shortargs.len();
-
-            let mut inside = true;
-            for shortargs.iter().enumerate().advance |(j, c)| {
-                // Reads the argument of the option. Option string should be consumed first.
-                let fetch_arg = |opt| {
-                    let off = if inside {j+1} else {j};
-                    let nextarg =
-                        if inside && off < nshortargs {
-                            // remaining portion of `args[i]` is an argument
-                            shortargs.slice_to_end(off)
-                        } else {
-                            // `args[i+1]` is an argument as a whole
-                            i += 1;
-                            if i < nargs {
-                                let arg: &str = args[i];
-                                arg
-                            } else {
-                                die!("No argument to the option -%c", opt);
-                            }
-                        };
-                    inside = false;
-                    nextarg
-                };
-
-                match c {
-                    'h' => { usage(); }
-                    'V' => { println(version()); return; }
-                    'v' => { mode = AutoPlayMode; }
-                    'x' => { mode = ExclusiveMode; }
-                    'X' => { mode = ExclusiveMode; bga = NoBga; }
-                    'w' => { fullscreen = false; }
-                    'q' => { showinfo = false; }
-                    'm' => { modf = Some(MirrorModf); }
-                    's' => { modf = Some(ShuffleModf); }
-                    'S' => { modf = Some(ShuffleExModf); }
-                    'r' => { modf = Some(RandomModf); }
-                    'R' => { modf = Some(RandomExModf); }
-                    'k' => { preset = Some(fetch_arg('k').to_owned()); }
-                    'K' => { leftkeys = Some(fetch_arg('K').to_owned());
-                             rightkeys = Some(fetch_arg('K').to_owned()); }
-                    'a' => {
-                        match float::from_str(fetch_arg('a')) {
-                            Some(speed) if speed > 0.0 => {
-                                playspeed = if speed < 0.1 {0.1}
-                                            else if speed > 99.0 {99.0}
-                                            else {speed};
-                            }
-                            _ => die!("Invalid argument to option -a")
-                        }
-                    }
-                    'B' => { bga = NoBga; }
-                    'M' => { bga = BgaButNoMovie; }
-                    'j' => {
-                        match uint::from_str(fetch_arg('j')) {
-                            Some(n) => { joystick = Some(n); }
-                            _ => die!("Invalid argument to option -j")
-                        }
-                    }
-                    ' ' => {} // for ignored long options
-                    '1'..'9' => { playspeed = char::to_digit(c, 10).get() as float; }
-                    _ => die!("Invalid option: -%c", c)
-                }
-                if !inside { break; }
-            }
-        }
-        i += 1;
-    }
-
-    // shows a file dialog if the path to the BMS file is missing and the system supports it
-    if bmspath.is_none() {
-        bmspath = ui::common::get_path_from_dialog();
-    }
-
-    match bmspath {
-        None => { usage(); }
-        Some(bmspath) => {
-            let opts = ~Options {
-                mode: mode, modf: modf, bga: bga, showinfo: showinfo, fullscreen: fullscreen,
-                joystick: joystick, preset: preset, leftkeys: leftkeys, rightkeys: rightkeys,
-                playspeed: playspeed
-            };
-            play(bmspath, opts);
-        }
+    let args = args.slice(1, args.len());
+    match parse_opts(args, ui::common::get_path_from_dialog) {
+        ShowVersion => { println(version()); }
+        ShowUsage => { usage(); }
+        PathAndOptions(bmspath, opts) => { play(bmspath, opts); }
+        Error(err) => { die!("%s", err); }
     }
 }
+

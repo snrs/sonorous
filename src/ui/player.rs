@@ -10,31 +10,22 @@
 use std::{int, uint, vec, cmp, num};
 
 use sdl::*;
-use sdl::video::*;
-use sdl::event::*;
-use sdl::mixer::*;
-use ext::sdl::mixer::*;
-use ext::sdl::mpeg::*;
+use ext::sdl::{mixer, mpeg};
 use format::bms::*;
 use util::gl::{Texture, ShadedDrawing, TexturedDrawing};
 use util::gfx::*;
-use util::bmfont::*;
+use util::bmfont::{Font, LeftAligned, Centered};
 use engine::keyspec::*;
 use engine::input::{Input, KeyInput, JoyAxisInput, JoyButtonInput, QuitInput};
 use engine::input::{LaneInput, SpeedUpInput, SpeedDownInput};
 use engine::input::{InputState, Positive, Neutral, Negative};
 use engine::input::{KeyMap};
-use engine::resource::{BGAW, BGAH, SAMPLERATE};
-use engine::resource::{SoundResource, NoSound, ImageResource, NoImage, Image, Movie};
-use engine::resource::{get_basedir, load_sound, load_image, apply_blitcmd};
-use ui::common::{Ticker};
+use engine::resource::{BGAW, BGAH};
+use engine::resource::{SoundResource, ImageResource, NoImage, Image, Movie};
+use ui::common::{Ticker, update_line};
 use ui::screen::Screen;
 use ui::options::*;
-
-/// The width of screen, unless the exclusive mode.
-pub static SCREENW: uint = 800;
-/// The height of screen, unless the exclusive mode.
-pub static SCREENH: uint = 600;
+use ui::init::{SCREENW, SCREENH};
 
 //----------------------------------------------------------------------------------------------
 // bms utilities
@@ -58,76 +49,6 @@ pub fn apply_modf<R: ::std::rand::RngUtil>(bms: &mut Bms, modf: Modf, r: &mut R,
         MirrorModf => apply_mirror_modf(bms, lanes),
         ShuffleModf | ShuffleExModf => apply_shuffle_modf(bms, r, lanes),
         RandomModf | RandomExModf => apply_random_modf(bms, r, lanes)
-    }
-}
-
-//----------------------------------------------------------------------------------------------
-// utilities
-
-/// Checks if the user pressed the escape key or the quit button. `atexit` is called before
-/// the program is terminated. (C: `check_exit`)
-pub fn check_exit(atexit: &fn()) {
-    loop {
-        match poll_event() {
-            KeyEvent(EscapeKey,_,_,_) | QuitEvent => {
-                atexit();
-                ::ui::common::exit(0);
-            },
-            NoEvent => { break; },
-            _ => {}
-        }
-    }
-}
-
-/// Writes a line to the console without advancing to the next line. `s` should be short enough
-/// to be replaced (currently up to 72 bytes).
-pub fn update_line(s: &str) {
-    ::std::io::stderr().write_str(fmt!("\r%s\r%s", " ".repeat(72), s));
-}
-
-//----------------------------------------------------------------------------------------------
-// initialization
-
-/// Creates a small screen for BGAs (`BGAW` by `BGAH` pixels) if `exclusive` is set,
-/// or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise. `fullscreen` is ignored
-/// when `exclusive` is set. (C: `init_video`)
-pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
-    let (width, height, fullscreen) = if exclusive {
-        (BGAW, BGAH, false)
-    } else {
-        (SCREENW, SCREENH, fullscreen)
-    };
-    let screen = match Screen::new(width, height, fullscreen) {
-        Ok(screen) => screen,
-        Err(err) => die!("Failed to initialize screen: %s", err)
-    };
-    if !exclusive {
-        mouse::set_cursor_visible(false);
-    }
-    wm::set_caption(::version(), "");
-    screen
-}
-
-/// Initializes an SDL, SDL_image and SDL_mixer. (C: `init_ui`)
-pub fn init_sdl() {
-    if !init([InitVideo, InitAudio, InitJoystick]) {
-        die!("SDL Initialization Failure: %s", get_error());
-    }
-    img::init([img::InitJPG, img::InitPNG]);
-    //mixer::init([mixer::InitOGG, mixer::InitMP3]); // TODO
-    if mixer::open(SAMPLERATE, audio::S16AudioFormat, audio::Stereo, 2048).is_err() {
-        die!("SDL Mixer Initialization Failure");
-    }
-}
-
-/// Initializes a joystick with given index.
-pub fn init_joystick(joyidx: uint) -> ~joy::Joystick {
-    unsafe {
-        joy::ll::SDL_JoystickEventState(1); // TODO rust-sdl patch
-    }
-    match joy::Joystick::open(joyidx as int) {
-        Ok(joy) => joy,
-        Err(err) => die!("SDL Joystick Initialization Failure: %s", err)
     }
 }
 
@@ -170,7 +91,7 @@ impl Uploadable for ImageResource {
     pub fn should_always_upload(&self) -> bool {
         match *self {
             NoImage | Image(_) => false,
-            Movie(_,mpeg) => mpeg.status() == SMPEG_PLAYING
+            Movie(_,mpeg) => mpeg.status() == mpeg::SMPEG_PLAYING
         }
     }
 }
@@ -229,197 +150,6 @@ impl BGARenderState {
             }
         }
     }
-}
-
-//----------------------------------------------------------------------------------------------
-// loading
-
-pub struct LoadingScene {
-    showinfo: bool,
-    meta: ~str,
-    title: ~str,
-    genre: ~str,
-    artist: ~str,
-    stagefile_path: Option<(Path,~str)>, // basedir, path
-    stagefile_tex: Option<Texture>,
-}
-
-/// Returns the interface string common to the graphical and textual loading screen.
-fn displayed_info(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec) -> (~str, ~str, ~str, ~str) {
-    let meta = fmt!("Level %d | BPM %.2f%s | %d note%s [%uKEY%s]",
-                    bms.playlevel, *bms.initbpm, if infos.hasbpmchange {~"?"} else {~""},
-                    infos.nnotes, if infos.nnotes == 1 {~""} else {~"s"}, keyspec.nkeys(),
-                    if infos.haslongnote {~"-LN"} else {~""});
-    let title = bms.title.clone().get_or_default(~"");
-    let genre = bms.genre.clone().get_or_default(~"");
-    let artist = bms.artist.clone().get_or_default(~"");
-    (meta, title, genre, artist)
-}
-
-impl LoadingScene {
-    /// Creates a state required for rendering the graphical loading screen.
-    pub fn new(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec, opts: &Options) -> LoadingScene {
-        let (meta, title, genre, artist) = displayed_info(bms, infos, keyspec);
-        let stagefile_path = do bms.stagefile.map |&path| { (get_basedir(bms), path) };
-        LoadingScene { showinfo: opts.showinfo, meta: meta, title: title, genre: genre,
-                       artist: artist, stagefile_path: stagefile_path, stagefile_tex: None }
-    }
-
-    /// Loads the BMS #STAGEFILE image and creates an OpenGL texture for it.
-    pub fn load_stagefile(&mut self) {
-        let (basedir, path) = match self.stagefile_path {
-            Some((ref basedir, ref path)) => (basedir, path),
-            None => { return; }
-        };
-
-        let tex_or_err = do load_image(*path, basedir, false).chain |res| {
-            match res {
-                Image(surface) => {
-                    // in principle we don't need this, but some STAGEFILEs mistakenly uses alpha
-                    // channel or SDL_image fails to read them so we need to force STAGEFILEs to
-                    // ignore alpha channels. (cf. http://bugzilla.libsdl.org/show_bug.cgi?id=1943)
-                    do surface.display_format().chain |surface| {
-                        Texture::from_owned_surface(surface, false, false)
-                    }
-                },
-                _ => Err(~"unexpected")
-            }
-        };
-        match tex_or_err {
-            Ok(tex) => { self.stagefile_tex = Some(tex); }
-            Err(_err) => { warn!("failed to load image #STAGEFILE (%s)", path.to_str()); }
-        }
-    }
-
-    /// Renders the graphical loading screen by blitting BMS #STAGEFILE image (if any) and showing
-    /// the metadata.
-    pub fn render(&self, screen: &Screen, font: &Font, msg: Option<~str>) {
-        let msg = msg.get_or_default(~"loading...");
-
-        screen.clear();
-
-        let W = SCREENW as f32;
-        let H = SCREENH as f32;
-
-        do screen.draw_shaded() |d| {
-            font.draw_string(d, W/2.0, H/2.0-16.0, 2.0, Centered, "loading bms file...",
-                             Gradient(RGB(0x80,0x80,0x80), RGB(0x20,0x20,0x20)));
-        }
-
-        if self.stagefile_tex.is_some() {
-            let tex = self.stagefile_tex.get_ref();
-            do screen.draw_textured(tex) |d| {
-                d.rect(0.0, 0.0, W, H);
-            }
-        }
-
-        if self.showinfo {
-            let bg = RGBA(0x10,0x10,0x10,0xc0);
-            let fg = Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80));
-            do screen.draw_shaded() |d| {
-                d.rect(0.0, 0.0, W, 42.0, bg);
-                d.rect(0.0, H-20.0, W, H, bg);
-                font.draw_string(d, 6.0, 4.0, 2.0, LeftAligned, self.title, fg);
-                font.draw_string(d, W-8.0, 4.0, 1.0, RightAligned, self.genre, fg);
-                font.draw_string(d, W-8.0, 20.0, 1.0, RightAligned, self.artist, fg);
-                font.draw_string(d, 3.0, H-18.0, 1.0, LeftAligned, self.meta, fg);
-                font.draw_string(d, W-3.0, H-18.0, 1.0, RightAligned, msg,
-                                 Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x80,0x80,0x80)));
-            }
-        }
-
-        screen.swap_buffers();
-    }
-}
-
-/// Renders the textual loading screen by printing the metadata.
-/// (C: `play_show_stagefile` when `opt_mode >= EXCLUSIVE_MODE`)
-pub fn show_stagefile_noscreen(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec, opts: &Options) {
-    if opts.showinfo {
-        let (meta, title, genre, artist) = displayed_info(bms, infos, keyspec);
-        ::std::io::stderr().write_line(fmt!("\
-----------------------------------------------------------------------------------------------
-Title:    %s\nGenre:    %s\nArtist:   %s\n%s
-----------------------------------------------------------------------------------------------",
-            title, genre, artist, meta));
-    }
-}
-
-/// Loads the image and sound resources and calls a callback whenever a new resource has been
-/// loaded. (C: `load_resource`)
-pub fn load_resource(bms: &Bms, opts: &Options,
-                     callback: &fn(Option<~str>)) -> (~[SoundResource], ~[ImageResource]) {
-    let basedir = get_basedir(bms);
-
-    let sndres: ~[SoundResource] =
-        do bms.sndpath.iter().enumerate().transform |(i, &path)| {
-            match path {
-                Some(path) => {
-                    callback(Some(path.clone()));
-                    match load_sound(path, &basedir) {
-                        Ok(res) => res,
-                        Err(_) => {
-                            warn!("failed to load sound #WAV%s (%s)", Key(i as int).to_str(), path);
-                            NoSound
-                        }
-                    }
-                },
-                None => NoSound
-            }
-        }.collect();
-    let mut imgres: ~[ImageResource] =
-        do bms.imgpath.iter().enumerate().transform |(i, &path)| {
-            let path = if opts.has_bga() {path} else {None}; // skip loading BGAs if requested
-            match path {
-                Some(path) => {
-                    callback(Some(path.clone()));
-                    match load_image(path, &basedir, opts.has_movie()) {
-                        Ok(res) => res,
-                        Err(_) => {
-                            warn!("failed to load image #BMP%s (%s)", Key(i as int).to_str(), path);
-                            NoImage
-                        }
-                    }
-                },
-                None => NoImage
-            }
-        }.collect();
-
-    for bms.blitcmd.iter().advance |bc| {
-        apply_blitcmd(imgres, bc);
-    }
-    (sndres, imgres)
-}
-
-/// A callback template for `load_resource` with the graphical loading screen.
-/// (C: `resource_loaded`)
-pub fn graphic_update_status(path: Option<~str>, screen: &Screen, scene: &LoadingScene,
-                             font: &Font, ticker: &mut Ticker, atexit: &fn()) {
-    // Rust: `on_tick` calls the closure at most once so `path` won't be referenced twice,
-    //       but the analysis can't reason that. (#4654) an "option dance" via
-    //       `Option<T>::swap_unwrap` is not helpful here since `path` can be `None`.
-    let mut path = path; // XXX #4654
-    do ticker.on_tick(get_ticks()) {
-        let path = ::std::util::replace(&mut path, None); // XXX #4654
-        scene.render(screen, font, path);
-    }
-    check_exit(atexit);
-}
-
-/// A callback template for `load_resource` with the textual loading screen.
-/// (C: `resource_loaded`)
-pub fn text_update_status(path: Option<~str>, ticker: &mut Ticker, atexit: &fn()) {
-    let mut path = path; // XXX #4654
-    do ticker.on_tick(get_ticks()) {
-        match ::std::util::replace(&mut path, None) { // XXX #4654
-            Some(path) => {
-                let path = if path.len() < 63 {path} else {path.slice(0, 63).to_owned()};
-                update_line(~"Loading: " + path);
-            }
-            None => { update_line("Loading done."); }
-        }
-    }
-    check_exit(atexit);
 }
 
 //----------------------------------------------------------------------------------------------
@@ -513,7 +243,7 @@ pub struct Player {
     /// Sound resources. (C: `res` field in `sndres`)
     sndres: ~[SoundResource],
     /// A sound chunk used for beeps. It always plays on the channel #0. (C: `beep`)
-    beep: ~Chunk,
+    beep: ~mixer::Chunk,
     /// Last channels in which the corresponding sound in `sndres` was played.
     /// (C: `lastch` field in `sndres`)
     sndlastch: ~[Option<uint>],
@@ -640,11 +370,11 @@ fn previous_speed_mark(current: float) -> Option<float> {
 }
 
 /// Creates a beep sound played on the play speed change. (C: `create_beep`)
-fn create_beep() -> ~Chunk {
+fn create_beep() -> ~mixer::Chunk {
     let samples = vec::from_fn::<i32>(12000, // approx. 0.14 seconds
         // sawtooth wave at 3150 Hz, quadratic decay after 0.02 seconds.
         |i| { let i = i as i32; (i%28-14) * cmp::min(2000, (12000-i)*(12000-i)/50000) });
-    Chunk::new(unsafe { ::std::cast::transmute(samples) }, 128)
+    mixer::Chunk::new(unsafe { ::std::cast::transmute(samples) }, 128)
 }
 
 /// Creates a new player object. The player object owns other related structures, including
@@ -684,7 +414,7 @@ pub fn Player(opts: ~Options, bms: ~Bms, infos: ~BmsInfo, duration: float, keysp
     };
 
     player.allocate_more_channels(64);
-    reserve_channels(1); // so that the beep won't be affected
+    mixer::reserve_channels(1); // so that the beep won't be affected
     player
 }
 
@@ -771,8 +501,8 @@ impl Player {
     /// (C: `allocate_more_channels`)
     pub fn allocate_more_channels(&mut self, howmany: uint) {
         let howmany = howmany as ::std::libc::c_int;
-        let nchannels = allocate_channels(-1 as ::std::libc::c_int);
-        let nchannels = allocate_channels(nchannels + howmany) as uint;
+        let nchannels = mixer::allocate_channels(-1 as ::std::libc::c_int);
+        let nchannels = mixer::allocate_channels(nchannels + howmany) as uint;
         if self.lastchsnd.len() < nchannels {
             self.lastchsnd.grow(nchannels, &None);
         }
@@ -799,8 +529,8 @@ impl Player {
         }
 
         let group = if bgm {1} else {0};
-        set_channel_volume(Some(ch), if bgm {96} else {128});
-        group_channel(Some(ch), Some(group));
+        mixer::set_channel_volume(Some(ch), if bgm {96} else {128});
+        mixer::group_channel(Some(ch), Some(group));
 
         let ch = ch as uint;
         for self.lastchsnd[ch].iter().advance |&idx| { self.sndlastch[idx] = None; }
@@ -940,7 +670,7 @@ impl Player {
             // map to the virtual input. results in `vkey` (virtual key), `state` (input state)
             // and `continuous` (true if the input is not discrete and `Negative` input state
             // matters).
-            let (key, state) = match poll_event() {
+            let (key, state) = match event::poll_event() {
                 event::NoEvent => { break; }
                 ev => match Input::from_event(ev) {
                     Some((QuitInput,_)) => { return false; },
@@ -1110,9 +840,9 @@ impl Player {
         // determines if we should keep playing
         if self.bottom > (bms.nmeasures + 1) as float {
             if self.opts.is_autoplay() {
-                num_playing(None) != num_playing(Some(0))
+                mixer::num_playing(None) != mixer::num_playing(Some(0))
             } else {
-                newest_in_group(Some(1)).is_some()
+                mixer::newest_in_group(Some(1)).is_some()
             }
         } else if self.bottom < self.infos.originoffset {
             false // special casing the negative BPM

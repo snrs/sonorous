@@ -6,6 +6,9 @@
 
 #[macro_escape];
 
+use std::io::stderr;
+use sdl::event;
+
 /// Immediately terminates the program with given exit code.
 pub fn exit(exitcode: int) -> ! {
     // Rust: `os::set_exit_status` doesn't immediately terminate the program.
@@ -27,13 +30,13 @@ pub fn die(s: ~str) -> ! {
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(not(target_os = "win32"))]
 pub fn die(s: ~str) -> ! {
-    ::std::io::stderr().write_line(fmt!("%s: %s", ::exename(), s));
+    stderr().write_line(fmt!("%s: %s", ::exename(), s));
     exit(1)
 }
 
 /// Prints an warning message. Internally used in the `warn!` macro below.
 pub fn warn(s: ~str) {
-    ::std::io::stderr().write_line(fmt!("*** Warning: %s", s));
+    stderr().write_line(fmt!("*** Warning: %s", s));
 }
 
 // Exits with a formatted error message. (C: `die`)
@@ -47,6 +50,27 @@ macro_rules! die(
 macro_rules! warn(
     ($($e:expr),+) => (::ui::common::warn(fmt!($($e),+)))
 )
+
+/// Checks if the user pressed the escape key or the quit button. `atexit` is called before
+/// the program is terminated. (C: `check_exit`)
+pub fn check_exit(atexit: &fn()) {
+    loop {
+        match event::poll_event() {
+            event::KeyEvent(event::EscapeKey,_,_,_) | event::QuitEvent => {
+                atexit();
+                exit(0);
+            },
+            event::NoEvent => { break; },
+            _ => {}
+        }
+    }
+}
+
+/// Writes a line to the console without advancing to the next line. `s` should be short enough
+/// to be replaced (currently up to 72 bytes).
+pub fn update_line(s: &str) {
+    stderr().write_str(fmt!("\r%s\r%s", " ".repeat(72), s));
+}
 
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
 /// refused to do so or the platform is unsupported. (C: `filedialog`)
