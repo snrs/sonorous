@@ -31,7 +31,7 @@
  * command memo](http://hitkey.nekokan.dyndns.info/cmds.htm).
  */
 
-use std::{int, uint, float, vec, cmp};
+use std::{int, uint, cmp};
 use std::rand::*;
 
 pub use format::obj::{Lane, NLANES};
@@ -42,14 +42,12 @@ pub use format::obj::{Damage, GaugeDamage, InstantDeath};
 pub use format::obj::{ObjData, Deleted, Visible, Invisible, LNStart, LNDone, Bomb, BGM, SetBGA,
                       SetBPM, Stop};
 pub use format::obj::{ObjQueryOps, ObjConvOps, Obj};
+pub use format::timeline::Timeline;
 pub use format::bms::types::{Key, MAXKEY};
 
 pub mod types;
 pub mod parse;
 pub mod pointer;
-
-//----------------------------------------------------------------------------------------------
-// BMS data
 
 /// Sound reference.
 #[deriving(Eq)]
@@ -131,81 +129,29 @@ pub struct Bms {
     /// List of blit commands to be executed after `imgpath` is loaded. (C: `blitcmd`)
     blitcmd: ~[BlitCmd],
 
-    /// List of objects sorted by the position. (C: `objs`)
-    objs: ~[BmsObj],
-    /// The scaling factor of measures. Defaults to 1.0. (C: `shortens`)
-    shortens: ~[float],
+    /// Timeline for this BMS file.
+    timeline: ~Timeline<SoundRef,ImageRef>,
     /// The number of measures after the origin, i.e. the length of the BMS file. The play stops
     /// after the last measure. (C: `length`)
     nmeasures: uint
 }
 
-/// Creates a default value of BMS data.
-pub fn Bms() -> Bms {
-    Bms { bmspath: ~"", title: None, genre: None, artist: None, stagefile: None, basepath: None,
-          player: SinglePlay, playlevel: 0, rank: 2, initbpm: DefaultBPM,
-          sndpath: [None, ..MAXKEY], imgpath: [None, ..MAXKEY], blitcmd: ~[], objs: ~[],
-          shortens: ~[], nmeasures: 0 }
-}
-
-impl Bms {
-    /// Returns a scaling factor of given measure number. The default scaling factor is 1.0, and
-    /// that value applies to any out-of-bound measures. (C: `shorten`)
-    pub fn shorten(&self, measure: int) -> float {
-        if measure < 0 || measure as uint >= self.shortens.len() {
-            1.0
-        } else {
-            self.shortens[measure as uint]
-        }
-    }
-
-    /// Calculates the virtual time that is `offset` measures away from the virtual time `base`.
-    /// This takes account of the scaling factor, so if first four measures are scaled by 1/4,
-    /// then `adjust_object_time(0.0, 2.0)` results in `5.0`. (C: `adjust_object_time`)
-    pub fn adjust_object_time(&self, base: float, offset: float) -> float {
-        let basemeasure = base.floor() as int;
-        let baseshorten = self.shorten(basemeasure);
-        let basefrac = base - basemeasure as float;
-        let tonextmeasure = (1.0 - basefrac) * baseshorten;
-        if offset < tonextmeasure {
-            base + offset / baseshorten
-        } else {
-            let mut offset = offset - tonextmeasure;
-            let mut i = basemeasure + 1;
-            let mut curshorten = self.shorten(i);
-            while offset >= curshorten {
-                offset -= curshorten;
-                i += 1;
-                curshorten = self.shorten(i);
-            }
-            i as float + offset / curshorten
-        }
-    }
-
-    /// Calculates an adjusted offset between the virtual time `base` and `base + offset`.
-    /// This takes account of the measure scaling factor, so for example, the adjusted offset
-    /// between the virtual time 0.0 and 2.0 is, if the measure #000 is scaled by 1.2x,
-    /// 2.2 measures instead of 2.0 measures. (C: `adjust_object_position`)
-    pub fn adjust_object_position(&self, base: float, time: float) -> float {
-        let basemeasure = base.floor() as int;
-        let timemeasure = time.floor() as int;
-        let basefrac = base - basemeasure as float;
-        let timefrac = time - timemeasure as float;
-        let mut pos = timefrac * self.shorten(timemeasure) -
-                      basefrac * self.shorten(basemeasure);
-        for int::range(basemeasure, timemeasure) |i| {
-            pos += self.shorten(i);
-        }
-        pos
-    }
-}
-
-//----------------------------------------------------------------------------------------------
-// parsing
-
 /// Reads and parses the BMS file with given RNG from given reader.
 pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Result<Bms,~str> {
-    let mut bms = Bms();
+    use format::timeline::builder::{TimelineBuilder, Mark};
+
+    let mut title = None;
+    let mut genre = None;
+    let mut artist = None;
+    let mut stagefile = None;
+    let mut basepath = None;
+    let mut player = SinglePlay;
+    let mut playlevel = 0;
+    let mut rank = 2;
+    let mut initbpm = DefaultBPM;
+    let mut sndpath = [None, ..MAXKEY];
+    let mut imgpath = [None, ..MAXKEY];
+    let mut blitcmd = ~[];
 
     /// The state of the block, for determining which lines should be processed.
     enum BlockState {
@@ -294,6 +240,8 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
         fn gt(&self, other: &BmsLine) -> bool { !self.le(other) }
     }
 
+    // A builder for objects.
+    let mut builder = TimelineBuilder::new();
     // A list of unprocessed data lines. They have to be sorted with a stable algorithm and
     // processed in the order of measure number. (C: `bmsline`)
     let mut bmsline = ~[];
@@ -314,27 +262,27 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
     for parse::each_bms_command(f) |cmd| {
         assert!(!blk.is_empty());
         match (cmd, blk.last().inactive()) {
-            (parse::BmsTitle(s),           false) => { bms.title = Some(s.to_owned()); }
-            (parse::BmsGenre(s),           false) => { bms.genre = Some(s.to_owned()); }
-            (parse::BmsArtist(s),          false) => { bms.artist = Some(s.to_owned()); }
-            (parse::BmsStageFile(s),       false) => { bms.stagefile = Some(s.to_owned()); }
-            (parse::BmsPathWAV(s),         false) => { bms.basepath = Some(s.to_owned()); }
-            (parse::BmsBPM(bpm),           false) => { bms.initbpm = bpm; }
+            (parse::BmsTitle(s),           false) => { title = Some(s.to_owned()); }
+            (parse::BmsGenre(s),           false) => { genre = Some(s.to_owned()); }
+            (parse::BmsArtist(s),          false) => { artist = Some(s.to_owned()); }
+            (parse::BmsStageFile(s),       false) => { stagefile = Some(s.to_owned()); }
+            (parse::BmsPathWAV(s),         false) => { basepath = Some(s.to_owned()); }
+            (parse::BmsBPM(bpm),           false) => { initbpm = bpm; }
             (parse::BmsExBPM(Key(i), bpm), false) => { bpmtab[i] = bpm; }
-            (parse::BmsPlayer(v),          false) => { bms.player = v; }
-            (parse::BmsPlayLevel(v),       false) => { bms.playlevel = v; }
-            (parse::BmsRank(v),            false) => { bms.rank = v; }
+            (parse::BmsPlayer(v),          false) => { player = v; }
+            (parse::BmsPlayLevel(v),       false) => { playlevel = v; }
+            (parse::BmsRank(v),            false) => { rank = v; }
             (parse::BmsLNType(lntype),     false) => { consecutiveln = (lntype == 2); }
             (parse::BmsLNObj(key),         false) => { lnobj = Some(key); }
-            (parse::BmsWAV(Key(i), s),     false) => { bms.sndpath[i] = Some(s.to_owned()); }
-            (parse::BmsBMP(Key(i), s),     false) => { bms.imgpath[i] = Some(s.to_owned()); }
-            (parse::BmsBGA(bc),            false) => { bms.blitcmd.push(bc); }
+            (parse::BmsWAV(Key(i), s),     false) => { sndpath[i] = Some(s.to_owned()); }
+            (parse::BmsBMP(Key(i), s),     false) => { imgpath[i] = Some(s.to_owned()); }
+            (parse::BmsBGA(bc),            false) => { blitcmd.push(bc); }
             (parse::BmsStop(Key(i), dur),  false) => { stoptab[i] = dur; }
-            (parse::BmsStp(pos, dur),      false) => { bms.objs.push(Obj::Stop(pos, dur)); }
+            (parse::BmsStp(pos, dur),      false) => { builder.add(pos, Stop(dur)); }
 
             (parse::BmsShorten(measure, shorten), false) => {
                 if shorten > 0.001 {
-                    bms.shortens.grow_set(measure, &1.0, shorten);
+                    builder.set_shorten(measure, shorten);
                 }
             }
             (parse::BmsData(measure, chan, data), false) => {
@@ -403,60 +351,50 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
 
     // Indices to last visible object per channels. A marker specified by #LNOBJ will turn
     // this last object to the start of LN. (C: `prev12`)
-    let mut lastvis: [Option<uint>, ..NLANES] = [None, ..NLANES];
+    let mut lastvis: [Option<Mark>, ..NLANES] = [None, ..NLANES];
 
     // Indices to last LN start or end inserted (and not finalized yet) per channels.
     // If `consecutiveln` is on (#LNTYPE 2), the position of referenced object gets updated
     // during parsing; if off (#LNTYPE 1), it is solely used for checking if we are inside
     // the LN or not. (C: `prev56`)
-    let mut lastln: [Option<uint>, ..NLANES] = [None, ..NLANES];
+    let mut lastln: [Option<Mark>, ..NLANES] = [None, ..NLANES];
 
     // Handles a non-00 alphanumeric key `v` positioned at the particular channel `chan` and
     // particular position `t`. The position `t2` next to `t` is used for some cases that
     // an alphanumeric key designates an area rather than a point.
     let handle_key = |chan: Key, t: float, t2: float, v: Key| {
-        // Adds an object. Objects are sorted by its position later.
-        let add = |obj: BmsObj| { bms.objs.push(obj); };
-        // Adds an object and returns its position. LN parsing generally mutates the existing
-        // object for simplicity.
-        let mark = |obj: BmsObj| -> Option<uint> {
-            let marked = bms.objs.len();
-            bms.objs.push(obj);
-            Some(marked)
-        };
-
         match *chan {
             // channel #01: BGM
-            1 => { add(Obj::BGM(t, SoundRef(v))); }
+            1 => { builder.add(t, BGM(SoundRef(v))); }
 
             // channel #03: BPM as an hexadecimal key
             3 => {
                 let v = v.to_hex(); // XXX #3511
                 for v.iter().advance |&v| {
-                    add(Obj::SetBPM(t, BPM(v as float)))
+                    builder.add(t, SetBPM(BPM(v as float)))
                 }
             }
 
             // channel #04: BGA layer 1
-            4 => { add(Obj::SetBGA(t, Layer1, Some(ImageRef(v)))); }
+            4 => { builder.add(t, SetBGA(Layer1, Some(ImageRef(v)))); }
 
             // channel #06: POOR BGA
             6 => {
-                add(Obj::SetBGA(t, PoorBGA, Some(ImageRef(v))));
+                builder.add(t, SetBGA(PoorBGA, Some(ImageRef(v))));
                 poorbgafix = false; // we don't add artificial BGA
             }
 
             // channel #07: BGA layer 2
-            7 => { add(Obj::SetBGA(t, Layer2, Some(ImageRef(v)))); }
+            7 => { builder.add(t, SetBGA(Layer2, Some(ImageRef(v)))); }
 
             // channel #08: BPM defined by #BPMxx
-            8 => { add(Obj::SetBPM(t, bpmtab[*v])); } // TODO bpmtab validity check
+            8 => { builder.add(t, SetBPM(bpmtab[*v])); } // TODO bpmtab validity check
 
             // channel #09: scroll stopper defined by #STOPxx
-            9 => { add(Obj::Stop(t, stoptab[*v])); } // TODO stoptab validity check
+            9 => { builder.add(t, Stop(stoptab[*v])); } // TODO stoptab validity check
 
             // channel #0A: BGA layer 3
-            10 => { add(Obj::SetBGA(t, Layer3, Some(ImageRef(v)))); }
+            10 => { builder.add(t, SetBGA(Layer3, Some(ImageRef(v)))); }
 
             // channels #1x/2x: visible object, possibly LNs when #LNOBJ is in active
             36/*1*36*/..107/*3*36-1*/ => {
@@ -464,21 +402,24 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
                 if lnobj.is_some() && lnobj == Some(v) {
                     // change the last inserted visible object to the start of LN if any.
                     let lastvispos = lastvis[*lane];
-                    for lastvispos.iter().advance |&pos| {
-                        assert!(bms.objs[pos].is_visible());
-                        bms.objs[pos] = bms.objs[pos].to_lnstart();
-                        add(Obj::LNDone(t, lane, Some(SoundRef(v))));
+                    for lastvispos.iter().advance |&mark| {
+                        do builder.mutate(mark) |pos, data| {
+                            assert!(data.is_visible());
+                            (pos, data.to_lnstart())
+                        }
+                        builder.add(t, LNDone(lane, Some(SoundRef(v))));
                         lastvis[*lane] = None;
                     }
                 } else {
-                    lastvis[*lane] = mark(Obj::Visible(t, lane, Some(SoundRef(v))));
+                    let mark = builder.add_and_mark(t, Visible(lane, Some(SoundRef(v))));
+                    lastvis[*lane] = Some(mark);
                 }
             }
 
             // channels #3x/4x: invisible object
             108/*3*36*/..179/*5*36-1*/ => {
                 let lane = chan.to_lane();
-                add(Obj::Invisible(t, lane, Some(SoundRef(v))));
+                builder.add(t, Invisible(lane, Some(SoundRef(v))));
             }
 
             // channels #5x/6x, #LNTYPE 1: LN endpoints
@@ -489,9 +430,10 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
                 // number of them, the last LN is implicitly closed later.
                 if lastln[*lane].is_some() {
                     lastln[*lane] = None;
-                    add(Obj::LNDone(t, lane, Some(SoundRef(v))));
+                    builder.add(t, LNDone(lane, Some(SoundRef(v))));
                 } else {
-                    lastln[*lane] = mark(Obj::LNStart(t, lane, Some(SoundRef(v))));
+                    let mark = builder.add_and_mark(t, LNStart(lane, Some(SoundRef(v))));
+                    lastln[*lane] = Some(mark); // TODO unused for now
                 }
             }
 
@@ -507,13 +449,20 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
                 // is simply moved from `t` to `t2` (effectively increasing the length of
                 // previous LN).
                 match lastln[*lane] {
-                    Some(pos) if bms.objs[pos].time == t => {
-                        assert!(bms.objs[pos].is_lndone());
-                        bms.objs[pos].time = t2;
+                    Some(mark) => {
+                        do builder.mutate(mark) |pos, data| {
+                            if pos == t {
+                                assert!(data.is_lndone());
+                                (t2, data)
+                            } else {
+                                (pos, data)
+                            }
+                        }
                     }
                     _ => {
-                        add(Obj::LNStart(t, lane, Some(SoundRef(v))));
-                        lastln[*lane] = mark(Obj::LNDone(t2, lane, Some(SoundRef(v))));
+                        builder.add(t, LNStart(lane, Some(SoundRef(v))));
+                        let mark = builder.add_and_mark(t2, LNDone(lane, Some(SoundRef(v))));
+                        lastln[*lane] = Some(mark);
                     }
                 }
             }
@@ -528,7 +477,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
                     _ => None
                 };
                 for damage.iter().advance |&damage| {
-                    add(Obj::Bomb(t, lane, Some(SoundRef(Key(0))), damage));
+                    builder.add(t, Bomb(lane, Some(SoundRef(Key(0))), damage));
                 }
             }
 
@@ -559,19 +508,23 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
     }
 
     if poorbgafix {
-        bms.objs.push(Obj::SetBGA(0.0, PoorBGA, Some(ImageRef(Key(0)))));
+        builder.add(0.0, SetBGA(PoorBGA, Some(ImageRef(Key(0)))));
     }
 
     // fix the unterminated longnote
-    bms.nmeasures = bmsline.last_opt().map_default(0, |l| l.measure) + 1;
-    let endt = bms.nmeasures as float;
+    let nmeasures = bmsline.last_opt().map_default(0, |l| l.measure) + 1;
+    let endt = nmeasures as float;
     for uint::range(0, NLANES) |i| {
         if lastvis[i].is_some() || (!consecutiveln && lastln[i].is_some()) {
-            bms.objs.push(Obj::LNDone(endt, Lane(i), None));
+            builder.add(endt, LNDone(Lane(i), None));
         }
     }
 
-    Ok(bms)
+    let timeline = builder.build();
+    Ok(Bms { bmspath: ~"", title: title, genre: genre, artist: artist, stagefile: stagefile,
+             basepath: basepath, player: player, playlevel: playlevel, rank: rank, initbpm: initbpm,
+             sndpath: sndpath, imgpath: imgpath, blitcmd: blitcmd, timeline: timeline,
+             nmeasures: nmeasures })
 }
 
 /// Reads and parses the BMS file with given RNG. (C: `parse_bms`)
@@ -584,139 +537,6 @@ pub fn parse_bms<R:RngUtil>(bmspath: &str, r: &mut R) -> Result<Bms,~str> {
         }
     }
 }
-
-//----------------------------------------------------------------------------------------------
-// post-processing
-
-/// Updates the object in place to BGM or placeholder. (C: `remove_or_replace_note`)
-pub fn remove_or_replace_note(obj: &mut BmsObj) {
-    obj.data = match obj.data {
-        Visible(_,Some(sref)) | Invisible(_,Some(sref)) |
-        LNStart(_,Some(sref)) | LNDone(_,Some(sref)) => BGM(sref),
-        _ => Deleted
-    };
-}
-
-/// Fixes a problematic data. (C: `sanitize_bms`)
-pub fn sanitize_bms(bms: &mut Bms) {
-    ::extra::sort::tim_sort(bms.objs);
-
-    fn sanitize(objs: &mut [BmsObj], to_type: &fn(&BmsObj) -> Option<uint>,
-                merge_types: &fn(uint) -> uint) {
-        let len = objs.len();
-        let mut i = 0;
-        while i < len {
-            let cur = objs[i].time;
-            let mut types = 0;
-            let mut j = i;
-            while j < len && objs[j].time <= cur {
-                let obj = &mut objs[j];
-                let ty = to_type(obj); // XXX #3511
-                for ty.iter().advance |&t| {
-                    if (types & (1 << t)) != 0 {
-                        // duplicate type
-                        remove_or_replace_note(obj);
-                    } else {
-                        types |= 1 << t;
-                    }
-                }
-                j += 1;
-            }
-
-            types = merge_types(types);
-
-            while i < j {
-                let obj = &mut objs[i];
-                let ty = to_type(obj); // XXX #3511
-                for ty.iter().advance |&t| {
-                    if (types & (1 << t)) == 0 {
-                        remove_or_replace_note(obj);
-                    }
-                }
-                i += 1;
-            }
-        }
-    }
-
-    for uint::range(0, NLANES) |lane| {
-        let lane0 = Lane(lane);
-
-        static LNDONE: uint = 0;
-        static LNSTART: uint = 1;
-        static VISIBLE: uint = 2;
-        static INVISIBLE: uint = 3;
-        static BOMB: uint = 4;
-        let to_type = |obj: &BmsObj| -> Option<uint> {
-            match obj.data {
-                Visible(lane,_) if lane == lane0 => Some(VISIBLE),
-                Invisible(lane,_) if lane == lane0 => Some(INVISIBLE),
-                LNStart(lane,_) if lane == lane0 => Some(LNSTART),
-                LNDone(lane,_) if lane == lane0 => Some(LNDONE),
-                Bomb(lane,_,_) if lane == lane0 => Some(BOMB),
-                _ => None,
-            }
-        };
-
-        let mut inside = false;
-        do sanitize(bms.objs, |obj| to_type(obj)) |mut types| { // XXX #7363
-            static LNMASK: uint = (1 << LNSTART) | (1 << LNDONE);
-
-            // remove overlapping LN endpoints altogether
-            if (types & LNMASK) == LNMASK { types &= !LNMASK; }
-
-            // remove prohibited types according to inside
-            if inside {
-                types &= !((1 << LNSTART) | (1 << VISIBLE) | (1 << BOMB));
-            } else {
-                types &= !(1 << LNDONE);
-            }
-
-            // invisible note cannot overlap with long note endpoints
-            if (types & LNMASK) != 0 { types &= !(1 << INVISIBLE); }
-
-            // keep the most important (lowest) type, except for
-            // BOMB/INVISIBLE combination
-            let lowest = types & -types;
-            if lowest == (1 << INVISIBLE) {
-                types = lowest | (types & (1 << BOMB));
-            } else {
-                types = lowest;
-            }
-
-            if (types & (1 << LNSTART)) != 0 {
-                inside = true;
-            } else if (types & (1 << LNDONE)) != 0 {
-                inside = false;
-            }
-
-            types
-        }
-
-        if inside {
-            // remove last starting longnote which is unfinished
-            match bms.objs.rposition(|obj| to_type(obj).is_some()) {
-                Some(pos) if bms.objs[pos].is_lnstart() =>
-                    remove_or_replace_note(&mut bms.objs[pos]),
-                _ => {}
-            }
-        }
-    }
-
-    sanitize(bms.objs,
-             |&obj| match obj.data {
-                        SetBGA(Layer1,_) => Some(0),
-                        SetBGA(Layer2,_) => Some(1),
-                        SetBGA(Layer3,_) => Some(2),
-                        SetBGA(PoorBGA,_) => Some(3),
-                        SetBPM(*) => Some(4),
-                        Stop(*) => Some(5),
-                        _ => None,
-                    },
-             |types| types);
-}
-
-//----------------------------------------------------------------------------------------------
-// analysis
 
 /// Derived BMS information. Again, this is not a global state.
 pub struct BmsInfo {
@@ -739,7 +559,7 @@ pub fn analyze_bms(bms: &Bms) -> BmsInfo {
     let mut infos = BmsInfo { originoffset: 0.0, hasbpmchange: false, haslongnote: false,
                               nnotes: 0, maxscore: 0 };
 
-    for bms.objs.iter().advance |&obj| {
+    for bms.timeline.objs.iter().advance |&obj| {
         infos.haslongnote |= obj.is_lnstart();
         infos.hasbpmchange |= obj.is_setbpm();
 
@@ -766,8 +586,8 @@ pub fn bms_duration(bms: &Bms, originoffset: float,
     let mut time = 0.0;
     let mut sndtime = 0.0;
 
-    for bms.objs.iter().advance |&obj| {
-        let delta = bms.adjust_object_position(pos, obj.time);
+    for bms.timeline.objs.iter().advance |&obj| {
+        let delta = bms.timeline.adjust_object_position(pos, obj.time);
         time += bpm.measure_to_msec(delta);
         match obj.data {
             Visible(_,Some(sref)) | LNStart(_,Some(sref)) | BGM(sref) => {
@@ -778,7 +598,7 @@ pub fn bms_duration(bms: &Bms, originoffset: float,
                     bpm = BPM(newbpm);
                 } else if newbpm < 0.0 {
                     bpm = BPM(newbpm);
-                    let delta = bms.adjust_object_position(originoffset, pos);
+                    let delta = bms.timeline.adjust_object_position(originoffset, pos);
                     time += BPM(-newbpm).measure_to_msec(delta);
                     break;
                 }
@@ -792,89 +612,9 @@ pub fn bms_duration(bms: &Bms, originoffset: float,
     }
 
     if *bpm > 0.0 { // the chart scrolls backwards to `originoffset` for negative BPM
-        let delta = bms.adjust_object_position(pos, (bms.nmeasures + 1) as float);
+        let delta = bms.timeline.adjust_object_position(pos, (bms.nmeasures + 1) as float);
         time += bpm.measure_to_msec(delta);
     }
     cmp::max(time, sndtime) / 1000.0
- }
-
-//----------------------------------------------------------------------------------------------
-// modifiers
-
-/// Applies a function to the object lane if any. This is used to shuffle the lanes without
-/// modifying the relative time position.
-fn update_object_lane(obj: &mut BmsObj, f: &fn(Lane) -> Lane) {
-    obj.data = match obj.data {
-        Visible(lane,sref) => Visible(f(lane),sref),
-        Invisible(lane,sref) => Invisible(f(lane),sref),
-        LNStart(lane,sref) => LNStart(f(lane),sref),
-        LNDone(lane,sref) => LNDone(f(lane),sref),
-        Bomb(lane,sref,damage) => Bomb(f(lane),sref,damage),
-        objdata => objdata
-    };
 }
-
-/// Swaps given lanes in the reverse order. (C: `shuffle_bms` with `MIRROR_MODF`)
-pub fn apply_mirror_modf(bms: &mut Bms, lanes: &[Lane]) {
-    let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
-    let rlanes = vec::reversed(lanes);
-    let assocs = vec::zip_slice(lanes, rlanes); // XXX #3511
-    for assocs.iter().advance |&(Lane(from), to)| {
-        map[from] = to;
-    }
-
-    for bms.objs.mut_iter().advance |obj| {
-        update_object_lane(obj, |Lane(lane)| map[lane]);
-    }
-}
-
-/// Swaps given lanes in the random order. (C: `shuffle_bms` with
-/// `SHUFFLE_MODF`/`SHUFFLEEX_MODF`)
-pub fn apply_shuffle_modf<R:RngUtil>(bms: &mut Bms, r: &mut R, lanes: &[Lane]) {
-    let shuffled = r.shuffle(lanes);
-    let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
-    let assocs = vec::zip_slice(lanes, shuffled); // XXX #3511
-    for assocs.iter().advance |&(Lane(from), to)| {
-        map[from] = to;
-    }
-
-    for bms.objs.mut_iter().advance |obj| {
-        update_object_lane(obj, |Lane(lane)| map[lane]);
-    }
-}
-
-/// Swaps given lanes in the random order, where the order is determined per object.
-/// `bms` should be first sanitized by `sanitize_bms`. It does not cause objects to move within
-/// another LN object, or place two objects in the same or very close time position to the same
-/// lane. (C: `shuffle_bms` with `RANDOM_MODF`/`RANDOMEX_MODF`)
-pub fn apply_random_modf<R:RngUtil>(bms: &mut Bms, r: &mut R, lanes: &[Lane]) {
-    let mut movable = lanes.to_owned();
-    let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
-
-    let mut lasttime = float::neg_infinity;
-    for bms.objs.mut_iter().advance |obj| {
-        if obj.is_lnstart() {
-            let lane = obj.object_lane().get();
-            match movable.position_elem(&lane) {
-                Some(i) => { movable.swap_remove(i); }
-                None => fail!(~"non-sanitized BMS detected")
-            }
-        }
-        if lasttime < obj.time { // reshuffle required
-            lasttime = obj.time + 1e-4;
-            let shuffled = r.shuffle(movable);
-            let assocs = vec::zip_slice(movable, shuffled); // XXX #3511
-            for assocs.iter().advance |&(Lane(from), to)| {
-                map[from] = to;
-            }
-        }
-        if obj.is_lnstart() {
-            let lane = obj.object_lane().get();
-            movable.push(lane);
-        }
-        update_object_lane(obj, |Lane(lane)| map[lane]);
-    }
-}
-
-//----------------------------------------------------------------------------------------------
 

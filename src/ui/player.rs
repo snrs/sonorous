@@ -34,7 +34,9 @@ use ui::init::{SCREENW, SCREENH};
 /// from given key specification. This function should be called twice for the Couple Play,
 /// since 1P and 2P should be treated separately. (C: `shuffle_bms`)
 pub fn apply_modf<R: ::std::rand::RngUtil>(bms: &mut Bms, modf: Modf, r: &mut R,
-                                            keyspec: &KeySpec, begin: uint, end: uint) {
+                                           keyspec: &KeySpec, begin: uint, end: uint) {
+    use timeline_modf = format::timeline::modf;
+
     let mut lanes = ~[];
     for uint::range(begin, end) |i| {
         let lane = keyspec.order[i];
@@ -46,10 +48,10 @@ pub fn apply_modf<R: ::std::rand::RngUtil>(bms: &mut Bms, modf: Modf, r: &mut R,
     }
 
     match modf {
-        MirrorModf => apply_mirror_modf(bms, lanes),
-        ShuffleModf | ShuffleExModf => apply_shuffle_modf(bms, r, lanes),
-        RandomModf | RandomExModf => apply_random_modf(bms, r, lanes)
-    }
+        MirrorModf => timeline_modf::mirror(bms.timeline, lanes),
+        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(bms.timeline, r, lanes),
+        RandomModf | RandomExModf => timeline_modf::randomize(bms.timeline, r, lanes)
+    };
 }
 
 //----------------------------------------------------------------------------------------------
@@ -384,12 +386,12 @@ pub fn Player(opts: ~Options, bms: ~Bms, infos: ~BmsInfo, duration: float, keysp
     let now = get_ticks();
     let initplayspeed = opts.playspeed;
     let originoffset = infos.originoffset;
-    let startshorten = bms.shorten(originoffset as int);
+    let startshorten = bms.timeline.shorten(originoffset as int);
     let gradefactor = 1.5 - cmp::min(bms.rank, 5) as float * 0.25;
     let initialgauge = MAXGAUGE * 500 / 1000;
     let survival = MAXGAUGE * 293 / 1000;
     let initbpm = bms.initbpm;
-    let nobjs = bms.objs.len();
+    let nobjs = bms.timeline.objs.len();
     let nsounds = sndres.len();
 
     let bms = @mut bms;
@@ -597,7 +599,7 @@ impl Player {
 
         // process the measure scale factor change
         let bottommeasure = self.bottom.floor();
-        let curshorten = bms.shorten(bottommeasure as int);
+        let curshorten = bms.timeline.shorten(bottommeasure as int);
         if bottommeasure >= -1.0 && self.startshorten != curshorten {
             break_continuity(bottommeasure);
             self.startshorten = curshorten;
@@ -605,8 +607,8 @@ impl Player {
 
         //self.line = bms.adjust_object_time(self.bottom, 0.03 / self.playspeed);
         self.line = self.bottom;
-        self.top = bms.adjust_object_time(self.bottom, 1.25 / self.playspeed);
-        let lineshorten = bms.shorten(self.line.floor() as int);
+        self.top = bms.timeline.adjust_object_time(self.bottom, 1.25 / self.playspeed);
+        let lineshorten = bms.timeline.shorten(self.line.floor() as int);
 
         // apply object-like effects while advancing to new `pcur`
         pfront.seek_until(self.bottom);
@@ -645,7 +647,7 @@ impl Player {
         if !self.opts.is_autoplay() {
             for pcheck.iter_to(pcur) |&obj| {
                 let dist = self.bpm.measure_to_msec(self.line - obj.time) *
-                           bms.shorten(obj.measure()) * self.gradefactor;
+                           bms.timeline.shorten(obj.measure()) * self.gradefactor;
                 if dist < BAD_CUTOFF { break; }
                 if !self.nograding[pcheck.pos] {
                     let lane = obj.object_lane(); // XXX #3511
@@ -1194,7 +1196,7 @@ impl Display for GraphicDisplay {
         }
 
         let time_to_y = |time| {
-            let adjusted = bms.adjust_object_position(player.bottom, time);
+            let adjusted = bms.timeline.adjust_object_position(player.bottom, time);
             (SCREENH-70) - (400.0 * player.playspeed * adjusted) as uint
         };
 
@@ -1215,11 +1217,11 @@ impl Display for GraphicDisplay {
                 } else {
                     let mut i = front.pos;
                     let mut nextbottom = None;
-                    let nobjs = bms.objs.len();
+                    let nobjs = bms.timeline.objs.len();
                     let top = player.top;
-                    while i < nobjs && bms.objs[i].time <= top {
-                        let y = time_to_y(bms.objs[i].time);
-                        match bms.objs[i].data {
+                    while i < nobjs && bms.timeline.objs[i].time <= top {
+                        let y = time_to_y(bms.timeline.objs[i].time);
+                        match bms.timeline.objs[i].data {
                             LNStart(lane0,_) if lane0 == lane => {
                                 assert!(nextbottom.is_none());
                                 nextbottom = Some(y);

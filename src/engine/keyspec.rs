@@ -4,8 +4,10 @@
 
 //! Key kinds and specification.
 
-use format::obj::{Lane, NLANES, Deleted, ObjQueryOps};
-use format::bms::{Bms, Key, DoublePlay, CouplePlay, remove_or_replace_note};
+use format::obj::{Lane, NLANES, ObjQueryOps};
+use format::timeline::Timeline;
+use format::timeline::modf::filter_lanes;
+use format::bms::{Bms, Key, DoublePlay, CouplePlay};
 
 /**
  * Key kinds. They define an appearance of particular lane, but otherwise ignored for the game
@@ -143,6 +145,11 @@ impl KeySpec {
         assert!(self.split <= self.order.len());
         self.order.slice(self.split, self.order.len()).iter().advance(f)
     }
+
+    /// Removes insignificant lanes. (C: `analyze_and_compact_bms`)
+    pub fn filter_timeline<S:Copy,I:Copy>(&self, timeline: &mut Timeline<S,I>) {
+        filter_lanes(timeline, self.order);
+    }
 }
 
 /// Parses the key specification from the string. (C: `parse_key_spec`)
@@ -203,7 +210,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
     use util::std::str::StrUtil;
 
     let mut present = [false, ..NLANES];
-    for bms.objs.iter().advance |&obj| {
+    for bms.timeline.objs.iter().advance |&obj| {
         let lane = obj.object_lane(); // XXX #3511
         for lane.iter().advance |&Lane(lane)| {
             present[lane] = true;
@@ -294,20 +301,5 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
         }
     }
     Ok(keyspec)
-}
-
-/// Removes insignificant objects (i.e. not in visible lanes) and ensures that there is no
-/// `Deleted` object. (C: `analyze_and_compact_bms`)
-pub fn compact_bms(bms: &mut Bms, keyspec: &KeySpec) {
-    for bms.objs.mut_iter().advance |obj| {
-        let lane = obj.object_lane(); // XXX #3511
-        for lane.iter().advance |&Lane(lane)| {
-            if keyspec.kinds[lane].is_none() {
-                remove_or_replace_note(obj)
-            }
-        }
-    }
-
-    do bms.objs.retain |&obj| { obj.data != Deleted }
 }
 

@@ -76,6 +76,7 @@ pub mod ext {
 }
 pub mod format {
     pub mod obj;
+    pub mod timeline;
     #[path="bms/mod.rs"] pub mod bms;
 }
 pub mod engine {
@@ -115,7 +116,6 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         Ok(bms) => ~bms,
         Err(err) => die!("Couldn't load BMS file: %s", err)
     };
-    bms::sanitize_bms(bms);
 
     // parses the key specification and further sanitizes `bms` with it
     let keyspec = match engine::keyspec::key_spec(bms, opts.preset.clone(), opts.leftkeys.clone(),
@@ -123,7 +123,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         Ok(keyspec) => keyspec,
         Err(err) => die!("%s", err)
     };
-    engine::keyspec::compact_bms(bms, keyspec);
+    keyspec.filter_timeline(bms.timeline);
     let infos = ~bms::analyze_bms(bms);
 
     // applies the modifier if any
