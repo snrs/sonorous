@@ -4,20 +4,38 @@
 
 //! Timeline interface.
 
-use std::int;
-use format::obj::Obj;
+use std::{int, cmp};
+use format::obj::*;
 
 /// A portion of game data which is not associated to resources and other metadata. Timelines are
 /// immutable by design (except for `modf` module), and should be built by `TimelineBuilder`
 /// in order to satisfy the invariant.
 pub struct Timeline<SoundRef,ImageRef> {
+    /// Initial BPM. (C: `initbpm`)
+    initbpm: BPM,
     /// List of objects sorted by the position. (C: `objs`)
     objs: ~[Obj<SoundRef,ImageRef>],
     /// The scaling factor of measures. Defaults to 1.0. (C: `shortens`)
     shortens: ~[float],
 }
 
-impl<SoundRef,ImageRef> Timeline<SoundRef,ImageRef> {
+/// Derived Timeline information.
+pub struct TimelineInfo {
+    /// The start position of the timeline. This is either -1.0 or 0.0 depending on the first
+    /// measure has any visible objects or not. (C: `originoffset`)
+    originoffset: float,
+    /// Set to true if the timeline has a BPM change. (C: `hasbpmchange`)
+    hasbpmchange: bool,
+    /// Set to true if the timeline has long note objects. (C: `haslongnote`)
+    haslongnote: bool,
+    /// The number of visible objects in the timeline. A long note object counts as one object.
+    /// (C: `nnotes`)
+    nnotes: int,
+    /// The maximum possible score. (C: `maxscore`)
+    maxscore: int
+}
+
+impl<S:Copy,I:Copy> Timeline<S,I> {
     /// Returns a scaling factor of given measure number. The default scaling factor is 1.0, and
     /// that value applies to any out-of-bound measures. (C: `shorten`)
     pub fn shorten(&self, measure: int) -> float {
@@ -66,6 +84,81 @@ impl<SoundRef,ImageRef> Timeline<SoundRef,ImageRef> {
             pos += self.shorten(i);
         }
         pos
+    }
+
+    /// Returns the position of the last object in the chart.
+    pub fn length(&self) -> float {
+        if self.objs.is_empty() {0.0} else {self.objs.last().time}
+    }
+
+    /// Calculates the duration of the timeline in seconds. `sound_length` should return
+    /// the length of sound resources in seconds or 0.0. (C: `get_bms_duration`)
+    pub fn duration(&self, originoffset: float, sound_length: &fn(S) -> float) -> float {
+        let mut pos = originoffset;
+        let mut bpm = self.initbpm;
+        let mut time = 0.0;
+        let mut sndtime = 0.0;
+
+        for self.objs.iter().advance |obj| {
+            let delta = self.adjust_object_position(pos, obj.time);
+            time += bpm.measure_to_msec(delta);
+            match obj.data {
+                Visible(_,Some(ref sref)) | LNStart(_,Some(ref sref)) | BGM(ref sref) => {
+                    sndtime = cmp::max(sndtime, time + sound_length(copy *sref) * 1000.0);
+                }
+                SetBPM(BPM(newbpm)) => {
+                    if newbpm > 0.0 {
+                        bpm = BPM(newbpm);
+                    } else if newbpm < 0.0 {
+                        // the chart scrolls backwards to `originoffset` for negative BPM
+                        bpm = BPM(newbpm);
+                        let delta = self.adjust_object_position(originoffset, pos);
+                        time += BPM(-newbpm).measure_to_msec(delta);
+                        break;
+                    }
+                }
+                Stop(duration) => {
+                    time += duration.to_msec(bpm);
+                }
+                _ => {}
+            }
+            pos = obj.time;
+        }
+
+        cmp::max(time, sndtime) / 1000.0
+    }
+
+    /// Analyzes the timeline. (C: `analyze_and_compact_bms`)
+    pub fn analyze(&self) -> TimelineInfo {
+        let mut infos = TimelineInfo { originoffset: 0.0, hasbpmchange: false, haslongnote: false,
+                                       nnotes: 0, maxscore: 0 };
+
+        for self.objs.iter().advance |&obj| {
+            infos.haslongnote |= obj.is_lnstart();
+            infos.hasbpmchange |= obj.is_setbpm();
+
+            if obj.is_lnstart() || obj.is_visible() {
+                infos.nnotes += 1;
+                if obj.time < 1.0 { infos.originoffset = -1.0; }
+            }
+        }
+
+        for int::range(0, infos.nnotes) |i| {
+            let ratio = (i as float) / (infos.nnotes as float);
+            infos.maxscore += (300.0 * (1.0 + ratio)) as int;
+        }
+
+        infos
+    }
+}
+
+impl<S:ToStr,I:ToStr> Timeline<S,I> {
+    /// Dumps the timeline to the writer for the debugging purpose.
+    pub fn dump(&self, writer: @Writer) {
+        writer.write_line(fmt!("    -inf  SetBPM(%f)", *self.initbpm));
+        for self.objs.iter().advance |obj| {
+            writer.write_line(fmt!("%8.3f  %s", obj.time, obj.data.to_str()));
+        }
     }
 }
 
@@ -191,10 +284,20 @@ pub mod builder {
                             _ => None,
                         },
                  |types| types);
+
+        // `End` must be the last object if any.
+        let lastobj = objs.len() - 1;
+        for objs.mut_iter().enumerate().advance |(i, obj)| {
+            if (*obj).is_end() && i != lastobj {
+                obj.data = Deleted;
+            }
+        }
     }
 
     /// An unprocessed game data which will eventually produce `Timeline` value.
     pub struct TimelineBuilder<SoundRef,ImageRef> {
+        /// Same as `Timeline::initbpm`.
+        initbpm: Option<BPM>,
         /// Same as `Timeline::objs` but not yet sorted.
         objs: ~[Obj<SoundRef,ImageRef>],
         /// Same as `Timeline::shortens`.
@@ -208,7 +311,12 @@ pub mod builder {
     impl<S:Copy,I:Copy> TimelineBuilder<S,I> {
         /// Creates a new timeline builder.
         pub fn new() -> ~TimelineBuilder<S,I> {
-            ~TimelineBuilder { objs: ~[], shortens: ~[] }
+            ~TimelineBuilder { initbpm: None, objs: ~[], shortens: ~[] }
+        }
+
+        /// Sets an initial BPM.
+        pub fn set_initbpm(&mut self, bpm: BPM) {
+            self.initbpm = Some(bpm); 
         }
 
         /// Sets a shorten factor for given measure.
@@ -219,11 +327,13 @@ pub mod builder {
 
         /// Adds an object at given position.
         pub fn add(&mut self, pos: float, data: ObjData<S,I>) {
+            assert!(pos >= 0.0);
             self.objs.push(Obj { time: pos, data: data });
         }
 
         /// Adds an object at given position and returns a mark to that object for later usage.
         pub fn add_and_mark(&mut self, pos: float, data: ObjData<S,I>) -> Mark {
+            assert!(pos >= 0.0);
             let index = self.objs.len();
             self.objs.push(Obj { time: pos, data: data });
             Mark(index)
@@ -234,6 +344,7 @@ pub mod builder {
             assert!(*mark < self.objs.len());
             let Obj { time: pos, data: data } = copy self.objs[*mark];
             let (pos, data) = f(pos, data);
+            assert!(pos >= 0.0);
             self.objs[*mark] = Obj { time: pos, data: data };
         }
 
@@ -243,15 +354,14 @@ pub mod builder {
         }
 
         /// Builds an actual timeline.
-        //
-        // Rust: what is happening? I can't get `build(~self)` signature working...
-        pub fn build(self) -> ~Timeline<S,I> {
-            let TimelineBuilder { objs: objs, shortens: shortens } = self;
+        pub fn build(~self) -> Timeline<S,I> {
+            let ~TimelineBuilder { initbpm: initbpm, objs: objs, shortens: shortens } = self;
+            let initbpm = initbpm.expect("initial BPM should have been set");
             let mut objs = objs;
             ::extra::sort::tim_sort(objs);
             sanitize_objs(objs);
             objs.retain(|&obj| !obj.is_deleted());
-            ~Timeline { objs: objs, shortens: shortens }
+            Timeline { initbpm: initbpm, objs: objs, shortens: shortens }
         }
     }
 }
@@ -272,7 +382,7 @@ pub mod modf {
         }
 
         for timeline.objs.mut_iter().advance |obj| {
-            match obj.object_lane() {
+            match (*obj).object_lane() {
                 Some(lane) if !keep[*lane] => { obj.data = obj.data.to_effect(); }
                 _ => {}
             }
@@ -283,8 +393,8 @@ pub mod modf {
     /// Applies a mapping to the object lane if any. This is used to shuffle the lanes without
     /// modifying the relative time position.
     fn map_object_lane<S:Copy,I:Copy>(obj: &mut Obj<S,I>, map: &[Lane]) {
-        match obj.object_lane() {
-            Some(lane) => { *obj = obj.with_object_lane(map[*lane]); }
+        match (*obj).object_lane() {
+            Some(lane) => { *obj = (*obj).with_object_lane(map[*lane]); }
             None => {}
         }
     }
@@ -329,8 +439,8 @@ pub mod modf {
 
         let mut lasttime = float::neg_infinity;
         for timeline.objs.mut_iter().advance |obj| {
-            if obj.is_lnstart() {
-                let lane = obj.object_lane().get();
+            if (*obj).is_lnstart() {
+                let lane = (*obj).object_lane().get();
                 match movable.position_elem(&lane) {
                     Some(i) => { movable.swap_remove(i); }
                     None => fail!(~"non-sanitized timeline")
@@ -344,8 +454,8 @@ pub mod modf {
                     map[from] = to;
                 }
             }
-            if obj.is_lnstart() {
-                let lane = obj.object_lane().get();
+            if (*obj).is_lnstart() {
+                let lane = (*obj).object_lane().get();
                 movable.push(lane);
             }
             map_object_lane(obj, map);

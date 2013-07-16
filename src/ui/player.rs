@@ -11,6 +11,8 @@ use std::{int, uint, vec, cmp, num};
 
 use sdl::*;
 use ext::sdl::{mixer, mpeg};
+use format::timeline::TimelineInfo;
+use format::pointer::*;
 use format::bms::*;
 use util::gl::{Texture, ShadedDrawing, TexturedDrawing};
 use util::gfx::*;
@@ -48,9 +50,9 @@ pub fn apply_modf<R: ::std::rand::RngUtil>(bms: &mut Bms, modf: Modf, r: &mut R,
     }
 
     match modf {
-        MirrorModf => timeline_modf::mirror(bms.timeline, lanes),
-        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(bms.timeline, r, lanes),
-        RandomModf | RandomExModf => timeline_modf::randomize(bms.timeline, r, lanes)
+        MirrorModf => timeline_modf::mirror(&mut bms.timeline, lanes),
+        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(&mut bms.timeline, r, lanes),
+        RandomModf | RandomExModf => timeline_modf::randomize(&mut bms.timeline, r, lanes)
     };
 }
 
@@ -223,14 +225,12 @@ static BAD_DAMAGE: Damage = GaugeDamage(0.030);
 pub struct Player {
     /// The game play options.
     opts: ~Options,
-    /// The current BMS data.
-    //
-    // Rust: this should have been just `~Bms`, and `Pointer` should have received a lifetime
-    //       parameter (for `&'self Bms` things). in reality, though, a lifetime parameter made
-    //       borrowck much stricter and I ended up with wrapping `bms` to a mutable managed box.
-    bms: @mut ~Bms,
-    /// The derived BMS information.
-    infos: ~BmsInfo,
+    /// The current BMS metadata.
+    meta: BmsMeta,
+    /// The current timeline. This is a managed pointer so that `Pointer` can be created for it.
+    timeline: @BmsTimeline,
+    /// The derived timeline information.
+    infos: TimelineInfo,
     /// The length of BMS file in seconds as calculated by `bms_duration`. (C: `duration`)
     duration: float,
     /// The key specification.
@@ -296,17 +296,17 @@ pub struct Player {
     /// The virtual time at the top of the visible chart. (C: `top`)
     top: float,
     /// A pointer to the first `Obj` after `bottom`. (C: `pfront`)
-    pfront: pointer::Pointer,
+    pfront: BmsPointer,
     /// A pointer to the first `Obj` after `line`. (C: `pcur`)
-    pcur: pointer::Pointer,
+    pcur: BmsPointer,
     /// A pointer to the first `Obj` that haven't escaped the grading area. It is possible that
     /// this `Obj` haven't reached the grading area either. (C: `pcheck`)
-    pcheck: pointer::Pointer,
+    pcheck: BmsPointer,
     /// Pointers to `Obj`s for the start of LN which grading is in progress. (C: `pthru`)
     //
-    // Rust: this is intended to be `[Option<pointer::Pointer>, ..NLANES]` but a fixed-size vector
+    // Rust: this is intended to be `[Option<BmsPointer>, ..NLANES]` but a fixed-size vector
     //       cannot be cloned.
-    pthru: ~[Option<pointer::Pointer>],
+    pthru: ~[Option<BmsPointer>],
 
     /// The scale factor for grading area. The factor less than 1 causes the grading area
     /// shrink. (C: `gradefactor`)
@@ -381,23 +381,26 @@ fn create_beep() -> ~mixer::Chunk {
 
 /// Creates a new player object. The player object owns other related structures, including
 /// the options, BMS file, key specification, input mapping and sound resources.
-pub fn Player(opts: ~Options, bms: ~Bms, infos: ~BmsInfo, duration: float, keyspec: ~KeySpec,
+pub fn Player(opts: ~Options, bms: Bms, infos: TimelineInfo, duration: float, keyspec: ~KeySpec,
               keymap: ~KeyMap, sndres: ~[SoundResource]) -> Player {
+    // we no longer need the full `Bms` structure.
+    let Bms { bmspath: _, meta: meta, timeline: timeline } = bms;
+    let timeline = @timeline;
+
     let now = get_ticks();
     let initplayspeed = opts.playspeed;
     let originoffset = infos.originoffset;
-    let startshorten = bms.timeline.shorten(originoffset as int);
-    let gradefactor = 1.5 - cmp::min(bms.rank, 5) as float * 0.25;
+    let startshorten = timeline.shorten(originoffset as int);
+    let gradefactor = 1.5 - cmp::min(meta.rank, 5) as float * 0.25;
     let initialgauge = MAXGAUGE * 500 / 1000;
     let survival = MAXGAUGE * 293 / 1000;
-    let initbpm = bms.initbpm;
-    let nobjs = bms.timeline.objs.len();
+    let initbpm = timeline.initbpm;
+    let nobjs = timeline.objs.len();
     let nsounds = sndres.len();
 
-    let bms = @mut bms;
-    let initptr = pointer::Pointer(bms);
+    let initptr = timeline.pointer();
     let mut player = Player {
-        opts: opts, bms: bms, infos: infos, duration: duration,
+        opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
         keyspec: keyspec, keymap: keymap,
 
         nograding: vec::from_elem(nobjs, false), sndres: sndres, beep: create_beep(),
@@ -554,7 +557,7 @@ impl Player {
 
     /// Updates the player state. (C: `play_process`)
     pub fn tick(&mut self) -> bool {
-        let bms = &*self.bms;
+        let timeline = self.timeline;
         let mut pfront = self.pfront.clone();
         let mut pcur = self.pcur.clone();
         let mut pcheck = self.pcheck.clone();
@@ -599,20 +602,20 @@ impl Player {
 
         // process the measure scale factor change
         let bottommeasure = self.bottom.floor();
-        let curshorten = bms.timeline.shorten(bottommeasure as int);
+        let curshorten = timeline.shorten(bottommeasure as int);
         if bottommeasure >= -1.0 && self.startshorten != curshorten {
             break_continuity(bottommeasure);
             self.startshorten = curshorten;
         }
 
-        //self.line = bms.adjust_object_time(self.bottom, 0.03 / self.playspeed);
+        //self.line = timeline.adjust_object_time(self.bottom, 0.03 / self.playspeed);
         self.line = self.bottom;
-        self.top = bms.timeline.adjust_object_time(self.bottom, 1.25 / self.playspeed);
-        let lineshorten = bms.timeline.shorten(self.line.floor() as int);
+        self.top = timeline.adjust_object_time(self.bottom, 1.25 / self.playspeed);
+        let lineshorten = timeline.shorten(self.line.floor() as int);
 
         // apply object-like effects while advancing to new `pcur`
         pfront.seek_until(self.bottom);
-        let mut prevpcur = pointer::pointer_with_pos(self.bms, pcur.pos);
+        let mut prevpcur = timeline.pointer_with_pos(pcur.pos);
         for pcur.iter_until(self.line) |&obj| {
             match obj.data {
                 BGM(sref) => {
@@ -647,7 +650,7 @@ impl Player {
         if !self.opts.is_autoplay() {
             for pcheck.iter_to(pcur) |&obj| {
                 let dist = self.bpm.measure_to_msec(self.line - obj.time) *
-                           bms.timeline.shorten(obj.measure()) * self.gradefactor;
+                           timeline.shorten(obj.time.floor() as int) * self.gradefactor;
                 if dist < BAD_CUTOFF { break; }
                 if !self.nograding[pcheck.pos] {
                     let lane = obj.object_lane(); // XXX #3511
@@ -771,7 +774,7 @@ impl Player {
                                    lineshorten * self.gradefactor;
                         if num::abs(dist) < BAD_CUTOFF {
                             if p.is_lnstart() {
-                                pthru[*lane] = Some(pointer::pointer_with_pos(self.bms, p.pos));
+                                pthru[*lane] = Some(timeline.pointer_with_pos(p.pos));
                             }
                             self.nograding[p.pos] = true;
                             self.update_grade_from_distance(dist);
@@ -840,7 +843,7 @@ impl Player {
         self.pthru = pthru;
 
         // determines if we should keep playing
-        if self.bottom > (bms.nmeasures + 1) as float {
+        if self.bottom > timeline.length() {
             if self.opts.is_autoplay() {
                 mixer::num_playing(None) != mixer::num_playing(Some(0))
             } else {
@@ -1152,7 +1155,7 @@ static GRADES: &'static [(&'static str,Gradient)] = &[
 impl Display for GraphicDisplay {
     fn render(&mut self, player: &Player) {
         let font = &*self.font;
-        let bms = &*player.bms;
+        let timeline = player.timeline;
 
         let W = SCREENW as f32;
         let H = SCREENH as f32;
@@ -1196,7 +1199,7 @@ impl Display for GraphicDisplay {
         }
 
         let time_to_y = |time| {
-            let adjusted = bms.timeline.adjust_object_position(player.bottom, time);
+            let adjusted = timeline.adjust_object_position(player.bottom, time);
             (SCREENH-70) - (400.0 * player.playspeed * adjusted) as uint
         };
 
@@ -1217,11 +1220,11 @@ impl Display for GraphicDisplay {
                 } else {
                     let mut i = front.pos;
                     let mut nextbottom = None;
-                    let nobjs = bms.timeline.objs.len();
+                    let nobjs = timeline.objs.len();
                     let top = player.top;
-                    while i < nobjs && bms.timeline.objs[i].time <= top {
-                        let y = time_to_y(bms.timeline.objs[i].time);
-                        match bms.timeline.objs[i].data {
+                    while i < nobjs && timeline.objs[i].time <= top {
+                        let y = time_to_y(timeline.objs[i].time);
+                        match timeline.objs[i].data {
                             LNStart(lane0,_) if lane0 == lane => {
                                 assert!(nextbottom.is_none());
                                 nextbottom = Some(y);

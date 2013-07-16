@@ -77,6 +77,7 @@ pub mod ext {
 pub mod format {
     pub mod obj;
     pub mod timeline;
+    pub mod pointer;
     #[path="bms/mod.rs"] pub mod bms;
 }
 pub mod engine {
@@ -113,24 +114,24 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     // parses the file and sanitizes it
     let mut r = std::rand::rng();
     let mut bms = match bms::parse_bms(bmspath, &mut r) {
-        Ok(bms) => ~bms,
+        Ok(bms) => bms,
         Err(err) => die!("Couldn't load BMS file: %s", err)
     };
 
     // parses the key specification and further sanitizes `bms` with it
-    let keyspec = match engine::keyspec::key_spec(bms, opts.preset.clone(), opts.leftkeys.clone(),
-                                                  opts.rightkeys.clone()) {
+    let keyspec = match engine::keyspec::key_spec(&bms, opts.preset.clone(),
+                                                  opts.leftkeys.clone(), opts.rightkeys.clone()) {
         Ok(keyspec) => keyspec,
         Err(err) => die!("%s", err)
     };
-    keyspec.filter_timeline(bms.timeline);
-    let infos = ~bms::analyze_bms(bms);
+    keyspec.filter_timeline(&mut bms.timeline);
+    let infos = bms.timeline.analyze();
 
     // applies the modifier if any
     for opts.modf.iter().advance |&modf| {
-        player::apply_modf(bms, modf, &mut r, keyspec, 0, keyspec.split);
+        player::apply_modf(&mut bms, modf, &mut r, keyspec, 0, keyspec.split);
         if keyspec.split < keyspec.order.len() {
-            player::apply_modf(bms, modf, &mut r, keyspec, keyspec.split, keyspec.order.len());
+            player::apply_modf(&mut bms, modf, &mut r, keyspec, keyspec.split, keyspec.order.len());
         }
     }
 
@@ -173,7 +174,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         let update_status;
         if !opts.is_exclusive() {
             let screen_: &Screen = screen.get_ref();
-            let mut scene = loading::LoadingScene::new(bms, infos, keyspec, opts);
+            let mut scene = loading::LoadingScene::new(&bms, &infos, keyspec, opts);
             scene.render(screen_, font, None);
             scene.load_stagefile();
             scene.render(screen_, font, None);
@@ -189,7 +190,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
                 update_status = |_path| {};
             }
         } else if opts.showinfo {
-            loading::show_stagefile_noscreen(bms, infos, keyspec, opts);
+            loading::show_stagefile_noscreen(&bms, &infos, keyspec, opts);
             update_status = |path| {
                 loading::text_update_status(path, &mut ticker, || atexit()) // XXX #7363
             };
@@ -200,7 +201,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         // wait for resources
         let start = ::sdl::get_ticks() + 3000;
         let (sndres, imgres) =
-            loading::load_resource(bms, opts, |msg| update_status(msg)); // XXX #7363
+            loading::load_resource(&bms, opts, |msg| update_status(msg)); // XXX #7363
         if opts.showinfo {
             ticker.reset(); // force update
             update_status(None);
@@ -208,8 +209,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         while ::sdl::get_ticks() < start { check_exit(|| atexit()); } // XXX #7363
 
         // create the player and transfer ownership of other resources to it
-        let duration = bms::bms_duration(bms, infos.originoffset,
-                                         |sref| sndres[**sref].duration());
+        let duration = bms.timeline.duration(infos.originoffset, |sref| sndres[**sref].duration());
         let player = player::Player(opts, bms, infos, duration, keyspec, keymap, sndres);
 
         // Rust: `@mut` upcasting is unsupported as of 0.6. (#5725)

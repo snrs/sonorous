@@ -33,7 +33,7 @@ static IMAGE_EXTS: &'static [&'static str] = &[".BMP", ".PNG", ".JPG", ".JPEG", 
 pub fn get_basedir(bms: &Bms) -> Path {
     // TODO this logic assumes that #PATH_WAV is always interpreted as a native path, which
     // the C version doesn't assume. this difference barely makes the practical issue though.
-    match bms.basepath {
+    match bms.meta.basepath {
         Some(ref basepath) => { let basepath: &str = *basepath; Path(basepath) }
         None => Path(bms.bmspath).dir_path()
     }

@@ -5,7 +5,8 @@
 //! Loading screen. Displays the STAGEFILE image and metadata while loading resources.
 
 use sdl::*;
-use format::bms::{Bms, BmsInfo, Key};
+use format::timeline::TimelineInfo;
+use format::bms::{Bms, Key};
 use util::gl::Texture;
 use util::gfx::*;
 use util::bmfont::{Font, LeftAligned, Centered, RightAligned};
@@ -22,7 +23,7 @@ pub struct LoadingScene {
     /// Same as `Options::showinfo`.
     showinfo: bool,
     /// Metadata string (level, BPM, number of notes etc).
-    meta: ~str,
+    brief: ~str,
     /// Title string.
     title: ~str,
     /// Genre string.
@@ -37,23 +38,24 @@ pub struct LoadingScene {
 }
 
 /// Returns the interface string common to the graphical and textual loading screen.
-fn displayed_info(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec) -> (~str, ~str, ~str, ~str) {
-    let meta = fmt!("Level %d | BPM %.2f%s | %d note%s [%uKEY%s]",
-                    bms.playlevel, *bms.initbpm, if infos.hasbpmchange {~"?"} else {~""},
-                    infos.nnotes, if infos.nnotes == 1 {~""} else {~"s"}, keyspec.nkeys(),
-                    if infos.haslongnote {~"-LN"} else {~""});
-    let title = bms.title.clone().get_or_default(~"");
-    let genre = bms.genre.clone().get_or_default(~"");
-    let artist = bms.artist.clone().get_or_default(~"");
-    (meta, title, genre, artist)
+fn displayed_info(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec) -> (~str, ~str, ~str, ~str) {
+    let brief = fmt!("Level %d | BPM %.2f%s | %d note%s [%uKEY%s]",
+                     bms.meta.playlevel, *bms.timeline.initbpm,
+                     if infos.hasbpmchange {~"?"} else {~""}, infos.nnotes,
+                     if infos.nnotes == 1 {~""} else {~"s"}, keyspec.nkeys(),
+                     if infos.haslongnote {~"-LN"} else {~""});
+    let title = bms.meta.title.clone().get_or_default(~"");
+    let genre = bms.meta.genre.clone().get_or_default(~"");
+    let artist = bms.meta.artist.clone().get_or_default(~"");
+    (brief, title, genre, artist)
 }
 
 impl LoadingScene {
     /// Creates a state required for rendering the graphical loading screen.
-    pub fn new(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec, opts: &Options) -> LoadingScene {
-        let (meta, title, genre, artist) = displayed_info(bms, infos, keyspec);
-        let stagefile_path = do bms.stagefile.map |&path| { (get_basedir(bms), path) };
-        LoadingScene { showinfo: opts.showinfo, meta: meta, title: title, genre: genre,
+    pub fn new(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec, opts: &Options) -> LoadingScene {
+        let (brief, title, genre, artist) = displayed_info(bms, infos, keyspec);
+        let stagefile_path = do bms.meta.stagefile.map |&path| { (get_basedir(bms), path) };
+        LoadingScene { showinfo: opts.showinfo, brief: brief, title: title, genre: genre,
                        artist: artist, stagefile_path: stagefile_path, stagefile_tex: None }
     }
 
@@ -114,7 +116,7 @@ impl LoadingScene {
                 font.draw_string(d, 6.0, 4.0, 2.0, LeftAligned, self.title, fg);
                 font.draw_string(d, W-8.0, 4.0, 1.0, RightAligned, self.genre, fg);
                 font.draw_string(d, W-8.0, 20.0, 1.0, RightAligned, self.artist, fg);
-                font.draw_string(d, 3.0, H-18.0, 1.0, LeftAligned, self.meta, fg);
+                font.draw_string(d, 3.0, H-18.0, 1.0, LeftAligned, self.brief, fg);
                 font.draw_string(d, W-3.0, H-18.0, 1.0, RightAligned, msg,
                                  Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x80,0x80,0x80)));
             }
@@ -126,14 +128,14 @@ impl LoadingScene {
 
 /// Renders the textual loading screen by printing the metadata.
 /// (C: `play_show_stagefile` when `opt_mode >= EXCLUSIVE_MODE`)
-pub fn show_stagefile_noscreen(bms: &Bms, infos: &BmsInfo, keyspec: &KeySpec, opts: &Options) {
+pub fn show_stagefile_noscreen(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec, opts: &Options) {
     if opts.showinfo {
-        let (meta, title, genre, artist) = displayed_info(bms, infos, keyspec);
+        let (brief, title, genre, artist) = displayed_info(bms, infos, keyspec);
         ::std::io::stderr().write_line(fmt!("\
 ----------------------------------------------------------------------------------------------
 Title:    %s\nGenre:    %s\nArtist:   %s\n%s
 ----------------------------------------------------------------------------------------------",
-            title, genre, artist, meta));
+            title, genre, artist, brief));
     }
 }
 
@@ -144,7 +146,7 @@ pub fn load_resource(bms: &Bms, opts: &Options,
     let basedir = get_basedir(bms);
 
     let sndres: ~[SoundResource] =
-        do bms.sndpath.iter().enumerate().transform |(i, &path)| {
+        do bms.meta.sndpath.iter().enumerate().transform |(i, &path)| {
             match path {
                 Some(path) => {
                     callback(Some(path.clone()));
@@ -160,7 +162,7 @@ pub fn load_resource(bms: &Bms, opts: &Options,
             }
         }.collect();
     let mut imgres: ~[ImageResource] =
-        do bms.imgpath.iter().enumerate().transform |(i, &path)| {
+        do bms.meta.imgpath.iter().enumerate().transform |(i, &path)| {
             let path = if opts.has_bga() {path} else {None}; // skip loading BGAs if requested
             match path {
                 Some(path) => {
@@ -177,7 +179,7 @@ pub fn load_resource(bms: &Bms, opts: &Options,
             }
         }.collect();
 
-    for bms.blitcmd.iter().advance |bc| {
+    for bms.meta.blitcmd.iter().advance |bc| {
         apply_blitcmd(imgres, bc);
     }
     (sndres, imgres)

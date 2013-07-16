@@ -31,7 +31,7 @@
  * command memo](http://hitkey.nekokan.dyndns.info/cmds.htm).
  */
 
-use std::{int, uint, cmp};
+use std::uint;
 use std::rand::*;
 
 pub use format::obj::{Lane, NLANES};
@@ -40,14 +40,14 @@ pub use format::obj::{BPM};
 pub use format::obj::{Duration, Seconds, Measures};
 pub use format::obj::{Damage, GaugeDamage, InstantDeath};
 pub use format::obj::{ObjData, Deleted, Visible, Invisible, LNStart, LNDone, Bomb, BGM, SetBGA,
-                      SetBPM, Stop};
+                      SetBPM, Stop, End};
 pub use format::obj::{ObjQueryOps, ObjConvOps, Obj};
 pub use format::timeline::Timeline;
+pub use format::pointer::Pointer;
 pub use format::bms::types::{Key, MAXKEY};
 
 pub mod types;
 pub mod parse;
-pub mod pointer;
 
 /// Sound reference.
 #[deriving(Eq)]
@@ -57,8 +57,13 @@ pub struct SoundRef(Key);
 #[deriving(Eq)]
 pub struct ImageRef(Key);
 
-/// BMS-specific object. Both the sound and the image are referenced in the alphanumeric keys.
-pub type BmsObj = Obj<SoundRef,ImageRef>;
+impl ToStr for SoundRef {
+    fn to_str(&self) -> ~str { (**self).to_str() }
+}
+
+impl ToStr for ImageRef {
+    fn to_str(&self) -> ~str { (**self).to_str() }
+}
 
 /// Default BPM. This value comes from the original BMS specification.
 pub static DefaultBPM: BPM = BPM(130.0);
@@ -90,12 +95,8 @@ pub static CouplePlay: int = 2;
 /// renders to a single wide panel. The chart is still meant to be played by one person.
 pub static DoublePlay: int = 3;
 
-/// Loaded BMS data. It is not a global state unlike C.
-pub struct Bms {
-    /// A path to the BMS file. Also used for finding the resource when `basepath` is not set.
-    /// (C: `bmspath`)
-    bmspath: ~str,
-
+/// Loaded BMS metadata and resources.
+pub struct BmsMeta {
     /// Title. Maps to BMS #TITLE command. (C: `string[S_TITLE]`)
     title: Option<~str>,
     /// Genre. Maps to BMS #GENRE command. (C: `string[S_GENRE]`)
@@ -118,8 +119,6 @@ pub struct Bms {
     /// Gauge difficulty. Higher is easier. Maps to BMS #RANK command. (C: `value[V_RANK]`)
     rank: int,
 
-    /// Initial BPM. (C: `initbpm`)
-    initbpm: BPM,
     /// Paths to sound file relative to `basepath` or BMS file. (C: `sndpath`)
     //
     // Rust: constant expression in the array size is unsupported.
@@ -128,12 +127,25 @@ pub struct Bms {
     imgpath: [Option<~str>, ..MAXKEY],
     /// List of blit commands to be executed after `imgpath` is loaded. (C: `blitcmd`)
     blitcmd: ~[BlitCmd],
+}
 
-    /// Timeline for this BMS file.
-    timeline: ~Timeline<SoundRef,ImageRef>,
-    /// The number of measures after the origin, i.e. the length of the BMS file. The play stops
-    /// after the last measure. (C: `length`)
-    nmeasures: uint
+/// Timeline for the BMS file.
+pub type BmsTimeline = Timeline<SoundRef,ImageRef>;
+
+/// Pointer for the BMS file. Provided for the convenience.
+pub type BmsPointer = Pointer<SoundRef,ImageRef>;
+
+/// Loaded BMS data. This is an intermediate structure for metadata, resources and actual chart
+/// data, and cannot be used for actual game play (since `Pointer` requires `Timeline` to be
+/// a managed pointer).
+pub struct Bms {
+    /// A path to the BMS file. Also used for finding the resource when `meta.basepath` is not set.
+    /// (C: `bmspath`)
+    bmspath: ~str,
+    /// Metadata and resources.
+    meta: BmsMeta,
+    /// Timeline.
+    timeline: BmsTimeline,
 }
 
 /// Reads and parses the BMS file with given RNG from given reader.
@@ -148,7 +160,6 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
     let mut player = SinglePlay;
     let mut playlevel = 0;
     let mut rank = 2;
-    let mut initbpm = DefaultBPM;
     let mut sndpath = [None, ..MAXKEY];
     let mut imgpath = [None, ..MAXKEY];
     let mut blitcmd = ~[];
@@ -242,6 +253,8 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
 
     // A builder for objects.
     let mut builder = TimelineBuilder::new();
+    builder.set_initbpm(DefaultBPM);
+
     // A list of unprocessed data lines. They have to be sorted with a stable algorithm and
     // processed in the order of measure number. (C: `bmsline`)
     let mut bmsline = ~[];
@@ -267,7 +280,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
             (parse::BmsArtist(s),          false) => { artist = Some(s.to_owned()); }
             (parse::BmsStageFile(s),       false) => { stagefile = Some(s.to_owned()); }
             (parse::BmsPathWAV(s),         false) => { basepath = Some(s.to_owned()); }
-            (parse::BmsBPM(bpm),           false) => { initbpm = bpm; }
+            (parse::BmsBPM(bpm),           false) => { builder.set_initbpm(bpm); }
             (parse::BmsExBPM(Key(i), bpm), false) => { bpmtab[i] = bpm; }
             (parse::BmsPlayer(v),          false) => { player = v; }
             (parse::BmsPlayLevel(v),       false) => { playlevel = v; }
@@ -512,19 +525,22 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
     }
 
     // fix the unterminated longnote
-    let nmeasures = bmsline.last_opt().map_default(0, |l| l.measure) + 1;
-    let endt = nmeasures as float;
+    let endt = bmsline.last_opt().map_default(0.0, |l| l.measure as float) + 1.0;
     for uint::range(0, NLANES) |i| {
         if lastvis[i].is_some() || (!consecutiveln && lastln[i].is_some()) {
             builder.add(endt, LNDone(Lane(i), None));
         }
     }
 
+    // mark the end of the chart
+    builder.add(endt + 1.0, End);
+
     let timeline = builder.build();
-    Ok(Bms { bmspath: ~"", title: title, genre: genre, artist: artist, stagefile: stagefile,
-             basepath: basepath, player: player, playlevel: playlevel, rank: rank, initbpm: initbpm,
-             sndpath: sndpath, imgpath: imgpath, blitcmd: blitcmd, timeline: timeline,
-             nmeasures: nmeasures })
+    Ok(Bms { bmspath: ~"",
+             meta: BmsMeta { title: title, genre: genre, artist: artist, stagefile: stagefile,
+                             basepath: basepath, player: player, playlevel: playlevel, rank: rank,
+                             sndpath: sndpath, imgpath: imgpath, blitcmd: blitcmd },
+             timeline: timeline })
 }
 
 /// Reads and parses the BMS file with given RNG. (C: `parse_bms`)
@@ -536,85 +552,5 @@ pub fn parse_bms<R:RngUtil>(bmspath: &str, r: &mut R) -> Result<Bms,~str> {
             bms
         }
     }
-}
-
-/// Derived BMS information. Again, this is not a global state.
-pub struct BmsInfo {
-    /// The start position of the BMS file. This is either -1.0 or 0.0 depending on the first
-    /// measure has any visible objects or not. (C: `originoffset`)
-    originoffset: float,
-    /// Set to true if the BMS file has a BPM change. (C: `hasbpmchange`)
-    hasbpmchange: bool,
-    /// Set to true if the BMS file has long note objects. (C: `haslongnote`)
-    haslongnote: bool,
-    /// The number of visible objects in the BMS file. A long note object counts as one object.
-    /// (C: `nnotes`)
-    nnotes: int,
-    /// The maximum possible score. (C: `maxscore`)
-    maxscore: int
-}
-
-/// Analyzes the loaded BMS file. (C: `analyze_and_compact_bms`)
-pub fn analyze_bms(bms: &Bms) -> BmsInfo {
-    let mut infos = BmsInfo { originoffset: 0.0, hasbpmchange: false, haslongnote: false,
-                              nnotes: 0, maxscore: 0 };
-
-    for bms.timeline.objs.iter().advance |&obj| {
-        infos.haslongnote |= obj.is_lnstart();
-        infos.hasbpmchange |= obj.is_setbpm();
-
-        if obj.is_lnstart() || obj.is_visible() {
-            infos.nnotes += 1;
-            if obj.time < 1.0 { infos.originoffset = -1.0; }
-        }
-    }
-
-    for int::range(0, infos.nnotes) |i| {
-        let ratio = (i as float) / (infos.nnotes as float);
-        infos.maxscore += (300.0 * (1.0 + ratio)) as int;
-    }
-
-    infos
-}
-
-/// Calculates the duration of the loaded BMS file in seconds. `sound_length` should return
-/// the length of sound resources in seconds or 0.0. (C: `get_bms_duration`)
-pub fn bms_duration(bms: &Bms, originoffset: float,
-                    sound_length: &fn(SoundRef) -> float) -> float {
-    let mut pos = originoffset;
-    let mut bpm = bms.initbpm;
-    let mut time = 0.0;
-    let mut sndtime = 0.0;
-
-    for bms.timeline.objs.iter().advance |&obj| {
-        let delta = bms.timeline.adjust_object_position(pos, obj.time);
-        time += bpm.measure_to_msec(delta);
-        match obj.data {
-            Visible(_,Some(sref)) | LNStart(_,Some(sref)) | BGM(sref) => {
-                sndtime = cmp::max(sndtime, time + sound_length(sref) * 1000.0);
-            }
-            SetBPM(BPM(newbpm)) => {
-                if newbpm > 0.0 {
-                    bpm = BPM(newbpm);
-                } else if newbpm < 0.0 {
-                    bpm = BPM(newbpm);
-                    let delta = bms.timeline.adjust_object_position(originoffset, pos);
-                    time += BPM(-newbpm).measure_to_msec(delta);
-                    break;
-                }
-            }
-            Stop(duration) => {
-                time += duration.to_msec(bpm);
-            }
-            _ => {}
-        }
-        pos = obj.time;
-    }
-
-    if *bpm > 0.0 { // the chart scrolls backwards to `originoffset` for negative BPM
-        let delta = bms.timeline.adjust_object_position(pos, (bms.nmeasures + 1) as float);
-        time += bpm.measure_to_msec(delta);
-    }
-    cmp::max(time, sndtime) / 1000.0
 }
 
