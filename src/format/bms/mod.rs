@@ -34,16 +34,10 @@
 use std::uint;
 use std::rand::*;
 
-pub use format::obj::{Lane, NLANES};
-pub use format::obj::{BGALayer, Layer1, Layer2, Layer3, PoorBGA, NLAYERS};
-pub use format::obj::{BPM};
-pub use format::obj::{Duration, Seconds, Measures};
-pub use format::obj::{Damage, GaugeDamage, InstantDeath};
-pub use format::obj::{ObjData, Deleted, Visible, Invisible, LNStart, LNDone, Bomb, BGM, SetBGA,
-                      SetBPM, Stop, End};
-pub use format::obj::{ObjQueryOps, ObjConvOps, Obj};
-pub use format::timeline::Timeline;
-pub use format::pointer::Pointer;
+use format::obj::*;
+use format::timeline::Timeline;
+use format::pointer::Pointer;
+
 pub use format::bms::types::{Key, MAXKEY};
 
 pub mod types;
@@ -258,6 +252,9 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
     // A list of unprocessed data lines. They have to be sorted with a stable algorithm and
     // processed in the order of measure number. (C: `bmsline`)
     let mut bmsline = ~[];
+    // A table of measure factors (#xxx02). They are eventually converted to `SetMeasureFactor`
+    // objects.
+    let mut shortens = ~[];
     // A table of BPMs. Maps to BMS #BPMxx command. (C: `bpmtab`)
     let mut bpmtab = ~[DefaultBPM, ..MAXKEY];
     // A table of the length of scroll stoppers. Maps to BMS #STOP/#STP commands. (C: `stoptab`)
@@ -293,9 +290,9 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
             (parse::BmsStop(Key(i), dur),  false) => { stoptab[i] = dur; }
             (parse::BmsStp(pos, dur),      false) => { builder.add(pos, Stop(dur)); }
 
-            (parse::BmsShorten(measure, shorten), false) => {
-                if shorten > 0.001 {
-                    builder.set_shorten(measure, shorten);
+            (parse::BmsShorten(measure, factor), false) => {
+                if factor > 0.0 {
+                    shortens.grow_set(measure, &1.0, factor);
                 }
             }
             (parse::BmsData(measure, chan, data), false) => {
@@ -501,7 +498,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
         }
     };
 
-    // loops over the sorted bmslines
+    // loop over the sorted bmslines
     ::extra::sort::tim_sort(bmsline);
     for bmsline.iter().advance |line| {
         let measure = line.measure as float;
@@ -520,20 +517,33 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
         }
     }
 
+    // insert an artificial `SetBGA` object at 0.0 if required
     if poorbgafix {
         builder.add(0.0, SetBGA(PoorBGA, Some(ImageRef(Key(0)))));
     }
 
     // fix the unterminated longnote
-    let endt = bmsline.last_opt().map_default(0.0, |l| l.measure as float) + 1.0;
+    let nmeasures = bmsline.last_opt().map_default(0, |l| l.measure) + 1;
+    let endt = nmeasures as float;
     for uint::range(0, NLANES) |i| {
         if lastvis[i].is_some() || (!consecutiveln && lastln[i].is_some()) {
             builder.add(endt, LNDone(Lane(i), None));
         }
     }
 
-    // mark the end of the chart
-    builder.add(endt + 1.0, End);
+    // convert shortens to objects and insert measure bars
+    shortens.grow_set(nmeasures, &1.0, 1.0); // so we always have a normal measure at the end
+    let mut prevfactor = 1.0;
+    for shortens.iter().enumerate().advance |(measure, &factor)| {
+        builder.add(measure as float, MeasureBar);
+        if prevfactor != factor {
+            builder.add(measure as float, SetMeasureFactor(factor));
+            prevfactor = factor;
+        }
+    }
+
+    // set the end of the chart (no measure bar at this position)
+    builder.set_end(endt + 1.0);
 
     let timeline = builder.build();
     Ok(Bms { bmspath: ~"",

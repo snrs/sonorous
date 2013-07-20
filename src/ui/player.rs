@@ -11,6 +11,7 @@ use std::{int, uint, vec, cmp, num};
 
 use sdl::*;
 use ext::sdl::{mixer, mpeg};
+use format::obj::*;
 use format::timeline::TimelineInfo;
 use format::pointer::*;
 use format::bms::*;
@@ -180,32 +181,30 @@ enum Grade {
     MISS = 0,
     /// Issued when the player inputed the object and the normalized time difference (that is,
     /// the time difference multiplied by `Player::gradefactor`) between the input point and
-    /// the object is between `GOOD_CUTOFF` and `BAD_CUTOFF` milliseconds. Resets the combo
-    /// number, decreases the gauge by moderate amount (`BAD_DAMAGE`) and displays the POOR BGA
-    /// for moments.
+    /// the object is between `GOOD_CUTOFF` and `BAD_CUTOFF` seconds. Resets the combo number,
+    /// decreases the gauge by moderate amount (`BAD_DAMAGE`) and displays the POOR BGA for moments.
     BAD  = 1,
     /// Issued when the player inputed the object and the normalized time difference is between
-    /// `GREAT_CUTOFF` and `GOOD_CUTOFF` milliseconds. Both the combo number and gauge is
-    /// left unchanged.
+    /// `GREAT_CUTOFF` and `GOOD_CUTOFF` seconds. Both the combo number and gauge is left unchanged.
     GOOD = 2,
     /// Issued when the player inputed the object and the normalized time difference is between
-    /// `COOL_CUTOFF` and `GREAT_CUTOFF` milliseconds. The combo number is increased by one and
-    /// the gauge is replenished by small amount.
+    /// `COOL_CUTOFF` and `GREAT_CUTOFF` . The combo number is increased by one and the gauge is
+    /// replenished by small amount.
     GREAT = 3,
     /// Issued when the player inputed the object and the normalized time difference is less
-    /// than `COOL_CUTOFF` milliseconds. The combo number is increased by one and the gauge is
-    /// replenished by large amount.
+    /// than `COOL_CUTOFF` . The combo number is increased by one and the gauge is replenished by
+    /// large amount.
     COOL = 4,
 }
 
-/// Required time difference in milliseconds to get at least COOL grade.
-static COOL_CUTOFF: float = 14.4;
-/// Required time difference in milliseconds to get at least GREAT grade.
-static GREAT_CUTOFF: float = 48.0;
-/// Required time difference in milliseconds to get at least GOOD grade.
-static GOOD_CUTOFF: float = 84.0;
-/// Required time difference in milliseconds to get at least BAD grade.
-static BAD_CUTOFF: float = 144.0;
+/// Required time difference in seconds to get at least COOL grade.
+static COOL_CUTOFF: float = 0.0144;
+/// Required time difference in seconds to get at least GREAT grade.
+static GREAT_CUTOFF: float = 0.048;
+/// Required time difference in seconds to get at least GOOD grade.
+static GOOD_CUTOFF: float = 0.084;
+/// Required time difference in seconds to get at least BAD grade.
+static BAD_CUTOFF: float = 0.144;
 
 /// The number of available grades.
 static NGRADES: uint = 5;
@@ -270,43 +269,21 @@ pub struct Player {
     now: uint,
     /// The timestamp at the first tick. (C: `origintime`)
     origintime: uint,
-    /**
-     * The timestamp at the last discontinuity that breaks a linear relationship between
-     * the virtual time and actual time. (C: `starttime`) Currently the following are
-     * considered a discontinuity:
-     *
-     * - `origintime`
-     * - A change in BPM
-     * - A change in scaling factor of measure
-     * - A scroll stopper (in this case, `stoptime` is first updated and `starttime` is updated
-     *   at the end of stop)
-     */
-    starttime: uint,
-    /// The timestamp at the end of ongoing scroll stopper, if any. (C: `stoptime`)
-    stoptime: Option<uint>,
-    /// The virtual time at the last discontinuity. (C: `startoffset`)
-    startoffset: float,
-    /// The current scaling factor of measure. (C: `startshorten`)
-    startshorten: float,
 
-    /// The virtual time at the bottom of the visible chart. (C: `bottom`)
-    bottom: float,
-    /// The virtual time at the grading line. Currently same as `bottom`. (C: `line`)
-    line: float,
-    /// The virtual time at the top of the visible chart. (C: `top`)
-    top: float,
-    /// A pointer to the first `Obj` after `bottom`. (C: `pfront`)
-    pfront: BmsPointer,
-    /// A pointer to the first `Obj` after `line`. (C: `pcur`)
-    pcur: BmsPointer,
-    /// A pointer to the first `Obj` that haven't escaped the grading area. It is possible that
-    /// this `Obj` haven't reached the grading area either. (C: `pcheck`)
-    pcheck: BmsPointer,
-    /// Pointers to `Obj`s for the start of LN which grading is in progress. (C: `pthru`)
-    //
-    // Rust: this is intended to be `[Option<BmsPointer>, ..NLANES]` but a fixed-size vector
-    //       cannot be cloned.
-    pthru: ~[Option<BmsPointer>],
+    /// A pointer to the point where the game play starts (and not necessarily equal to zero point
+    /// in the chart). Corresponds to `origintime` and `TimelineInfo::originoffset`.
+    origin: BmsPointer,
+    /// A pointer to the grading line.
+    cur: BmsPointer,
+    /// A pointer to the lower bound of the grading area containing `cur`.
+    checked: BmsPointer,
+    /// A pointer to objects for the start of LN which grading is in progress.
+    thru: [Option<BmsPointer>, ..NLANES],
+    /// The pointer to the first encountered `SetBPM` object with a negative value. This is
+    /// a special casing for negative BPMs (ugh!); when this is set, the normal timeline routine is
+    /// disabled and `cur` etc. always move backwards with given BPM. Everything except for
+    /// `MeasureLine` is not rendered.
+    reverse: Option<BmsPointer>,
 
     /// The scale factor for grading area. The factor less than 1 causes the grading area
     /// shrink. (C: `gradefactor`)
@@ -390,7 +367,6 @@ pub fn Player(opts: ~Options, bms: Bms, infos: TimelineInfo, duration: float, ke
     let now = get_ticks();
     let initplayspeed = opts.playspeed;
     let originoffset = infos.originoffset;
-    let startshorten = timeline.shorten(originoffset as int);
     let gradefactor = 1.5 - cmp::min(meta.rank, 5) as float * 0.25;
     let initialgauge = MAXGAUGE * 500 / 1000;
     let survival = MAXGAUGE * 293 / 1000;
@@ -398,7 +374,8 @@ pub fn Player(opts: ~Options, bms: Bms, infos: TimelineInfo, duration: float, ke
     let nobjs = timeline.objs.len();
     let nsounds = sndres.len();
 
-    let initptr = timeline.pointer();
+    // we initially set all pointers to the origin, and let the `tick` do the initial calculation.
+    let origin = timeline.pointer(VirtualPos, originoffset);
     let mut player = Player {
         opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
         keyspec: keyspec, keymap: keymap,
@@ -407,10 +384,9 @@ pub fn Player(opts: ~Options, bms: Bms, infos: TimelineInfo, duration: float, ke
         sndlastch: vec::from_elem(nsounds, None), lastchsnd: ~[], bga: initial_bga_state(),
 
         playspeed: initplayspeed, targetspeed: None, bpm: initbpm, now: now, origintime: now,
-        starttime: now, stoptime: None, startoffset: originoffset, startshorten: startshorten,
 
-        bottom: originoffset, line: originoffset, top: originoffset,
-        pfront: initptr, pcur: initptr, pcheck: initptr, pthru: ~[None, ..NLANES],
+        origin: origin.clone(), cur: origin.clone(), checked: origin.clone(),
+        thru: [None, ..NLANES], reverse: None,
 
         gradefactor: gradefactor, lastgrade: None, gradecounts: [0, ..NGRADES],
         lastcombo: 0, bestcombo: 0, score: 0, gauge: initialgauge, survival: survival,
@@ -473,7 +449,7 @@ impl Player {
     }
 
     /// Same as `update_grade`, but the grade is calculated from the normalized difference
-    /// between the object and input time in milliseconds. The normalized distance equals to
+    /// between the object and input time in seconds. The normalized distance equals to
     /// the actual time difference when `gradefactor` is 1.0. (C: `update_grade(grade,
     /// scoredelta, 0)` where `grade` and `scoredelta` are pre-calculated from `dist`)
     pub fn update_grade_from_distance(&mut self, dist: float) {
@@ -557,12 +533,6 @@ impl Player {
 
     /// Updates the player state. (C: `play_process`)
     pub fn tick(&mut self) -> bool {
-        let timeline = self.timeline;
-        let mut pfront = self.pfront.clone();
-        let mut pcur = self.pcur.clone();
-        let mut pcheck = self.pcheck.clone();
-        let mut pthru = self.pthru.clone();
-
         // smoothly change the play speed
         if self.targetspeed.is_some() {
             let target = self.targetspeed.get();
@@ -575,95 +545,68 @@ impl Player {
             }
         }
 
-        // process the ongoing scroll stopper if any
         self.now = get_ticks();
-        self.bottom = match self.stoptime {
-            Some(t) => {
-                if self.now >= t {
-                    self.starttime = t;
-                    self.stoptime = None;
-                }
-                self.startoffset
+        let mut cur = self.cur;
+        let mut checked = self.checked;
+        let mut thru = self.thru;
+        let prev = self.cur.clone();
+
+        let curtime = (self.now - self.origintime) as float / 1000.0 + self.origin.loc.time;
+        match self.reverse {
+            Some(reverse) => {
+                assert!(*self.bpm < 0.0 && curtime >= reverse.loc.time);
+                let newpos = reverse.loc.pos + self.bpm.sec_to_measure(curtime - reverse.loc.time);
+                cur.seek(ActualPos, newpos - cur.loc.pos);
             }
             None => {
-                let msecdiff = (self.now - self.starttime) as float;
-                let measurediff = self.bpm.msec_to_measure(msecdiff);
-                self.startoffset + measurediff / self.startshorten
-            }
-        };
-
-        // Breaks a continuity at given virtual time.
-        let break_continuity = |at: float| {
-            assert!(at >= self.startoffset);
-            self.starttime += (self.bpm.measure_to_msec(at - self.startoffset) *
-                               self.startshorten) as uint;
-            self.startoffset = at;
-        };
-
-        // process the measure scale factor change
-        let bottommeasure = self.bottom.floor();
-        let curshorten = timeline.shorten(bottommeasure as int);
-        if bottommeasure >= -1.0 && self.startshorten != curshorten {
-            break_continuity(bottommeasure);
-            self.startshorten = curshorten;
-        }
-
-        //self.line = timeline.adjust_object_time(self.bottom, 0.03 / self.playspeed);
-        self.line = self.bottom;
-        self.top = timeline.adjust_object_time(self.bottom, 1.25 / self.playspeed);
-        let lineshorten = timeline.shorten(self.line.floor() as int);
-
-        // apply object-like effects while advancing to new `pcur`
-        pfront.seek_until(self.bottom);
-        let mut prevpcur = timeline.pointer_with_pos(pcur.pos);
-        for pcur.iter_until(self.line) |&obj| {
-            match obj.data {
-                BGM(sref) => {
-                    self.play_sound_if_nonzero(sref, true);
-                }
-                SetBGA(layer, iref) => {
-                    self.bga[layer as uint] = iref;
-                }
-                SetBPM(newbpm) => {
-                    break_continuity(obj.time);
-                    self.bpm = newbpm;
-                }
-                Stop(duration) => {
-                    let msecs = duration.to_msec(self.bpm);
-                    let newstoptime = Some(msecs as uint + self.now);
-                    self.stoptime = self.stoptime.merge(newstoptime, cmp::max);
-                    self.startoffset = obj.time;
-                }
-                Visible(_,sref) | LNStart(_,sref) => {
-                    if self.opts.is_autoplay() {
-                        for sref.iter().advance |&sref| {
-                            self.play_sound_if_nonzero(sref, false);
+                // apply object-like effects while advancing `self.cur`
+                for cur.mut_until(ActualTime, curtime - cur.loc.time) |p| {
+                    match p.data() {
+                        BGM(sref) => {
+                            self.play_sound_if_nonzero(sref, true);
                         }
-                        self.update_grade_from_distance(0.0);
+                        SetBGA(layer, iref) => {
+                            self.bga[layer as uint] = iref;
+                        }
+                        SetBPM(newbpm) => {
+                            self.bpm = newbpm;
+                            if *newbpm == 0.0 {
+                                return false; // finish immediately
+                            } else if *newbpm < 0.0 {
+                                self.reverse = Some(p.clone()); // activate reverse motion
+                            }
+                        }
+                        Visible(_,sref) | LNStart(_,sref) => {
+                            if self.opts.is_autoplay() {
+                                for sref.iter().advance |&sref| {
+                                    self.play_sound_if_nonzero(sref, false);
+                                }
+                                self.update_grade_from_distance(0.0);
+                            }
+                        }
+                        _ => {}
                     }
                 }
-                _ => {}
             }
         }
 
         // grade objects that have escaped the grading area
         if !self.opts.is_autoplay() {
-            for pcheck.iter_to(pcur) |&obj| {
-                let dist = self.bpm.measure_to_msec(self.line - obj.time) *
-                           timeline.shorten(obj.time.floor() as int) * self.gradefactor;
+            for checked.mut_upto(&cur) |p| {
+                let dist = (cur.loc.vtime - p.loc.vtime) * self.gradefactor;
                 if dist < BAD_CUTOFF { break; }
-                if !self.nograding[pcheck.pos] {
-                    let lane = obj.object_lane(); // XXX #3511
+                if !self.nograding[p.index] {
+                    let lane = p.object_lane(); // XXX #3511
                     for lane.iter().advance |&Lane(lane)| {
                         let missable =
-                            match obj.data {
+                            match p.data() {
                                 Visible(*) | LNStart(*) => true,
-                                LNDone(*) => pthru[lane].is_some(),
+                                LNDone(*) => thru[lane].is_some(),
                                 _ => false,
                             };
                         if missable {
                             self.update_grade_to_miss();
-                            pthru[lane] = None;
+                            thru[lane] = None;
                         }
                     }
                 }
@@ -731,28 +674,26 @@ impl Player {
             let process_unpress = |lane: Lane| {
                 // if LN grading is in progress and it is not within the threshold then
                 // MISS grade is issued
-                for pthru[*lane].iter().advance |&thru| {
+                for thru[*lane].iter().advance |&thru| {
                     let nextlndone = do thru.find_next_of_type |&obj| {
-                        obj.object_lane() == Some(lane) &&
-                        obj.is_lndone()
+                        obj.object_lane() == Some(lane) && obj.is_lndone()
                     };
                     for nextlndone.iter().advance |&p| {
-                        let delta = self.bpm.measure_to_msec(p.time() - self.line) *
-                                    lineshorten * self.gradefactor;
+                        let delta = (p.loc.vtime - cur.loc.vtime) * self.gradefactor;
                         if num::abs(delta) < BAD_CUTOFF {
-                            self.nograding[p.pos] = true;
+                            self.nograding[p.index] = true;
                         } else {
                             self.update_grade_to_miss();
                         }
                     }
                 }
-                pthru[*lane] = None;
+                thru[*lane] = None;
             };
 
             let process_press = |lane: Lane| {
                 // plays the closest key sound
                 let soundable =
-                    do pcur.find_closest_of_type(self.line) |&obj| {
+                    do cur.find_closest_of_type(VirtualTime) |&obj| {
                         obj.object_lane() == Some(lane) && obj.is_soundable()
                     };
                 for soundable.iter().advance |&p| {
@@ -762,21 +703,17 @@ impl Player {
                     }
                 }
 
-                // tries to grade the closest gradable object in
-                // the grading area
+                // tries to grade the closest gradable object in the grading area
                 let gradable =
-                    do pcur.find_closest_of_type(self.line) |&obj| {
+                    do cur.find_closest_of_type(VirtualTime) |&obj| {
                         obj.object_lane() == Some(lane) && obj.is_gradable()
                     };
                 for gradable.iter().advance |&p| {
-                    if p.pos >= pcheck.pos && !self.nograding[p.pos] && !p.is_lndone() {
-                        let dist = self.bpm.measure_to_msec(p.time() - self.line) *
-                                   lineshorten * self.gradefactor;
+                    if p.index >= checked.index && !self.nograding[p.index] && !p.is_lndone() {
+                        let dist = (p.loc.vtime - cur.loc.vtime) * self.gradefactor;
                         if num::abs(dist) < BAD_CUTOFF {
-                            if p.is_lnstart() {
-                                pthru[*lane] = Some(timeline.pointer_with_pos(p.pos));
-                            }
-                            self.nograding[p.pos] = true;
+                            if p.is_lnstart() { thru[*lane] = Some(p.clone()); }
+                            self.nograding[p.index] = true;
                             self.update_grade_from_distance(dist);
                         }
                     }
@@ -818,17 +755,17 @@ impl Player {
 
         // process bombs
         if !self.opts.is_autoplay() {
-            for prevpcur.iter_to(pcur) |&obj| {
-                match obj.data {
+            for prev.upto(&cur) |p| {
+                match p.data() {
                     Bomb(lane,sref,damage) if self.key_pressed(lane) => {
                         // ongoing long note is not graded twice
-                        pthru[*lane] = None;
+                        thru[*lane] = None;
                         for sref.iter().advance |&sref| {
                             self.play_sound(sref, false);
                         }
                         if !self.update_grade_from_damage(damage) {
                             // instant death
-                            pcur.seek_to_end();
+                            self.cur = cur.find_end();
                             return false;
                         }
                     }
@@ -837,19 +774,18 @@ impl Player {
             }
         }
 
-        self.pfront = pfront;
-        self.pcur = pcur;
-        self.pcheck = pcheck;
-        self.pthru = pthru;
+        self.cur = cur;
+        self.checked = checked;
+        self.thru = thru;
 
         // determines if we should keep playing
-        if self.bottom > timeline.length() {
+        if self.cur.index == self.timeline.objs.len() {
             if self.opts.is_autoplay() {
                 mixer::num_playing(None) != mixer::num_playing(Some(0))
             } else {
                 mixer::newest_in_group(Some(1)).is_some()
             }
-        } else if self.bottom < self.infos.originoffset {
+        } else if self.cur.loc.vpos < self.infos.originoffset {
             false // special casing the negative BPM
         } else {
             true
@@ -1155,7 +1091,6 @@ static GRADES: &'static [(&'static str,Gradient)] = &[
 impl Display for GraphicDisplay {
     fn render(&mut self, player: &Player) {
         let font = &*self.font;
-        let timeline = player.timeline;
 
         let W = SCREENW as f32;
         let H = SCREENH as f32;
@@ -1198,33 +1133,41 @@ impl Display for GraphicDisplay {
             }
         }
 
-        let time_to_y = |time| {
-            let adjusted = timeline.adjust_object_position(player.bottom, time);
-            (SCREENH-70) - (400.0 * player.playspeed * adjusted) as uint
+        //let bottom = player.cur.find(ActualPos, -0.03 / player.playspeed);
+        //let top = player.cur.find(ActualPos, 1.22 / player.playspeed);
+        let bottom = player.cur.clone();
+        let top = player.cur.find(ActualPos, 1.25 / player.playspeed);
+
+        let loc_to_y = |loc: &ObjLoc<float>| {
+            let offset = loc.pos - bottom.loc.pos;
+            (SCREENH-70) - (400.0 * player.playspeed * offset) as uint
         };
 
         do self.screen.draw_textured(&self.sprite) |d| {
+            // if we are in the reverse motion, do not draw objects before the motion start.
+            let localbottom = match player.reverse {
+                Some(reverse) => reverse.clone(),
+                None => bottom
+            };
+
             // render objects
             for self.lanestyles.iter().advance |&(lane,style)| {
                 if player.key_pressed(lane) { style.render_pressed_back(d); }
 
-                let front = do player.pfront.find_next_of_type |&obj| {
+                let front = do localbottom.find_next_of_type |&obj| {
                     obj.object_lane() == Some(lane) && obj.is_renderable()
                 };
                 if front.is_none() { loop; }
                 let front = front.get();
 
                 // LN starting before the bottom and ending after the top
-                if front.time() > player.top && front.is_lndone() {
+                if front.loc.vpos > top.loc.vpos && front.is_lndone() {
                     style.render_note(d, 30, SCREENH - 80);
                 } else {
-                    let mut i = front.pos;
                     let mut nextbottom = None;
-                    let nobjs = timeline.objs.len();
-                    let top = player.top;
-                    while i < nobjs && timeline.objs[i].time <= top {
-                        let y = time_to_y(timeline.objs[i].time);
-                        match timeline.objs[i].data {
+                    for front.upto(&top) |ptr| {
+                        let y = loc_to_y(&ptr.loc);
+                        match ptr.data() {
                             LNStart(lane0,_) if lane0 == lane => {
                                 assert!(nextbottom.is_none());
                                 nextbottom = Some(y);
@@ -1244,7 +1187,6 @@ impl Display for GraphicDisplay {
                             }
                             _ => {}
                         }
-                        i += 1;
                     }
 
                     for nextbottom.iter().advance |&y| {
@@ -1255,13 +1197,18 @@ impl Display for GraphicDisplay {
         }
 
         do self.screen.draw_shaded |d| {
-            // render measure bars
-            for int::range(player.bottom.floor() as int, player.top.floor() as int + 1) |i| {
-                let y = time_to_y(i as float) as f32;
-                d.rect(0.0, y, self.leftmost as f32, y + 1.0, RGB(0xc0,0xc0,0xc0));
-                for self.rightmost.iter().advance |&rightmost| {
-                    d.rect(rightmost as f32, y,
-                           (SCREENW - rightmost) as f32, y + 1.0, RGB(0xc0,0xc0,0xc0));
+            // render non-note objects (currently, measure bars)
+            for bottom.upto(&top) |ptr| {
+                match ptr.data() {
+                    MeasureBar => {
+                        let y = loc_to_y(&ptr.loc) as f32;
+                        d.rect(0.0, y, self.leftmost as f32, y + 1.0, RGB(0xc0,0xc0,0xc0));
+                        for self.rightmost.iter().advance |&rightmost| {
+                            d.rect(rightmost as f32, y,
+                                   (SCREENW - rightmost) as f32, y + 1.0, RGB(0xc0,0xc0,0xc0));
+                        }
+                    }
+                    _ => {}
                 }
             }
 
@@ -1307,7 +1254,7 @@ impl Display for GraphicDisplay {
                              fmt!("%02u:%02u / %02u:%02u", elapsed/60, elapsed%60,
                                                            duration/60, duration%60), black);
             font.draw_string(d, 95.0, H-62.0, 1.0, LeftAligned,
-                             fmt!("@%9.4f", player.bottom), black);
+                             fmt!("@%9.4f", player.cur.loc.vpos), black);
             font.draw_string(d, 95.0, H-78.0, 1.0, LeftAligned,
                              fmt!("BPM %6.2f", *player.bpm), black);
             let timetick = cmp::min(self.leftmost, (player.now - player.origintime) *
@@ -1317,7 +1264,7 @@ impl Display for GraphicDisplay {
             // render gauge
             if !player.opts.is_autoplay() {
                 // cycles four times per measure, [0,40)
-                let cycle = (160.0 * player.startshorten * player.bottom).floor() % 40.0;
+                let cycle = (160.0 * player.cur.loc.vpos).floor() % 40.0;
                 let width = if player.gauge < 0 {0}
                             else {player.gauge * 400 / MAXGAUGE - (cycle as int)};
                 let width = ::util::std::cmp::clamp(5, width, 360);
@@ -1335,7 +1282,7 @@ impl Display for GraphicDisplay {
 
         // check if the song reached the last gradable object (otherwise the game play was
         // terminated by the user)
-        let nextgradable = player.pcur.find_next_of_type(|obj| obj.is_gradable());
+        let nextgradable = player.cur.find_next_of_type(|obj| obj.is_gradable());
         if nextgradable.is_some() { return; }
 
         if player.gauge >= player.survival {
@@ -1377,7 +1324,7 @@ impl Display for TextDisplay {
             update_line(fmt!("%02u:%02u.%u / %02u:%02u.%u (@%9.4f) | BPM %6.2f | %u / %d notes",
                              elapsed/600, elapsed/10%60, elapsed%10,
                              duration/600, duration/10%60, duration%10,
-                             player.bottom, *player.bpm,
+                             player.cur.loc.vpos, *player.bpm,
                              player.lastcombo, player.infos.nnotes));
         }
     }

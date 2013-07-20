@@ -15,8 +15,6 @@ pub struct Timeline<SoundRef,ImageRef> {
     initbpm: BPM,
     /// List of objects sorted by the position. (C: `objs`)
     objs: ~[Obj<SoundRef,ImageRef>],
-    /// The scaling factor of measures. Defaults to 1.0. (C: `shortens`)
-    shortens: ~[float],
 }
 
 /// Derived Timeline information.
@@ -36,96 +34,37 @@ pub struct TimelineInfo {
 }
 
 impl<S:Copy,I:Copy> Timeline<S,I> {
-    /// Returns a scaling factor of given measure number. The default scaling factor is 1.0, and
-    /// that value applies to any out-of-bound measures. (C: `shorten`)
-    pub fn shorten(&self, measure: int) -> float {
-        if measure < 0 || measure as uint >= self.shortens.len() {
-            1.0
-        } else {
-            self.shortens[measure as uint]
-        }
-    }
-
-    /// Calculates the virtual time that is `offset` measures away from the virtual time `base`.
-    /// This takes account of the scaling factor, so if first four measures are scaled by 1/4,
-    /// then `adjust_object_time(0.0, 2.0)` results in `5.0`. (C: `adjust_object_time`)
-    pub fn adjust_object_time(&self, base: float, offset: float) -> float {
-        let basemeasure = base.floor() as int;
-        let baseshorten = self.shorten(basemeasure);
-        let basefrac = base - basemeasure as float;
-        let tonextmeasure = (1.0 - basefrac) * baseshorten;
-        if offset < tonextmeasure {
-            base + offset / baseshorten
-        } else {
-            let mut offset = offset - tonextmeasure;
-            let mut i = basemeasure + 1;
-            let mut curshorten = self.shorten(i);
-            while offset >= curshorten {
-                offset -= curshorten;
-                i += 1;
-                curshorten = self.shorten(i);
-            }
-            i as float + offset / curshorten
-        }
-    }
-
-    /// Calculates an adjusted offset between the virtual time `base` and `base + offset`.
-    /// This takes account of the measure scaling factor, so for example, the adjusted offset
-    /// between the virtual time 0.0 and 2.0 is, if the measure #000 is scaled by 1.2x,
-    /// 2.2 measures instead of 2.0 measures. (C: `adjust_object_position`)
-    pub fn adjust_object_position(&self, base: float, time: float) -> float {
-        let basemeasure = base.floor() as int;
-        let timemeasure = time.floor() as int;
-        let basefrac = base - basemeasure as float;
-        let timefrac = time - timemeasure as float;
-        let mut pos = timefrac * self.shorten(timemeasure) -
-                      basefrac * self.shorten(basemeasure);
-        for int::range(basemeasure, timemeasure) |i| {
-            pos += self.shorten(i);
-        }
-        pos
-    }
-
     /// Returns the position of the last object in the chart.
-    pub fn length(&self) -> float {
-        if self.objs.is_empty() {0.0} else {self.objs.last().time}
+    pub fn end(&self) -> ObjLoc<float> {
+        let last = self.objs.last();
+        assert!(last.data.is_end());
+        last.loc.clone()
     }
 
-    /// Calculates the duration of the timeline in seconds. `sound_length` should return
-    /// the length of sound resources in seconds or 0.0. (C: `get_bms_duration`)
+    /// Similar to `self.end().time`, but also takes account of `sound_length` which should return
+    /// the length of sound resources in seconds or 0.0. It also handles the non-zero origin (by
+    /// `originoffset`) and the chart scrolling backwards. (C: `get_bms_duration`)
     pub fn duration(&self, originoffset: float, sound_length: &fn(S) -> float) -> float {
-        let mut pos = originoffset;
-        let mut bpm = self.initbpm;
-        let mut time = 0.0;
-        let mut sndtime = 0.0;
-
+        assert!(originoffset <= 0.0);
+        let mut maxtime = 0.0;
         for self.objs.iter().advance |obj| {
-            let delta = self.adjust_object_position(pos, obj.time);
-            time += bpm.measure_to_msec(delta);
             match obj.data {
                 Visible(_,Some(ref sref)) | LNStart(_,Some(ref sref)) | BGM(ref sref) => {
-                    sndtime = cmp::max(sndtime, time + sound_length(copy *sref) * 1000.0);
+                    maxtime = cmp::max(maxtime, obj.loc.time + sound_length(copy *sref));
                 }
-                SetBPM(BPM(newbpm)) => {
-                    if newbpm > 0.0 {
-                        bpm = BPM(newbpm);
-                    } else if newbpm < 0.0 {
-                        // the chart scrolls backwards to `originoffset` for negative BPM
-                        bpm = BPM(newbpm);
-                        let delta = self.adjust_object_position(originoffset, pos);
-                        time += BPM(-newbpm).measure_to_msec(delta);
-                        break;
-                    }
+                SetBPM(BPM(0.0)) => {
+                    return obj.loc.time;
                 }
-                Stop(duration) => {
-                    time += duration.to_msec(bpm);
+                SetBPM(BPM(newbpm)) if newbpm < 0.0 => {
+                    // we explicitly ignore `self.end().time` since it will be +inf.
+                    let backtime = BPM(-newbpm).measure_to_sec(obj.loc.pos - originoffset);
+                    return cmp::max(maxtime, obj.loc.time + backtime);
                 }
                 _ => {}
             }
-            pos = obj.time;
         }
-
-        cmp::max(time, sndtime) / 1000.0
+        // except for sounds past the end, we normally ends at the position of `End` object.
+        cmp::max(maxtime, self.end().time)
     }
 
     /// Analyzes the timeline. (C: `analyze_and_compact_bms`)
@@ -139,7 +78,7 @@ impl<S:Copy,I:Copy> Timeline<S,I> {
 
             if obj.is_lnstart() || obj.is_visible() {
                 infos.nnotes += 1;
-                if obj.time < 1.0 { infos.originoffset = -1.0; }
+                if obj.loc.time < 1.0 { infos.originoffset = -1.0; }
             }
         }
 
@@ -155,38 +94,64 @@ impl<S:Copy,I:Copy> Timeline<S,I> {
 impl<S:ToStr,I:ToStr> Timeline<S,I> {
     /// Dumps the timeline to the writer for the debugging purpose.
     pub fn dump(&self, writer: @Writer) {
-        writer.write_line(fmt!("    -inf  SetBPM(%f)", *self.initbpm));
+        writer.write_line(
+            fmt!("********  ********  ********  ********  SetBPM(%f)", *self.initbpm));
         for self.objs.iter().advance |obj| {
-            writer.write_line(fmt!("%8.3f  %s", obj.time, obj.data.to_str()));
+            writer.write_line(
+                fmt!("%8.3f  %8.3f  %8.3f  %8.3f  %s",
+                     obj.loc.vpos, obj.loc.pos, obj.loc.vtime, obj.loc.time, obj.data.to_str()));
         }
     }
 }
 
 /// A timeline builder.
 pub mod builder {
-    use std::uint;
+    use std::{uint, float};
     use format::obj::*;
     use super::Timeline;
 
+    /// Converts objects to an integral "class". Normally objects have no ordering, but sometimes
+    /// some kind of objects should be placed ahead of other kind of objects (e.g. `Stop` after
+    /// `SetBPM`) so we need to define a custom ordering.
+    fn classify<S,I>(data: &ObjData<S,I>) -> int {
+        match *data {
+            Deleted | StopEnd | End => -1, // should be removed
+            SetMeasureFactor(*) | MeasureBar => 0,
+            Visible(*) | Invisible(*) | LNStart(*) | LNDone(*) | Bomb(*) | BGM(*) | SetBGA(*) => 1,
+            SetBPM(*) => 2,
+            Stop(*) => 3,
+        }
+    }
+
+    impl<S:Copy,I:Copy> Ord for ObjData<S,I> {
+        fn lt(&self, other: &ObjData<S,I>) -> bool { classify(self) < classify(other) }
+        fn le(&self, other: &ObjData<S,I>) -> bool { classify(self) <= classify(other) }
+        fn ge(&self, other: &ObjData<S,I>) -> bool { classify(self) >= classify(other) }
+        fn gt(&self, other: &ObjData<S,I>) -> bool { classify(self) > classify(other) }
+    }
+
     /// Fixes a problematic data. (C: `sanitize_bms`)
-    fn sanitize_objs<S:Copy,I:Copy>(objs: &mut [Obj<S,I>]) {
+    fn sanitize_objs<S:Copy,I:Copy>(objs: &mut [(float,ObjData<S,I>)]) {
         /// Abstracted sanitization algorithm. Basically, objects are categorized into several types
         /// and the algorithm removes or replaces objects which have the same or conflicting type
         /// in the same position. Conflicting types are specified by `merge_types` function.
-        fn sanitize<S:Copy,I:Copy>(objs: &mut [Obj<S,I>], to_type: &fn(&Obj<S,I>) -> Option<uint>,
+        fn sanitize<S:Copy,I:Copy>(objs: &mut [(float,ObjData<S,I>)],
+                                   to_type: &fn(&ObjData<S,I>) -> Option<uint>,
                                    merge_types: &fn(uint) -> uint) {
             let len = objs.len();
             let mut i = 0;
             while i < len {
-                let cur = objs[i].time;
+                let &(vpos, _data) = &objs[i];
                 let mut types = 0;
                 let mut j = i;
-                while j < len && objs[j].time <= cur {
-                    let ty = to_type(&objs[j]); // XXX #3511
+                while j < len {
+                    let &(vpos_, data_) = &objs[j];
+                    if vpos_ > vpos { break; }
+                    let ty = to_type(&data_); // XXX #3511
                     for ty.iter().advance |&t| {
                         if (types & (1 << t)) != 0 {
                             // duplicate type
-                            objs[j] = (copy objs[j]).to_effect();
+                            objs[j] = (vpos_, data_.to_effect());
                         } else {
                             types |= 1 << t;
                         }
@@ -197,10 +162,11 @@ pub mod builder {
                 types = merge_types(types);
 
                 while i < j {
-                    let ty = to_type(&objs[i]); // XXX #3511
+                    let &(vpos, data) = &objs[i];
+                    let ty = to_type(&data); // XXX #3511
                     for ty.iter().advance |&t| {
                         if (types & (1 << t)) == 0 {
-                            objs[i] = (copy objs[i]).to_effect();
+                            objs[i] = (vpos, data.to_effect());
                         }
                     }
                     i += 1;
@@ -217,8 +183,8 @@ pub mod builder {
             static VISIBLE: uint = 2;
             static INVISIBLE: uint = 3;
             static BOMB: uint = 4;
-            let to_type = |obj: &Obj<S,I>| -> Option<uint> {
-                match obj.data {
+            let to_type = |obj: &ObjData<S,I>| -> Option<uint> {
+                match *obj {
                     Visible(lane,_) if lane == lane0 => Some(VISIBLE),
                     Invisible(lane,_) if lane == lane0 => Some(INVISIBLE),
                     LNStart(lane,_) if lane == lane0 => Some(LNSTART),
@@ -265,16 +231,19 @@ pub mod builder {
 
             if inside {
                 // remove last starting longnote which is unfinished
-                match objs.rposition(|obj| to_type(obj).is_some()) {
-                    Some(pos) if objs[pos].is_lnstart() => { objs[pos] = objs[pos].to_effect(); }
-                    _ => {}
+                match objs.rposition(|&(_,data)| to_type(&data).is_some()) {
+                    Some(index) => {
+                        let &(vpos, data) = &objs[index];
+                        if data.is_lnstart() { objs[index] = (vpos, data.to_effect()); }
+                    }
+                    None => {}
                 }
             }
         }
 
         // object-like effects (except for BGMs) are simpler, any conflicting objects are removed.
         sanitize(objs,
-                 |&obj| match obj.data {
+                 |&obj| match obj {
                             SetBGA(Layer1,_) => Some(0),
                             SetBGA(Layer2,_) => Some(1),
                             SetBGA(Layer3,_) => Some(2),
@@ -284,24 +253,83 @@ pub mod builder {
                             _ => None,
                         },
                  |types| types);
+    }
 
-        // `End` must be the last object if any.
-        let lastobj = objs.len() - 1;
-        for objs.mut_iter().enumerate().advance |(i, obj)| {
-            if (*obj).is_end() && i != lastobj {
-                obj.data = Deleted;
+    /// Derives other three axes from the virtual position.
+    fn precalculate_time<S:Copy,I:Copy>(initbpm: BPM, objs: &[(float,ObjData<S,I>)],
+                                        endvpos: float) -> ~[Obj<S,I>] {
+        let mut ret = ~[];
+
+        // last discontinuity for vpos-pos relation
+        let mut shorten = 1.0;
+        let mut shorten_vpos = 0.0;
+        let mut shorten_pos = 0.0;
+
+        // last discontinuity for pos-vtime relation
+        let mut bpm = initbpm;
+        let mut bpm_pos = 0.0;
+        let mut bpm_vtime = 0.0;
+
+        // vtime-time relation does not have a factor other than 1 (currently), but vtime can
+        // accumulate the `Stop` duration.
+        let mut stop_delay = 0.0;
+
+        for objs.iter().advance |&(vpos,data)| {
+            // these objects should not be inserted manually
+            if classify(&data) < 0 { loop; }
+
+            let pos = (vpos - shorten_vpos) * shorten + shorten_pos;
+            let vtime = bpm.measure_to_sec(pos - bpm_pos) + bpm_vtime;
+            let time = vtime + stop_delay;
+
+            let loc = ObjLoc { vpos: vpos, pos: pos, vtime: vtime, time: time };
+            ret.push(Obj { loc: loc, data: copy data });
+
+            match data {
+                SetBPM(BPM(newbpm)) => {
+                    if newbpm > 0.0 {
+                        bpm = BPM(newbpm);
+                        bpm_pos = pos;
+                        bpm_vtime = vtime;
+                    } else {
+                        // the chart scrolls backwards or terminates immediately,
+                        // vtime and time should be +inf from now on.
+                        bpm_vtime = float::infinity;
+                    }
+                }
+                Stop(duration) => {
+                    let delay = duration.to_sec(bpm);
+                    stop_delay += delay;
+                    ret.push(Obj { loc: ObjLoc { time: time + delay, ..loc }, data: StopEnd });
+                }
+                SetMeasureFactor(newshorten) => {
+                    shorten = newshorten;
+                    shorten_vpos = vpos;
+                    shorten_pos = pos;
+                }
+                _ => {}
             }
         }
+
+        // insert a final `End` object at the end
+        assert!(ret.is_empty() || ret.last().loc.vpos < endvpos);
+        let endpos = (endvpos - shorten_vpos) * shorten + shorten_pos;
+        let endvtime = bpm.measure_to_sec(endpos - bpm_pos) + bpm_vtime;
+        let endtime = endvtime + stop_delay;
+        ret.push(Obj { loc: ObjLoc { vpos: endvpos, pos: endpos, vtime: endvtime, time: endtime},
+                       data: End });
+
+        ret
     }
 
     /// An unprocessed game data which will eventually produce `Timeline` value.
     pub struct TimelineBuilder<SoundRef,ImageRef> {
         /// Same as `Timeline::initbpm`.
         initbpm: Option<BPM>,
-        /// Same as `Timeline::objs` but not yet sorted.
-        objs: ~[Obj<SoundRef,ImageRef>],
-        /// Same as `Timeline::shortens`.
-        shortens: ~[float],
+        /// Same as `Timeline::objs` but not yet sorted and only has a virtual position.
+        objs: ~[(float,ObjData<SoundRef,ImageRef>)],
+        /// End position. Every object must have the virtual position less than this value.
+        endvpos: float,
     }
 
     /// A mark to the existing object. The caller is recommended not to directly mutate the builder
@@ -311,7 +339,7 @@ pub mod builder {
     impl<S:Copy,I:Copy> TimelineBuilder<S,I> {
         /// Creates a new timeline builder.
         pub fn new() -> ~TimelineBuilder<S,I> {
-            ~TimelineBuilder { initbpm: None, objs: ~[], shortens: ~[] }
+            ~TimelineBuilder { initbpm: None, objs: ~[], endvpos: 0.0 }
         }
 
         /// Sets an initial BPM.
@@ -319,49 +347,49 @@ pub mod builder {
             self.initbpm = Some(bpm); 
         }
 
-        /// Sets a shorten factor for given measure.
-        pub fn set_shorten(&mut self, measure: uint, factor: float) {
-            assert!(factor > 0.0);
-            self.shortens.grow_set(measure, &1.0, factor);
+        /// Sets the end position.
+        pub fn set_end(&mut self, vpos: float) {
+            assert!(vpos >= 0.0);
+            self.endvpos = vpos;
         }
 
         /// Adds an object at given position.
-        pub fn add(&mut self, pos: float, data: ObjData<S,I>) {
-            assert!(pos >= 0.0);
-            self.objs.push(Obj { time: pos, data: data });
+        pub fn add(&mut self, vpos: float, data: ObjData<S,I>) {
+            assert!(vpos >= 0.0);
+            self.objs.push((vpos, data));
         }
 
         /// Adds an object at given position and returns a mark to that object for later usage.
-        pub fn add_and_mark(&mut self, pos: float, data: ObjData<S,I>) -> Mark {
-            assert!(pos >= 0.0);
+        pub fn add_and_mark(&mut self, vpos: float, data: ObjData<S,I>) -> Mark {
+            assert!(vpos >= 0.0);
             let index = self.objs.len();
-            self.objs.push(Obj { time: pos, data: data });
+            self.objs.push((vpos, data));
             Mark(index)
         }
 
         /// Mutates an existing object.
         pub fn mutate(&mut self, mark: Mark, f: &fn(float,ObjData<S,I>) -> (float,ObjData<S,I>)) {
             assert!(*mark < self.objs.len());
-            let Obj { time: pos, data: data } = copy self.objs[*mark];
-            let (pos, data) = f(pos, data);
-            assert!(pos >= 0.0);
-            self.objs[*mark] = Obj { time: pos, data: data };
+            let (vpos, data) = copy self.objs[*mark];
+            let (vpos, data) = f(vpos, data);
+            assert!(vpos >= 0.0);
+            self.objs[*mark] = (vpos, data);
         }
 
         /// Deletes an existing object (or rather, marks it as deleted).
         pub fn delete(&mut self, mark: Mark) {
-            self.mutate(mark, |pos,_data| (pos, Deleted));
+            self.mutate(mark, |vpos,_data| (vpos, Deleted));
         }
 
         /// Builds an actual timeline.
         pub fn build(~self) -> Timeline<S,I> {
-            let ~TimelineBuilder { initbpm: initbpm, objs: objs, shortens: shortens } = self;
+            let ~TimelineBuilder { initbpm: initbpm, objs: objs, endvpos: endvpos } = self;
             let initbpm = initbpm.expect("initial BPM should have been set");
             let mut objs = objs;
             ::extra::sort::tim_sort(objs);
             sanitize_objs(objs);
-            objs.retain(|&obj| !obj.is_deleted());
-            Timeline { initbpm: initbpm, objs: objs, shortens: shortens }
+            let objs = precalculate_time(initbpm, objs, endvpos);
+            Timeline { initbpm: initbpm, objs: objs }
         }
     }
 }
@@ -446,8 +474,8 @@ pub mod modf {
                     None => fail!(~"non-sanitized timeline")
                 }
             }
-            if lasttime < obj.time { // reshuffle required
-                lasttime = obj.time + 1e-4;
+            if lasttime < obj.loc.time { // reshuffle required
+                lasttime = obj.loc.time; // XXX should we use this restriction on very quick notes?
                 let shuffled = r.shuffle(movable);
                 let assocs = vec::zip_slice(movable, shuffled); // XXX #3511
                 for assocs.iter().advance |&(Lane(from), to)| {
