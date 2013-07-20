@@ -7,11 +7,10 @@
 /**
  * Resolves the specified resource path to the actual path if possible. May fail, but its
  * success doesn't guarantee that the resource should be read without a failure either.
- * (C: `resolve_relative_path`)
  *
  * The actual resolution is complicated by the fact that many BMSes assume the case-insensitive
  * matching on file names and the coexistence between WAV resources and MP3 resources while
- * keeping the same BMS file. Therefore Angolmois adopted the following resolution rules:
+ * keeping the same BMS file. Therefore Sonorous adopted the following resolution rules:
  *
  * 1. Both `/` and `\` are accepted as a directory separator.
  * 2. Path components including file names are matched case-insensitively. If there are multiple

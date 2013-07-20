@@ -3,45 +3,29 @@
 // See README.md and LICENSE.txt for details.
 
 /*!
- * This is a direct, one-to-one translation of Angolmois to Rust programming language.
- * [Angolmois](http://mearie.org/projects/angolmois/) is
- * a [BM98](http://bm98.yaneu.com/bm98/)-like minimalistic music video game which supports
+ * This is Sonorous, a free music video game written in Rust programming language that supports
  * the [BMS format](http://en.wikipedia.org/wiki/Be-Music_Source) for playing.
- * 
- * Angolmois is a combination of string parsing, path manipulation, two-dimensional graphics and
- * complex game play carefully packed into some thousand lines of code. This translation is intended
- * to provide an example of translating a moderately-sized C code to Rust, and also to investigate
- * additional library supports required for such moderately-sized programs.
- * 
- * Angolmois is distributed under GNU GPL version 2+, so is this translation. The portions of it is
- * intended to be sent as a patch to Rust, so those portions are licensed under Apache License 2.0
- * and MIT license. Also note that:
+ *
+ * Sonorous is a continuation of prior attempts to the free music video games: Angolmois (2005--),
+ * theseit (2007--2008) and Angolmois Rust edition (2012--2013). Unlike prior attempts, however,
+ * Sonorous aims at the full-featured game with relatively liberal decisions (e.g. languages).
+ *
+ * At the moment Sonorous is highly experimental, so do not expect high stabillity nor features.
+ * Still, you are greatly welcomed to make any suggestions or file any issues: please use 
+ * [Github page](https://github.com/snrs/sonorous) for now.
+ *
+ * # Notes
  *
  * - This code is known to compile with the following combinations of rustc and rust-sdl:
  *     - rustc 0.7 + rust-sdl `48cb490` 2013-07-02 (an unmerged branch from rossmurray/rust-sdl)
  *
- * - Unlike the original Angolmois code (which sacrifices most comments due to code size concerns),
- *   the Rust version has much more comments which can be beneficial for understanding Angolmois
- *   itself too.
- *
- * # Key
- * 
- * The following notations are used in the comments and documentations.
- * 
- * * (C: ...) - variable/function corresponds to given name in the C code.
- * * Rust: ... - suboptimal translation with a room for improvement in Rust. often contains a Rust
- *   issue number like #1234.
- * * XXX - should be fixed as soon as Rust issue is gone.
- * * TODO - other problems unrelated to Rust.
- *
- * # Common Issues
- *
- * Those issues are common enough that they have to be discussed before the source code.
- *
- * * #3511 - iterator needs to ensure its underlying object available but rvalue lifetime is too
- *           short for it. rooting the underlying object is necessary for now.
- * * #7363 - implicit borrowing of stack closures is currently disabled due to the soundness issue.
- *           can be worked around by wrapping a reference to the closure to another closure.
+ * - There are several comments with Rust issue numbers like #1234. They are intended to be fixed
+ *   after corresponding issues are resolved. The following issues are common enough that we put
+ *   the explanation here:
+ *     - \#3511 - iterator needs to ensure its underlying object available but rvalue lifetime is
+ *       too short for it. rooting the underlying object is necessary for now.
+ *     - \#7363 - implicit borrowing of stack closures is currently disabled due to the soundness
+ *       issue. can be worked around by wrapping a reference to the closure to another closure.
  */
 
 #[link(name = "sonorous",
@@ -94,17 +78,17 @@ pub mod engine {
     pub mod player;
 }
 
-/// Returns a version string. (C: `VERSION`)
-pub fn version() -> ~str { ~"Angolmois 2.0.0 alpha 2 (rust edition)" }
+/// Returns a version string.
+pub fn version() -> ~str { ~"Sonorous 0.1.0-pre" }
 
-/// Returns an executable name used in the command line if any. (C: `argv0`)
+/// Returns an executable name used in the command line if any.
 pub fn exename() -> ~str {
     let args = std::os::args();
-    if args.is_empty() {~"angolmois"} else {args[0].clone()}
+    if args.is_empty() {~"sonorous"} else {args[0].clone()}
 }
 
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
-/// loop. (C: `play`)
+/// loop.
 pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     use format::bms;
     use ui::{init, player, loading};
@@ -248,13 +232,12 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     }
 }
 
-/// Prints the usage. (C: `usage`)
+/// Prints the usage.
 pub fn usage() {
     // Rust: this is actually a good use case of `include_str!`...
     std::io::stderr().write_str(fmt!("\
-%s -- the simple BMS player
-http://mearie.org/projects/angolmois/
-https://github.com/lifthrasiir/angolmois-rust/
+%s
+https://github.com/snrs/sonorous/
 
 Usage: %s <options> <path>
   Accepts any BMS, BME, BML or PMS file.
@@ -286,11 +269,11 @@ Options:
   -j #, --joystick #      Enable the joystick with index # (normally 0)
 
 Environment Variables:
-  ANGOLMOIS_1P_KEYS=<scratch>|<key 1>|<2>|<3>|<4>|<5>|<6>|<7>|<pedal>
-  ANGOLMOIS_2P_KEYS=<pedal>|<key 1>|<2>|<3>|<4>|<5>|<6>|<7>|<scratch>
-  ANGOLMOIS_PMS_KEYS=<key 1>|<2>|<3>|<4>|<5>|<6>|<7>|<8>|<9>
-  ANGOLMOIS_SPEED_KEYS=<speed down>|<speed up>
-  ANGOLMOIS_XXy_KEY=<keys for channel XX and channel kind y>
+  SNRS_1P_KEYS=<scratch>|<key 1>|<2>|<3>|<4>|<5>|<6>|<7>|<pedal>
+  SNRS_2P_KEYS=<pedal>|<key 1>|<2>|<3>|<4>|<5>|<6>|<7>|<scratch>
+  SNRS_PMS_KEYS=<key 1>|<2>|<3>|<4>|<5>|<6>|<7>|<8>|<9>
+  SNRS_SPEED_KEYS=<speed down>|<speed up>
+  SNRS_XXy_KEY=<keys for channel XX and channel kind y>
     Sets keys used for game play. Use either SDL key names or joystick names
     like 'button #' or 'axis #' can be used. Separate multiple keys by '%%'.
     See the manual for more information.
@@ -300,7 +283,6 @@ Environment Variables:
 }
 
 /// The entry point. Parses the command line options and delegates other things to `play`.
-/// (C: `main`)
 pub fn main() {
     use ui::options::*;
     let args = std::os::args();

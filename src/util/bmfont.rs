@@ -38,7 +38,7 @@ pub struct Font {
     /**
      * Font data used for zoomed font reconstruction. This is actually an array of `u32`
      * elements, where the first `u16` element forms upper 16 bits and the second forms lower
-     * 16 bits. It is reinterpreted for better compression. (C: `fontdata`)
+     * 16 bits. It is reinterpreted for better compression.
      *
      * One glyph has 16 `u32` elements for each row from the top to the bottom. One `u32`
      * element contains eight four-bit groups for each column from the left (lowermost group)
@@ -65,7 +65,7 @@ pub struct Font {
 
     /// Precalculated zoomed font per zoom factor. It is three-dimensional array which indices
     /// are zoom factor, glyph number and row respectively. Assumes that each element has
-    /// at least zoom factor times 8 (columns per row) bits. (C: `zoomfont`)
+    /// at least zoom factor times 8 (columns per row) bits.
     pixels: ~[~[~[ZoomedFontRow]]],
 
     /// Precalculated polygons for glyphs.
@@ -84,7 +84,7 @@ pub enum Alignment {
 
 /// Decompresses a bitmap font data. `Font::create_zoomed_font` is required for the actual use.
 pub fn Font() -> Font {
-    // Delta-coded code words. (C: `words`)
+    // Delta-coded code words.
     let dwords = [0, 2, 6, 2, 5, 32, 96, 97, 15, 497, 15, 1521, 15, 1537,
         16, 48, 176, 1, 3, 1, 3, 7, 1, 4080, 4096, 3, 1, 8, 3, 4097, 4080,
         16, 16128, 240, 1, 2, 9, 3, 8177, 15, 16385, 240, 15, 1, 47, 721,
@@ -94,7 +94,6 @@ pub fn Font() -> Font {
     // - Byte 33..97 encodes a literal code word 0..64;
     // - Byte 98..126 encodes an LZ77 length distance pair with length 3..31;
     //   the following byte 33..126 encodes a distance 1..94.
-    // (C: `indices`)
     let indices =
         ~"!!7a/&/&s$7a!f!'M*Q*Qc$(O&J!!&J&Jc(e!2Q2Qc$-Bg2m!2bB[Q7Q2[e&2Q!Qi>&!&!>UT2T2&2>WT!c*\
           T2GWc8icM2U2D!.8(M$UQCQ-jab!'U*2*2*2TXbZ252>9ZWk@*!*!*8(J$JlWi@cxQ!Q!d$#Q'O*?k@e2dfe\
@@ -112,7 +111,7 @@ pub fn Font() -> Font {
           Zf@UWb6>eX:GWk<&J&J7[c&&JTJTb$G?o`c~i$m`k@U:EW.O(v`T2Tb$a[Fp`M+eZ,M=UWCO-u`Q:RWGO.A(\
           M$U!Ck@a[]!G8.M(U$[!Ca[i:78&J&Jc$%[g*7?e<g0w$cD#iVAg*$[g~dB]NaaPGft~!f!7[.W(O";
 
-    /// Decompresses a font data from `dwords` and `indices`. (C: `fontdecompress`)
+    /// Decompresses a font data from `dwords` and `indices`.
     fn decompress(dwords: &[u16], indices: &str) -> ~[u16] {
         let mut words = ~[0];
         for dwords.iter().advance |&delta| {
@@ -235,7 +234,7 @@ pub fn Font() -> Font {
 }
 
 impl Font {
-    /// Creates a zoomed font of scale `zoom`. (C: `fontprocess`)
+    /// Creates a zoomed font of scale `zoom`.
     pub fn create_zoomed_font(&mut self, zoom: uint) {
         assert!(zoom > 0);
         assert!(zoom <= (8 * ::std::sys::size_of::<ZoomedFontRow>()) / NCOLUMNS);
@@ -281,7 +280,7 @@ impl Font {
 
     /// Prints a glyph with given position and color (possibly gradient). This method is
     /// distinct from `print_glyph` since the glyph #95 is used for the tick marker
-    /// (character code -1 in C). (C: `printchar`)
+    /// (character code -1 in C).
     pub fn print_glyph<ColorT:Blend+Copy>(&self, pixels: &mut SurfacePixels, x: uint, y: uint,
                                           zoom: uint, glyph: uint, color: ColorT) { // XXX #3984
         assert!(!self.pixels[zoom].is_empty());
@@ -298,7 +297,7 @@ impl Font {
 
     /// Draws a glyph with given position and color (possibly gradient). This method is
     /// distinct from `draw_glyph` since the glyph #95 is used for the tick marker
-    /// (character code -1 in C). (C: `printchar`)
+    /// (character code -1 in C).
     pub fn draw_glyph<ColorT:Blend+Copy>(&self, d: &mut glutil::ShadedDrawing, x: f32, y: f32,
                                          zoom: f32, glyph: uint, color: ColorT) { // XXX #3984
         assert!(zoom > 0.0);
@@ -365,7 +364,7 @@ impl Font {
         }
     }
 
-    /// Prints a string with given position, alignment and color. (C: `printstr`)
+    /// Prints a string with given position, alignment and color.
     pub fn print_string<ColorT:Blend+Copy>(&self, pixels: &mut SurfacePixels, x: uint, y: uint,
                                            zoom: uint, align: Alignment, s: &str,
                                            color: ColorT) { // XXX #3984
@@ -382,7 +381,7 @@ impl Font {
         }
     }
 
-    /// Draws a string with given position, alignment and color. (C: `printstr`)
+    /// Draws a string with given position, alignment and color.
     pub fn draw_string<ColorT:Blend+Copy>(&self, d: &mut glutil::ShadedDrawing, x: f32, y: f32,
                                           zoom: f32, align: Alignment, s: &str,
                                           color: ColorT) { // XXX #3984

@@ -11,25 +11,24 @@ use format::obj::*;
 /// immutable by design (except for `modf` module), and should be built by `TimelineBuilder`
 /// in order to satisfy the invariant.
 pub struct Timeline<SoundRef,ImageRef> {
-    /// Initial BPM. (C: `initbpm`)
+    /// Initial BPM.
     initbpm: BPM,
-    /// List of objects sorted by the position. (C: `objs`)
+    /// List of objects sorted by the position.
     objs: ~[Obj<SoundRef,ImageRef>],
 }
 
 /// Derived Timeline information.
 pub struct TimelineInfo {
     /// The start position of the timeline. This is either -1.0 or 0.0 depending on the first
-    /// measure has any visible objects or not. (C: `originoffset`)
+    /// measure has any visible objects or not.
     originoffset: float,
-    /// Set to true if the timeline has a BPM change. (C: `hasbpmchange`)
+    /// Set to true if the timeline has a BPM change.
     hasbpmchange: bool,
-    /// Set to true if the timeline has long note objects. (C: `haslongnote`)
+    /// Set to true if the timeline has long note objects.
     haslongnote: bool,
     /// The number of visible objects in the timeline. A long note object counts as one object.
-    /// (C: `nnotes`)
     nnotes: int,
-    /// The maximum possible score. (C: `maxscore`)
+    /// The maximum possible score.
     maxscore: int
 }
 
@@ -43,7 +42,7 @@ impl<S:Copy,I:Copy> Timeline<S,I> {
 
     /// Similar to `self.end().time`, but also takes account of `sound_length` which should return
     /// the length of sound resources in seconds or 0.0. It also handles the non-zero origin (by
-    /// `originoffset`) and the chart scrolling backwards. (C: `get_bms_duration`)
+    /// `originoffset`) and the chart scrolling backwards.
     pub fn duration(&self, originoffset: float, sound_length: &fn(S) -> float) -> float {
         assert!(originoffset <= 0.0);
         let mut maxtime = 0.0;
@@ -67,7 +66,7 @@ impl<S:Copy,I:Copy> Timeline<S,I> {
         cmp::max(maxtime, self.end().time)
     }
 
-    /// Analyzes the timeline. (C: `analyze_and_compact_bms`)
+    /// Analyzes the timeline.
     pub fn analyze(&self) -> TimelineInfo {
         let mut infos = TimelineInfo { originoffset: 0.0, hasbpmchange: false, haslongnote: false,
                                        nnotes: 0, maxscore: 0 };
@@ -130,7 +129,7 @@ pub mod builder {
         fn gt(&self, other: &ObjData<S,I>) -> bool { classify(self) > classify(other) }
     }
 
-    /// Fixes a problematic data. (C: `sanitize_bms`)
+    /// Fixes a problematic data.
     fn sanitize_objs<S:Copy,I:Copy>(objs: &mut [(float,ObjData<S,I>)]) {
         /// Abstracted sanitization algorithm. Basically, objects are categorized into several types
         /// and the algorithm removes or replaces objects which have the same or conflicting type
@@ -402,7 +401,7 @@ pub mod modf {
     use format::obj::*;
     use super::Timeline;
 
-    /// Removes objects not in given lanes by replacing them to BGMs. (C: `analyze_and_compact_bms`)
+    /// Removes objects not in given lanes by replacing them to BGMs.
     pub fn filter_lanes<S:Copy,I:Copy>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
         let mut keep = vec::from_elem(NLANES, false);
         for lanes.iter().advance |&Lane(lane)| {
@@ -427,7 +426,7 @@ pub mod modf {
         }
     }
 
-    /// Swaps given lanes in the reverse order. (C: `shuffle_bms` with `MIRROR_MODF`)
+    /// Swaps given lanes in the reverse order.
     pub fn mirror<S:Copy,I:Copy>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
         let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
         let rlanes = vec::reversed(lanes);
@@ -441,8 +440,7 @@ pub mod modf {
         }
     }
 
-    /// Swaps given lanes in the random order. (C: `shuffle_bms` with
-    /// `SHUFFLE_MODF`/`SHUFFLEEX_MODF`)
+    /// Swaps given lanes in the random order.
     pub fn shuffle<S:Copy,I:Copy,R:RngUtil>(timeline: &mut Timeline<S,I>, r: &mut R,
                                             lanes: &[Lane]) {
         let shuffled = r.shuffle(lanes);
@@ -459,7 +457,7 @@ pub mod modf {
 
     /// Swaps given lanes in the random order, where the order is determined per object. It does not
     /// cause objects to move within another LN object, or place two objects in the same or very
-    /// close time position to the same lane. (C: `shuffle_bms` with `RANDOM_MODF`/`RANDOMEX_MODF`)
+    /// close time position to the same lane.
     pub fn randomize<S:Copy,I:Copy,R:RngUtil>(timeline: &mut Timeline<S,I>, r: &mut R,
                                               lanes: &[Lane]) {
         let mut movable = lanes.to_owned();

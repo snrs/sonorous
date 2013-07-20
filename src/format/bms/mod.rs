@@ -64,7 +64,7 @@ pub static DefaultBPM: BPM = BPM(130.0);
 
 /**
  * Blit commands, which manipulate the image after the image had been loaded. This maps to BMS
- * #BGA command. (C: `struct blitcmd`)
+ * #BGA command.
  *
  * Blitting occurs from the region `(x1,y1)-(x2,y2)` in the source surface to the region
  * `(dx,dy)-(dx+(x2-x1),dy+(y2-y1))` in the destination surface. The rectangular region contains
@@ -83,7 +83,7 @@ pub static SinglePlay: int = 1;
 /// A value of BMS #PLAYER command signifying Couple Play, where channels #1x and #2x renders to
 /// the different panels. They are originally meant to be played by different players with
 /// separate gauges and scores, but this mode of game play is increasingly unsupported by modern
-/// implementations. Angolmois has only a limited support for Couple Play.
+/// implementations. Sonorous has only a limited support for Couple Play.
 pub static CouplePlay: int = 2;
 /// A value of BMS #PLAYER command signifying Double Play (DP), where both channels #1x and #2x
 /// renders to a single wide panel. The chart is still meant to be played by one person.
@@ -91,35 +91,30 @@ pub static DoublePlay: int = 3;
 
 /// Loaded BMS metadata and resources.
 pub struct BmsMeta {
-    /// Title. Maps to BMS #TITLE command. (C: `string[S_TITLE]`)
+    /// Title. Maps to BMS #TITLE command.
     title: Option<~str>,
-    /// Genre. Maps to BMS #GENRE command. (C: `string[S_GENRE]`)
+    /// Genre. Maps to BMS #GENRE command.
     genre: Option<~str>,
-    /// Artist. Maps to BMS #ARTIST command. (C: `string[S_ARTIST]`)
+    /// Artist. Maps to BMS #ARTIST command.
     artist: Option<~str>,
     /// Path to an image for loading screen. Maps to BMS #STAGEFILE command.
-    /// (C: `string[S_STAGEFILE]`)
     stagefile: Option<~str>,
     /// A base path used for loading all other resources. Maps to BMS #PATH_WAV command.
-    /// (C: `string[S_BASEPATH]`)
     basepath: Option<~str>,
 
     /// Game mode. One of `SinglePlay`(1), `CouplePlay`(2) or `DoublePlay`(3). Maps to BMS
-    /// #PLAYER command. (C: `value[V_PLAYER]`)
+    /// #PLAYER command.
     player: int,
     /// Game level. Does not affect the actual game play. Maps to BMS #PLAYLEVEL command.
-    /// (C: `value[V_PLAYLEVEL]`)
     playlevel: int,
-    /// Gauge difficulty. Higher is easier. Maps to BMS #RANK command. (C: `value[V_RANK]`)
+    /// Gauge difficulty. Higher is easier. Maps to BMS #RANK command.
     rank: int,
 
-    /// Paths to sound file relative to `basepath` or BMS file. (C: `sndpath`)
-    //
-    // Rust: constant expression in the array size is unsupported.
+    /// Paths to sound file relative to `basepath` or BMS file.
     sndpath: [Option<~str>, ..MAXKEY],
-    /// Paths to image/movie file relative to `basepath` or BMS file. (C: `imgpath`)
+    /// Paths to image/movie file relative to `basepath` or BMS file.
     imgpath: [Option<~str>, ..MAXKEY],
-    /// List of blit commands to be executed after `imgpath` is loaded. (C: `blitcmd`)
+    /// List of blit commands to be executed after `imgpath` is loaded.
     blitcmd: ~[BlitCmd],
 }
 
@@ -134,7 +129,6 @@ pub type BmsPointer = Pointer<SoundRef,ImageRef>;
 /// a managed pointer).
 pub struct Bms {
     /// A path to the BMS file. Also used for finding the resource when `meta.basepath` is not set.
-    /// (C: `bmspath`)
     bmspath: ~str,
     /// Metadata and resources.
     meta: BmsMeta,
@@ -160,20 +154,20 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
 
     /// The state of the block, for determining which lines should be processed.
     enum BlockState {
-        /// Not contained in the #IF block. (C: `state == -1`)
+        /// Not contained in the #IF block.
         Outside,
-        /// Active. (C: `state == 0`)
+        /// Active.
         Process,
         /// Inactive, but (for the purpose of #IF/#ELSEIF/#ELSE/#ENDIF structure) can move to
-        /// `Process` state when matching clause appears. (C: `state == 1`)
+        /// `Process` state when matching clause appears.
         Ignore,
-        /// Inactive and won't be processed until the end of block. (C: `state == 2`)
+        /// Inactive and won't be processed until the end of block.
         NoFurther
     }
 
     impl BlockState {
         /// Returns true if lines should be ignored in the current block given that the parent
-        /// block was active. (C: `state > 0`)
+        /// block was active.
         fn inactive(self) -> bool {
             match self { Outside | Process => false, Ignore | NoFurther => true }
         }
@@ -181,9 +175,9 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
 
     /**
      * Block information. The parser keeps a list of nested blocks and determines if
-     * a particular line should be processed or not. (C: `struct rnd`)
+     * a particular line should be processed or not.
      *
-     * Angomlois actually recognizes only one kind of blocks, starting with #RANDOM or
+     * Sonorous actually recognizes only one kind of blocks, starting with #RANDOM or
      * #SETRANDOM and ending with #ENDRANDOM or #END(IF) outside an #IF block. An #IF block is
      * a state within #RANDOM, so it follows that #RANDOM/#SETRANDOM blocks can nest but #IF
      * can't nest unless its direct parent is #RANDOM/#SETRANDOM.
@@ -191,13 +185,12 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
     struct Block {
         /// A generated value if any. It can be `None` if this block is the topmost one (which
         /// is actually not a block but rather a sentinel) or the last `#RANDOM` or `#SETRANDOM`
-        /// command was invalid, and #IF in that case will always evaluates to false. (C: `val`
-        /// field)
+        /// command was invalid, and #IF in that case will always evaluates to false.
         val: Option<int>,
-        /// The state of the block. (C: `state` field)
+        /// The state of the block.
         state: BlockState,
         /// True if the parent block is already ignored so that this block should be ignored
-        /// no matter what `state` is. (C: `skip` field)
+        /// no matter what `state` is.
         skip: bool
     }
 
@@ -226,7 +219,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
         fn ne(&self, other: &Block) -> bool { !self.eq(other) }
     }
 
-    // A list of nested blocks. (C: `rnd`)
+    // A list of nested blocks.
     let mut blk = ~[Block { val: None, state: Outside, skip: false }];
 
     /// An unprocessed data line of BMS file.
@@ -250,23 +243,22 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
     builder.set_initbpm(DefaultBPM);
 
     // A list of unprocessed data lines. They have to be sorted with a stable algorithm and
-    // processed in the order of measure number. (C: `bmsline`)
+    // processed in the order of measure number.
     let mut bmsline = ~[];
     // A table of measure factors (#xxx02). They are eventually converted to `SetMeasureFactor`
     // objects.
     let mut shortens = ~[];
-    // A table of BPMs. Maps to BMS #BPMxx command. (C: `bpmtab`)
+    // A table of BPMs. Maps to BMS #BPMxx command.
     let mut bpmtab = ~[DefaultBPM, ..MAXKEY];
-    // A table of the length of scroll stoppers. Maps to BMS #STOP/#STP commands. (C: `stoptab`)
+    // A table of the length of scroll stoppers. Maps to BMS #STOP/#STP commands.
     let mut stoptab = ~[Seconds(0.0), ..MAXKEY];
 
     // Allows LNs to be specified as a consecutive row of same or non-00 alphanumeric keys (MGQ
     // type, #LNTYPE 2). The default is to specify LNs as two endpoints (RDM type, #LNTYPE 1).
-    // (C: `value[V_LNTYPE]`)
     let mut consecutiveln = false;
 
     // An end-of-LN marker used in LN specification for channels #1x/2x. Maps to BMS #LNOBJ
-    // command. (C: `value[V_LNOBJ]`)
+    // command.
     let mut lnobj = None;
 
     for parse::each_bms_command(f) |cmd| {
@@ -356,17 +348,17 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
     // Poor BGA defined by #BMP00 wouldn't be played if it is a movie. We can't just let it
     // played at the beginning of the chart as the "beginning" is not always 0.0 (actually,
     // `originoffset`). Thus we add an artificial BGA object at time 0.0 only when the other
-    // poor BGA does not exist at this position. (C: `poorbgafix`)
+    // poor BGA does not exist at this position.
     let mut poorbgafix = true;
 
     // Indices to last visible object per channels. A marker specified by #LNOBJ will turn
-    // this last object to the start of LN. (C: `prev12`)
+    // this last object to the start of LN.
     let mut lastvis: [Option<Mark>, ..NLANES] = [None, ..NLANES];
 
     // Indices to last LN start or end inserted (and not finalized yet) per channels.
     // If `consecutiveln` is on (#LNTYPE 2), the position of referenced object gets updated
     // during parsing; if off (#LNTYPE 1), it is solely used for checking if we are inside
-    // the LN or not. (C: `prev56`)
+    // the LN or not.
     let mut lastln: [Option<Mark>, ..NLANES] = [None, ..NLANES];
 
     // Handles a non-00 alphanumeric key `v` positioned at the particular channel `chan` and
@@ -553,7 +545,7 @@ pub fn parse_bms_from_reader<R:RngUtil>(f: @::std::io::Reader, r: &mut R) -> Res
              timeline: timeline })
 }
 
-/// Reads and parses the BMS file with given RNG. (C: `parse_bms`)
+/// Reads and parses the BMS file with given RNG.
 pub fn parse_bms<R:RngUtil>(bmspath: &str, r: &mut R) -> Result<Bms,~str> {
     do ::std::io::file_reader(&Path(bmspath)).chain |f| {
         do parse_bms_from_reader(f, r).map |&bms| {

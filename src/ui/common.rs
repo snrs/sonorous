@@ -39,20 +39,20 @@ pub fn warn(s: ~str) {
     stderr().write_line(fmt!("*** Warning: %s", s));
 }
 
-// Exits with a formatted error message. (C: `die`)
+// Exits with a formatted error message.
 //
 // Rust: this comment cannot be a doc comment (yet).
 macro_rules! die(
     ($($e:expr),+) => (::ui::common::die(fmt!($($e),+)))
 )
 
-// Prints a formatted warning message. (C: `warn`)
+// Prints a formatted warning message.
 macro_rules! warn(
     ($($e:expr),+) => (::ui::common::warn(fmt!($($e),+)))
 )
 
 /// Checks if the user pressed the escape key or the quit button. `atexit` is called before
-/// the program is terminated. (C: `check_exit`)
+/// the program is terminated.
 pub fn check_exit(atexit: &fn()) {
     loop {
         match event::poll_event() {
@@ -73,7 +73,7 @@ pub fn update_line(s: &str) {
 }
 
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
-/// refused to do so or the platform is unsupported. (C: `filedialog`)
+/// refused to do so or the platform is unsupported.
 #[cfg(target_os = "win32")]
 pub fn get_path_from_dialog() -> Option<~str> {
     use std::ptr::{null, mut_null};
@@ -126,7 +126,7 @@ pub fn get_path_from_dialog() -> Option<~str> {
 }
 
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
-/// refused to do so or the platform is unsupported. (C: `filedialog`)
+/// refused to do so or the platform is unsupported.
 #[cfg(not(target_os = "win32"))]
 pub fn get_path_from_dialog() -> Option<~str> {
     None
@@ -138,14 +138,13 @@ pub struct Ticker {
     interval: uint,
     /// The timestamp at the last display. It is a return value from `sdl::get_ticks` and
     /// measured in milliseconds. May be a `None` if the ticker is at the initial state or
-    /// has been reset by `reset` method. (C: `lastinfo`)
+    /// has been reset by `reset` method.
     lastinfo: Option<uint>
 }
 
 /// Returns a new ticker with a default display interval.
 pub fn Ticker() -> Ticker {
     /// A reasonable interval for the console and graphic display. Currently set to about 21fps.
-    /// (C: `INFO_INTERVAL`)
     static INFO_INTERVAL: uint = 47;
     Ticker { interval: INFO_INTERVAL, lastinfo: None }
 }

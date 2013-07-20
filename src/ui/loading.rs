@@ -127,7 +127,6 @@ impl LoadingScene {
 }
 
 /// Renders the textual loading screen by printing the metadata.
-/// (C: `play_show_stagefile` when `opt_mode >= EXCLUSIVE_MODE`)
 pub fn show_stagefile_noscreen(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec, opts: &Options) {
     if opts.showinfo {
         let (brief, title, genre, artist) = displayed_info(bms, infos, keyspec);
@@ -140,7 +139,7 @@ Title:    %s\nGenre:    %s\nArtist:   %s\n%s
 }
 
 /// Loads the image and sound resources and calls a callback whenever a new resource has been
-/// loaded. (C: `load_resource`)
+/// loaded.
 pub fn load_resource(bms: &Bms, opts: &Options,
                      callback: &fn(Option<~str>)) -> (~[SoundResource], ~[ImageResource]) {
     let basedir = get_basedir(bms);
@@ -186,7 +185,6 @@ pub fn load_resource(bms: &Bms, opts: &Options,
 }
 
 /// A callback template for `load_resource` with the graphical loading screen.
-/// (C: `resource_loaded`)
 pub fn graphic_update_status(path: Option<~str>, screen: &Screen, scene: &LoadingScene,
                              font: &Font, ticker: &mut Ticker, atexit: &fn()) {
     // Rust: `on_tick` calls the closure at most once so `path` won't be referenced twice,
@@ -201,7 +199,6 @@ pub fn graphic_update_status(path: Option<~str>, screen: &Screen, scene: &Loadin
 }
 
 /// A callback template for `load_resource` with the textual loading screen.
-/// (C: `resource_loaded`)
 pub fn text_update_status(path: Option<~str>, ticker: &mut Ticker, atexit: &fn()) {
     let mut path = path; // XXX #4654
     do ticker.on_tick(get_ticks()) {

@@ -114,6 +114,7 @@ impl VirtualInput {
 /*
 struct KeySet {
     envvar: &'static str,
+    envvar2: &'static str, // for compatibility with Angolmois
     default: &'static str,
     mapping: &'static [(Option<KeyKind>, &'static [VirtualInput])],
 }
@@ -121,12 +122,14 @@ struct KeySet {
 type KeySet = (
     &'static str,
     &'static str,
+    &'static str,
     &'static [(Option<KeyKind>, &'static [VirtualInput])]);
 
 /// A list of environment variables that set the mapping for multiple keys, and corresponding
-/// default values and the order of keys. (C: `envvars`)
+/// default values and the order of keys.
 static KEYSETS: &'static [KeySet] = &[
-    (/*KeySet { envvar:*/ &"ANGOLMOIS_1P_KEYS",
+    (/*KeySet { envvar:*/ &"SNRS_1P_KEYS",
+             /*envvar2:*/ &"ANGOLMOIS_1P_KEYS",
              /*default:*/ &"left shift%axis 3|z%button 3|s%button 6|x%button 2|d%button 7|\
                         c%button 1|f%button 4|v%axis 2|left alt",
              /*mapping:*/ &[(Some(Scratch),   &[LaneInput(Lane(6))]),
@@ -138,7 +141,8 @@ static KEYSETS: &'static [KeySet] = &[
                         (Some(BlackKey),  &[LaneInput(Lane(8))]),
                         (Some(WhiteKey),  &[LaneInput(Lane(9))]),
                         (Some(FootPedal), &[LaneInput(Lane(7))])] /*}*/),
-    (/*KeySet { envvar:*/ &"ANGOLMOIS_2P_KEYS",
+    (/*KeySet { envvar:*/ &"SNRS_2P_KEYS",
+             /*envvar2:*/ &"ANGOLMOIS_2P_KEYS",
              /*default:*/ &"right alt|m|k|,|l|.|;|/|right shift",
              /*mapping:*/ &[(Some(FootPedal), &[LaneInput(Lane(36+7))]),
                         (Some(WhiteKey),  &[LaneInput(Lane(36+1))]),
@@ -149,7 +153,8 @@ static KEYSETS: &'static [KeySet] = &[
                         (Some(BlackKey),  &[LaneInput(Lane(36+8))]),
                         (Some(WhiteKey),  &[LaneInput(Lane(36+9))]),
                         (Some(Scratch),   &[LaneInput(Lane(36+6))])] ),
-    (/*KeySet { envvar:*/ &"ANGOLMOIS_PMS_KEYS",
+    (/*KeySet { envvar:*/ &"SNRS_PMS_KEYS",
+             /*envvar2:*/ &"ANGOLMOIS_PMS_KEYS",
              /*default:*/ &"z|s|x|d|c|f|v|g|b",
              /*mapping:*/ &[(Some(Button1), &[LaneInput(Lane(1))]),
                         (Some(Button2), &[LaneInput(Lane(2))]),
@@ -160,7 +165,8 @@ static KEYSETS: &'static [KeySet] = &[
                         (Some(Button3), &[LaneInput(Lane(9)), LaneInput(Lane(36+3))]),
                         (Some(Button2), &[LaneInput(Lane(6)), LaneInput(Lane(36+4))]),
                         (Some(Button1), &[LaneInput(Lane(7)), LaneInput(Lane(36+5))])] ),
-    (/*KeySet { envvar:*/ &"ANGOLMOIS_SPEED_KEYS",
+    (/*KeySet { envvar:*/ &"SNRS_SPEED_KEYS",
+             /*envvar2:*/ &"ANGOLMOIS_SPEED_KEYS",
              /*default:*/ &"f3|f4",
              /*mapping:*/ &[(None, &[SpeedDownInput]),
                         (None, &[SpeedUpInput])] ),
@@ -169,7 +175,7 @@ static KEYSETS: &'static [KeySet] = &[
 /// An input mapping, i.e. a mapping from the actual input to the virtual input.
 pub type KeyMap = ::std::hashmap::HashMap<Input,VirtualInput>;
 
-/// Reads an input mapping from the environment variables. (C: `read_keymap`)
+/// Reads an input mapping from the environment variables.
 pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Result<KeyMap,~str> {
     use util::std::str::StrUtil;
 
@@ -209,8 +215,8 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
     };
 
     for KEYSETS.iter().advance |&keyset| {
-        let (envvar, default, mapping) = keyset; // XXX
-        let spec = getenv(/*keyset.*/envvar);
+        let (envvar, envvar2, default, mapping) = keyset; // XXX
+        let spec = getenv(/*keyset.*/envvar).or(getenv(/*keyset.*/envvar2));
         let spec = spec.get_or_default(/*keyset.*/default.to_owned());
 
         let mut i = 0;
@@ -238,8 +244,9 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
     for keyspec.order.iter().advance |&lane| {
         let key = Key(36 + *lane as int);
         let kind = keyspec.kinds[*lane].get();
-        let envvar = fmt!("ANGOLMOIS_%s%c_KEY", key.to_str(), kind.to_char());
-        let val = getenv(envvar); // XXX #3511
+        let envvar = fmt!("SNRS_%s%c_KEY", key.to_str(), kind.to_char());
+        let envvar2 = fmt!("ANGOLMOIS_%s%c_KEY", key.to_str(), kind.to_char());
+        let val = getenv(envvar).or(getenv(envvar2)); // XXX #3511
         for val.iter().advance |&s| {
             match parse_input(s) {
                 Some(input) => { add_mapping(Some(kind), input, LaneInput(lane)); }

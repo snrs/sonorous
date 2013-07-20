@@ -241,7 +241,7 @@ pub fn Gradient(top: Color, bottom: Color) -> Gradient {
 //
 // Rust: `Copy` can't be inherited even when it's specified. (#3984)
 pub trait Blend {
-    /// Calculates the color at the position `num/denom`. (C: `blend`)
+    /// Calculates the color at the position `num/denom`.
     fn blend(&self, num: int, denom: int) -> Color;
 }
 
@@ -266,8 +266,8 @@ impl Blend for Gradient {
 //----------------------------------------------------------------------------------------------
 // surface utilities
 
-/// Creates a new RAM-backed surface. By design, Angolmois does not use a VRAM-backed surface
-/// except for the screen. (C: `newsurface`)
+/// Creates a new RAM-backed surface. By design, Sonorous does not use a VRAM-backed surface
+/// except for the screen.
 pub fn new_surface(w: uint, h: uint) -> Result<~Surface,~str> {
     Surface::new([SWSurface], w as int, h as int, 32, 0xff0000, 0xff00, 0xff, 0)
 }
@@ -303,7 +303,7 @@ impl SurfacePixelsUtil for Surface {
     }
 }
 
-/// Returns a pixel at given position. (C: `getpixel`)
+/// Returns a pixel at given position.
 //
 // Rust: this and subsequent `*_pixel` functions are required due to the incorrect lifetime
 //       inference in 0.6 borrowck algorithm. This problem has been fixed in 0.7 with a new
@@ -312,12 +312,12 @@ pub fn get_pixel(surface: &SurfacePixels, x: uint, y: uint) -> Color {
     Color::from_mapped(surface.pixels[x + y * surface.pitch], surface.fmt)
 }
 
-/// Sets a pixel to given position. (C: `putpixel`)
+/// Sets a pixel to given position.
 pub fn put_pixel(surface: &mut SurfacePixels, x: uint, y: uint, c: Color) {
     surface.pixels[x + y * surface.pitch] = c.to_mapped(surface.fmt);
 }
 
-/// Sets or blends (if `c` is `RGBA`) a pixel to given position. (C: `putblendedpixel`)
+/// Sets or blends (if `c` is `RGBA`) a pixel to given position.
 pub fn put_blended_pixel(surface: &mut SurfacePixels, x: uint, y: uint, c: Color) {
     match c {
         RGB(*) => put_pixel(surface, x, y, c),
@@ -331,13 +331,13 @@ pub fn put_blended_pixel(surface: &mut SurfacePixels, x: uint, y: uint, c: Color
 }
 
 impl<'self> SurfacePixels<'self> {
-    /// Returns a pixel at given position. (C: `getpixel`)
+    /// Returns a pixel at given position.
     pub fn get_pixel(&self, x: uint, y: uint) -> Color { get_pixel(self, x, y) }
 
-    /// Sets a pixel to given position. (C: `putpixel`)
+    /// Sets a pixel to given position.
     pub fn put_pixel(&mut self, x: uint, y: uint, c: Color) { put_pixel(self, x, y, c) }
 
-    /// Sets or blends (if `c` is `RGBA`) a pixel to given position. (C: `putblendedpixel`)
+    /// Sets or blends (if `c` is `RGBA`) a pixel to given position.
     pub fn put_blended_pixel(&mut self, x: uint, y: uint, c: Color) {
         put_blended_pixel(self, x, y, c)
     }

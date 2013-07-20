@@ -2,10 +2,7 @@
 // Copyright (c) 2005, 2007, 2009, 2012, 2013, Kang Seonghoon.
 // See README.md and LICENSE.txt for details.
 
-/*!
- * Game play logics. This module contains whooping 2000+ lines of code, reflecting the fact that
- * Angolmois is not well refactored. (In fact, the game logic is usually hard to refactor, right?)
- */
+//! Game play logics.
 
 use std::{int, uint, vec, cmp, num};
 
@@ -35,7 +32,7 @@ use ui::init::{SCREENW, SCREENH};
 
 /// Applies given modifier to the game data. The target lanes of the modifier is determined
 /// from given key specification. This function should be called twice for the Couple Play,
-/// since 1P and 2P should be treated separately. (C: `shuffle_bms`)
+/// since 1P and 2P should be treated separately.
 pub fn apply_modf<R: ::std::rand::RngUtil>(bms: &mut Bms, modf: Modf, r: &mut R,
                                            keyspec: &KeySpec, begin: uint, end: uint) {
     use timeline_modf = format::timeline::modf;
@@ -123,8 +120,7 @@ impl BGARenderState {
     pub fn update(&mut self, current: &BGAState, imgres: &[ImageResource]) {
         for uint::range(0, NLAYERS) |layer| {
             // TODO this design can't handle the case that a BGA layer is updated to the same
-            // image reference, which should rewind the movie playback. the original Angolmois
-            // does handle it.
+            // image reference, which should rewind the movie playback.
             if self.state[layer] != current[layer] {
                 for self.state[layer].iter().advance |&iref| {
                     imgres[**iref].stop_movie();
@@ -160,7 +156,7 @@ impl BGARenderState {
 //----------------------------------------------------------------------------------------------
 // game play logics
 
-/// Grades. Angolmois performs the time-based grading as long as possible (it can go wrong when
+/// Grades. Sonorous performs the time-based grading as long as possible (it can go wrong when
 /// the object is near the discontinuity due to the current implementation strategy).
 #[deriving(Eq)]
 enum Grade {
@@ -175,7 +171,7 @@ enum Grade {
      * in order to avoid continuing the consecutive run ("combo") of acceptable grades by
      * just pressing every keys in the correct timing instead of pressing only lanes containing
      * objects. While this system is not a bad thing (and there are several BMS implementations
-     * that use it), it is tricky to implement for the all situations. Angolmois currently
+     * that use it), it is tricky to implement for the all situations. Sonorous currently
      * does not use this system due to the complexity.
      */
     MISS = 0,
@@ -230,7 +226,7 @@ pub struct Player {
     timeline: @BmsTimeline,
     /// The derived timeline information.
     infos: TimelineInfo,
-    /// The length of BMS file in seconds as calculated by `bms_duration`. (C: `duration`)
+    /// The length of BMS file in seconds as calculated by `bms_duration`.
     duration: float,
     /// The key specification.
     keyspec: ~KeySpec,
@@ -238,36 +234,33 @@ pub struct Player {
     keymap: ~KeyMap,
 
     /// Set to true if the corresponding object in `bms.objs` had graded and should not be
-    /// graded twice. Its length equals to that of `bms.objs`. (C: `nograding` field in
-    /// `struct obj`)
+    /// graded twice. Its length equals to that of `bms.objs`.
     nograding: ~[bool],
-    /// Sound resources. (C: `res` field in `sndres`)
+    /// Sound resources.
     sndres: ~[SoundResource],
-    /// A sound chunk used for beeps. It always plays on the channel #0. (C: `beep`)
+    /// A sound chunk used for beeps. It always plays on the channel #0.
     beep: ~mixer::Chunk,
     /// Last channels in which the corresponding sound in `sndres` was played.
-    /// (C: `lastch` field in `sndres`)
     sndlastch: ~[Option<uint>],
     /// Indices to last sounds which the channel has played. For every `x`, if `sndlastch[x] ==
-    /// Some(y)` then `sndlastchmap[y] == Some(x)` and vice versa. (C: `sndlastchmap`)
+    /// Some(y)` then `sndlastchmap[y] == Some(x)` and vice versa.
     lastchsnd: ~[Option<uint>],
-    /// Currently active BGA layers. (C: `bga`)
+    /// Currently active BGA layers.
     bga: BGAState,
 
     /// The chart expansion rate, or "play speed". One measure has the length of 400 pixels
     /// times the play speed, so higher play speed means that objects will fall much more
-    /// quickly (hence the name). (C: `playspeed`)
+    /// quickly (hence the name).
     playspeed: float,
     /// The play speed targeted for speed change if any. It is also the value displayed while
-    /// the play speed is changing. (C: `targetspeed`)
+    /// the play speed is changing.
     targetspeed: Option<float>,
     /// The current BPM. Can be negative, in that case the chart will scroll backwards.
-    /// (C: `bpm`)
     bpm: BPM,
     /// The timestamp at the last tick. It is a return value from `sdl::get_ticks` and measured
-    /// in milliseconds. (C: `now`)
+    /// in milliseconds.
     now: uint,
-    /// The timestamp at the first tick. (C: `origintime`)
+    /// The timestamp at the first tick.
     origintime: uint,
 
     /// A pointer to the point where the game play starts (and not necessarily equal to zero point
@@ -286,39 +279,37 @@ pub struct Player {
     reverse: Option<BmsPointer>,
 
     /// The scale factor for grading area. The factor less than 1 causes the grading area
-    /// shrink. (C: `gradefactor`)
+    /// shrink.
     gradefactor: float,
-    /// (C: `grademode` and `gradetime`)
+    /// The last grade and time when the grade is issued.
     lastgrade: Option<(Grade,uint)>,
-    /// The numbers of each grades. (C: `scocnt`)
+    /// The numbers of each grades.
     gradecounts: [uint, ..NGRADES],
     /// The last combo number, i.e. the number of objects graded at least GREAT. GOOD doesn't
-    /// cause the combo number reset; BAD and MISS do. (C: `scombo`)
+    /// cause the combo number reset; BAD and MISS do.
     lastcombo: uint,
     /// The best combo number so far. If the player manages to get no BADs and MISSes, then
     /// the combo number should end up with the number of note and LN objects
-    /// (`BMSInfo::nnotes`). (C: `smaxcombo`)
+    /// (`BMSInfo::nnotes`).
     bestcombo: uint,
-    /// The current score. (C: `score`)
+    /// The current score.
     score: uint,
     /// The current health gauge. Should be no larger than `MAXGAUGE`. This can go negative
     /// (not displayed directly), which will require players much more efforts to survive.
-    /// (C: `gauge`)
     gauge: int,
     /// The health gauge required to survive at the end of the song. Note that the gaugex
     /// less than this value (or even zero) doesn't cause the instant game over;
-    /// only `InstantDeath` value from `Damage` does. (C: `survival`)
+    /// only `InstantDeath` value from `Damage` does.
     survival: int,
 
     /// The number of keyboard or joystick keys, mapped to each lane and and currently pressed.
-    /// (C: `keypressed[0]`)
     keymultiplicity: [uint, ..NLANES],
-    /// The state of joystick axes. (C: `keypressed[1]`)
+    /// The state of joystick axes.
     joystate: [InputState, ..NLANES],
 }
 
 /// A list of play speed marks. `SpeedUpInput` and `SpeedDownInput` changes the play speed to
-/// the next/previous nearest mark. (C: `speeds`)
+/// the next/previous nearest mark.
 static SPEED_MARKS: &'static [float] = &[0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0,
     3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0, 10.0, 15.0, 25.0, 40.0, 60.0, 99.0];
 
@@ -348,7 +339,7 @@ fn previous_speed_mark(current: float) -> Option<float> {
     None
 }
 
-/// Creates a beep sound played on the play speed change. (C: `create_beep`)
+/// Creates a beep sound played on the play speed change.
 fn create_beep() -> ~mixer::Chunk {
     let samples = vec::from_fn::<i32>(12000, // approx. 0.14 seconds
         // sawtooth wave at 3150 Hz, quadratic decay after 0.02 seconds.
@@ -415,7 +406,7 @@ impl Player {
     /// Updates the score and associated statistics according to grading. `scoredelta` is
     /// an weight normalized to [0,1] that is calculated from the distance between the object
     /// and the input time, and `damage` is an optionally associated `Damage` value for bombs.
-    /// May return true when `Damage` resulted in the instant death. (C: `update_grade`)
+    /// May return true when `Damage` resulted in the instant death.
     pub fn update_grade(&mut self, grade: Grade, scoredelta: float,
                         damage: Option<Damage>) -> bool {
         self.gradecounts[grade as uint] += 1;
@@ -450,8 +441,7 @@ impl Player {
 
     /// Same as `update_grade`, but the grade is calculated from the normalized difference
     /// between the object and input time in seconds. The normalized distance equals to
-    /// the actual time difference when `gradefactor` is 1.0. (C: `update_grade(grade,
-    /// scoredelta, 0)` where `grade` and `scoredelta` are pre-calculated from `dist`)
+    /// the actual time difference when `gradefactor` is 1.0.
     pub fn update_grade_from_distance(&mut self, dist: float) {
         let dist = num::abs(dist);
         let (grade, damage) = if      dist <  COOL_CUTOFF {(COOL,None)}
@@ -466,20 +456,17 @@ impl Player {
 
     /// Same as `update_grade`, but with the predetermined damage value. Always results in MISS
     /// grade. May return true when the damage resulted in the instant death.
-    /// (C: `update_grade(0, 0, damage)`)
     pub fn update_grade_from_damage(&mut self, damage: Damage) -> bool {
         self.update_grade(MISS, 0.0, Some(damage))
     }
 
     /// Same as `update_grade`, but always results in MISS grade with the standard damage value.
-    /// (C: `update_grade(0, 0, 0)`)
     pub fn update_grade_to_miss(&mut self) {
         let keepgoing = self.update_grade(MISS, 0.0, Some(MISS_DAMAGE));
         assert!(keepgoing);
     }
 
     /// Allocate more SDL_mixer channels without stopping already playing channels.
-    /// (C: `allocate_more_channels`)
     pub fn allocate_more_channels(&mut self, howmany: uint) {
         let howmany = howmany as ::std::libc::c_int;
         let nchannels = mixer::allocate_channels(-1 as ::std::libc::c_int);
@@ -491,7 +478,7 @@ impl Player {
 
     /// Plays a given sound referenced by `sref`. `bgm` indicates that the sound is a BGM and
     /// should be played with the lower volume and should in the different channel group from
-    /// key sounds. (C: `play_sound`)
+    /// key sounds.
     pub fn play_sound(&mut self, sref: SoundRef, bgm: bool) {
         let sref = **sref as uint;
         let chunk = match self.sndres[sref].chunk() {
@@ -526,12 +513,12 @@ impl Player {
     }
 
     /// Plays a beep. The beep is always played in the channel 0, which is excluded from
-    /// the uniform key sound and BGM management. (C: `Mix_PlayChannel(0, beep, 0)`)
+    /// the uniform key sound and BGM management.
     pub fn play_beep(&self) {
         self.beep.play(Some(0), 0);
     }
 
-    /// Updates the player state. (C: `play_process`)
+    /// Updates the player state.
     pub fn tick(&mut self) -> bool {
         // smoothly change the play speed
         if self.targetspeed.is_some() {
@@ -805,24 +792,23 @@ pub trait Display {
 //----------------------------------------------------------------------------------------------
 // graphic display
 
-/// An appearance for each lane. (C: `struct tkeykind` and `tkeyleft`)
+/// An appearance for each lane.
 struct LaneStyle {
-    /// The left position of the lane in the final screen. (C: `tkeyleft`)
+    /// The left position of the lane in the final screen.
     left: uint,
-    /// The left position of the lane in the object sprite. (C: `spriteleft` field)
+    /// The left position of the lane in the object sprite.
     spriteleft: uint,
-    /// The left position of the lane in the bomb sprite. (C: `spritebombleft` field)
+    /// The left position of the lane in the bomb sprite.
     spritebombleft: uint,
-    /// The width of lane. (C: `width` field)
+    /// The width of lane.
     width: uint,
     /// The base color of object. The actual `Gradient` for drawing is derived from this color.
-    /// (C: `basecolor` field)
     basecolor: Color
 }
 
 impl LaneStyle {
     /// Constructs a new `LaneStyle` object from given key kind and the left (`Left(pos)`) or
-    /// right (`Right(pos)`) position. (C: `tkeykinds`)
+    /// right (`Right(pos)`) position.
     pub fn from_kind(kind: KeyKind, pos: Either<uint,uint>) -> LaneStyle {
         let (spriteleft, spritebombleft, width, color) = match kind {
             WhiteKey    => ( 25,   0, 25, RGB(0x80,0x80,0x80)),
@@ -952,7 +938,7 @@ fn build_lane_styles(keyspec: &KeySpec) ->
     Ok((leftmost, rightmost, styles))
 }
 
-/// Creates a sprite. (C: sprite construction portion of `play_prepare`)
+/// Creates a sprite.
 fn create_sprite(opts: &Options, leftmost: uint, rightmost: Option<uint>,
                  styles: &[(Lane,LaneStyle)]) -> Texture {
     let sprite = match new_surface(SCREENW + 400, SCREENH) {
@@ -1021,34 +1007,33 @@ fn create_sprite(opts: &Options, leftmost: uint, rightmost: Option<uint>,
 
 /// Full-featured graphic display. Used for the normal game play and automatic play mode.
 pub struct GraphicDisplay {
-    /// Sprite texture generated by `create_sprite`. (C: `sprite`)
+    /// Sprite texture generated by `create_sprite`.
     sprite: Texture,
-    /// Display screen. (C: `screen`)
+    /// Display screen.
     screen: Screen,
     /// Bitmap font.
     font: ~Font,
-    /// Image resources. (C: `imgres`)
+    /// Image resources.
     imgres: ~[ImageResource],
 
     /// The leftmost X coordinate of the area next to the lanes, that is, the total width of
-    /// left-hand-side lanes. (C: `tpanel1`)
+    /// left-hand-side lanes.
     leftmost: uint,
     /// The rightmost X coordinate of the area next to the lanes, that is, the screen width
     /// minus the total width of right-hand-side lanes if any. `None` indicates the absence of
-    /// right-hand-side lanes. (C: `tpanel2`)
+    /// right-hand-side lanes.
     rightmost: Option<uint>,
-    /// The order and appearance of lanes. (C: `tkey` and `tkeyleft`)
+    /// The order and appearance of lanes.
     lanestyles: ~[(Lane,LaneStyle)],
-    /// The left coordinate of the BGA. (C: `tbgax`)
+    /// The left coordinate of the BGA.
     bgax: uint,
-    /// The top coordinate of the BGA. (C: `tbgay`)
+    /// The top coordinate of the BGA.
     bgay: uint,
 
     /// If not `None`, indicates that the POOR BGA should be displayed until this timestamp.
-    /// (C: `poorlimit`)
     poorlimit: Option<uint>,
     /// If not `None`, indicates that the grading information should be displayed until
-    /// this timestamp. (C: `gradetime`)
+    /// this timestamp.
     gradelimit: Option<uint>,
     /// Currently known state of BGAs.
     lastbga: BGARenderState,
@@ -1078,7 +1063,7 @@ pub fn GraphicDisplay(opts: &Options, keyspec: &KeySpec, screen: Screen, font: ~
     Ok(display)
 }
 
-/// The list of grade names and corresponding color scheme. (C: `tgradestr` and `tgradecolor`)
+/// The list of grade names and corresponding color scheme.
 static GRADES: &'static [(&'static str,Gradient)] = &[
     // Rust: can we just use `Gradient()`???
     ("MISS",  Gradient { zero: RGB(0xff,0xc0,0xc0), one: RGB(0xff,0x40,0x40) }),
@@ -1341,9 +1326,9 @@ impl Display for TextDisplay {
 pub struct BGAOnlyDisplay {
     /// The underlying text-only display (as the BGA-only display lacks the on-screen display).
     textdisplay: TextDisplay,
-    /// Display screen. (C: `screen`)
+    /// Display screen.
     screen: Screen,
-    /// Image resources. (C: `imgres`)
+    /// Image resources.
     imgres: ~[ImageResource],
     /// Currently known state of BGAs.
     lastbga: BGARenderState,

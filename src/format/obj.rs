@@ -9,21 +9,20 @@
 #[deriving(Eq,Clone)]
 pub struct Lane(uint);
 
-/// The maximum number of lanes. (C: `NNOTECHANS`)
+/// The maximum number of lanes.
 pub static NLANES: uint = 72;
 
-/// BGA layers. (C: `enum BGA_type`)
+/// BGA layers.
 #[deriving(Eq,ToStr,Clone)]
 pub enum BGALayer {
-    /// The lowest layer. BMS channel #04. (C: `BGA_LAYER`)
+    /// The lowest layer. BMS channel #04.
     Layer1 = 0,
-    /// The middle layer. BMS channel #07. (C: `BGA2_LAYER`)
+    /// The middle layer. BMS channel #07.
     Layer2 = 1,
-    /// The highest layer. BMS channel #0A. (C: `BGA3_LAYER`)
+    /// The highest layer. BMS channel #0A.
     Layer3 = 2,
     /// The layer only displayed shortly after the MISS grade. It is technically not over
     /// `Layer3`, but several extensions to BMS assumes it. BMS channel #06.
-    /// (C: `POORBGA_LAYER`)
     PoorBGA = 3
 }
 
@@ -69,27 +68,25 @@ pub enum Damage { GaugeDamage(float), InstantDeath }
 pub enum ObjData<SoundRef,ImageRef> {
     /// Deleted object. Only used during various processing.
     Deleted,
-    /// Visible object. Sound is played when the key is input inside the associated grading
-    /// area. (C: `NOTE`)
+    /// Visible object. Sound is played when the key is input inside the associated grading area.
     Visible(Lane, Option<SoundRef>),
     /// Invisible object. Sound is played when the key is input inside the associated grading
-    /// area. No render nor grading performed. (C: `INVNOTE`)
+    /// area. No render nor grading performed.
     Invisible(Lane, Option<SoundRef>),
     /// Start of long note (LN). Sound is played when the key is down inside the associated
-    /// grading area. (C: `LNSTART`)
+    /// grading area.
     LNStart(Lane, Option<SoundRef>),
     /// End of LN. Sound is played when the start of LN is graded, the key was down and now up
-    /// inside the associated grading area. (C: `LNDONE`)
+    /// inside the associated grading area.
     LNDone(Lane, Option<SoundRef>),
     /// Bomb. Pressing the key down at the moment that the object is on time causes
     /// the specified damage; sound is played in this case. No associated grading area.
-    /// (C: `BOMB`)
     Bomb(Lane, Option<SoundRef>, Damage),
-    /// Plays associated sound. (C: `BGM_CHANNEL`)
+    /// Plays associated sound.
     BGM(SoundRef),
     /**
      * Sets the virtual BGA layer to given image. The layer itself may not be displayed
-     * depending on the current game status. (C: `BGA_CHANNEL`)
+     * depending on the current game status.
      *
      * If the reference points to a movie, the movie starts playing; if the other layer had
      * the same movie started, it rewinds to the beginning. The resulting image from the movie
@@ -98,10 +95,10 @@ pub enum ObjData<SoundRef,ImageRef> {
     SetBGA(BGALayer, Option<ImageRef>),
     /// Sets the BPM. Negative BPM causes the chart scrolls backwards. Zero BPM causes the chart
     /// immediately terminates. In both cases, the chart is considered unfinished if there are
-    /// remaining gradable objects. (C: `BPM_CHANNEL`)
+    /// remaining gradable objects.
     SetBPM(BPM),
     /// Stops the scroll of the chart for given duration ("scroll stopper" hereafter). The duration,
-    /// if specified in measures, is not affected by the measure scaling factor. (C: `STOP_CHANNEL`)
+    /// if specified in measures, is not affected by the measure scaling factor.
     Stop(Duration),
     /// Restarts the scroll of the chart. This object is a no-op, but it is used to keep
     /// the linear relation between time and position axes.
@@ -184,39 +181,35 @@ impl<S:Copy,I:Copy> WithObjData<S,I> for ObjData<S,I> {
 pub trait ObjQueryOps<SoundRef:Copy,ImageRef:Copy> {
     /// Returns true if the object is deleted (`Deleted`).
     pub fn is_deleted(&self) -> bool;
-    /// Returns true if the object is a visible object (`Visible`). (C: `obj->type == NOTE`)
+    /// Returns true if the object is a visible object (`Visible`).
     pub fn is_visible(&self) -> bool;
     /// Returns true if the object is an invisible object (`Invisible`).
-    /// (C: `obj->type == INVNOTE`)
     pub fn is_invisible(&self) -> bool;
     /// Returns true if the object is a start of LN object (`LNStart`).
-    /// (C: `obj->type == LNSTART`)
     pub fn is_lnstart(&self) -> bool;
-    /// Returns true if the object is an end of LN object (`LNEnd`). (C: `obj->type == LNDONE`)
+    /// Returns true if the object is an end of LN object (`LNEnd`).
     pub fn is_lndone(&self) -> bool;
     /// Returns true if the object is either a start or an end of LN object.
-    /// (C: `obj->type < NOTE`)
     pub fn is_ln(&self) -> bool;
-    /// Returns true if the object is a bomb (`Bomb`). (C: `obj->type == BOMB`)
+    /// Returns true if the object is a bomb (`Bomb`).
     pub fn is_bomb(&self) -> bool;
     /// Returns true if the object is soundable when it is the closest soundable object from
     /// the current position and the player pressed the key. Named "soundable" since it may
-    /// choose not to play the associated sound. Note that not every object with sound is
-    /// soundable. (C: `obj->type <= INVNOTE`)
+    /// choose not to play the associated sound. Note that not every object with sound is soundable.
     pub fn is_soundable(&self) -> bool;
-    /// Returns true if the object is subject to grading. (C: `obj->type < INVNOTE`)
+    /// Returns true if the object is subject to grading.
     pub fn is_gradable(&self) -> bool;
-    /// Returns true if the object has a visible representation. (C: `obj->type != INVNOTE`)
+    /// Returns true if the object has a visible representation.
     pub fn is_renderable(&self) -> bool;
-    /// Returns true if the data is an object. (C: `IS_NOTE_CHANNEL(obj->chan)`)
+    /// Returns true if the data is an object.
     pub fn is_object(&self) -> bool;
-    /// Returns true if the data is a BGM. (C: `obj->chan == BGM_CHANNEL`)
+    /// Returns true if the data is a BGM.
     pub fn is_bgm(&self) -> bool;
-    /// Returns true if the data is a BGA. (C: `obj->chan == BGA_CHANNEL`)
+    /// Returns true if the data is a BGA.
     pub fn is_setbga(&self) -> bool;
-    /// Returns true if the data is a BPM change. (C: `obj->chan == BPM_CHANNEL`)
+    /// Returns true if the data is a BPM change.
     pub fn is_setbpm(&self) -> bool;
-    /// Returns true if the data is a scroll stopper. (C: `obj->chan == STOP_CHANNEL`)
+    /// Returns true if the data is a scroll stopper.
     pub fn is_stop(&self) -> bool;
     /// Returns true if the data is the end of a scroll stopper.
     pub fn is_stopend(&self) -> bool;

@@ -79,6 +79,7 @@ impl<'self> ToStr for BmsCommand<'self> {
     }
 }
 
+/// Iterates over the parsed BMS commands.
 pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> bool {
     use util::std::str::StrUtil;
 

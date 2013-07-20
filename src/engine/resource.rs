@@ -24,9 +24,9 @@ pub static SAMPLERATE: i32 = 44100;
 /// The number of bytes in the chunk converted to an internal sampling rate.
 pub static BYTESPERSEC: i32 = SAMPLERATE * 2 * 2; // stereo, 16 bits/sample
 
-/// Alternative file extensions for sound resources. (C: `SOUND_EXTS`)
+/// Alternative file extensions for sound resources.
 static SOUND_EXTS: &'static [&'static str] = &[".WAV", ".OGG", ".MP3"];
-/// Alternative file extensions for image resources. (C: `IMAGE_EXTS`)
+/// Alternative file extensions for image resources.
 static IMAGE_EXTS: &'static [&'static str] = &[".BMP", ".PNG", ".JPG", ".JPEG", ".GIF"];
 
 /// Returns a specified or implied resource directory from the BMS file.
@@ -48,7 +48,7 @@ fn resolve_relative_path_result(basedir: &Path, path: &str, exts: &[&str]) -> Re
 }
 
 /// Sound resource associated to `SoundRef`. It contains the actual SDL_mixer chunk that can be
-/// readily played. (C: the type of `sndres`)
+/// readily played.
 pub enum SoundResource {
     /// No sound resource is associated, or error occurred while loading.
     NoSound,
@@ -91,7 +91,7 @@ pub fn load_sound(path: &str, basedir: &Path) -> Result<SoundResource,~str> {
 }
 
 /// Image resource associated to `ImageRef`. It can be either a static image or a movie, and
-/// both contains an SDL surface that can be blitted to the screen. (C: the type of `imgres`)
+/// both contains an SDL surface that can be blitted to the screen.
 pub enum ImageResource {
     /// No image resource is associated, or error occurred while loading.
     NoImage,
@@ -173,7 +173,7 @@ pub fn load_image(path: &str, basedir: &Path, load_movie: bool) -> Result<ImageR
     }
 }
 
-/// Applies the blit command to given list of image resources. (C: a part of `load_resource`)
+/// Applies the blit command to given list of image resources.
 pub fn apply_blitcmd(imgres: &mut [ImageResource], bc: &BlitCmd) {
     let origin: @PreparedSurface = match imgres[**bc.src] {
         Image(src) => src,

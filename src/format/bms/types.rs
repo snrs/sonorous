@@ -12,10 +12,10 @@ use format::obj::Lane;
 #[deriving(Eq)]
 pub struct Key(int);
 
-/// The number of all possible alphanumeric keys. (C: `MAXKEY`)
+/// The number of all possible alphanumeric keys.
 pub static MAXKEY: int = 36*36;
 
-/// Converts a single alphanumeric (base-36) letter to an integer. (C: `getdigit`)
+/// Converts a single alphanumeric (base-36) letter to an integer.
 fn getdigit(n: char) -> Option<int> {
     match n {
         '0'..'9' => Some((n as int) - ('0' as int)),
@@ -26,7 +26,7 @@ fn getdigit(n: char) -> Option<int> {
 }
 
 impl Key {
-    /// Converts the first two letters of `s` to a `Key`. (C: `key2index`)
+    /// Converts the first two letters of `s` to a `Key`.
     pub fn from_chars(s: &[char]) -> Option<Key> {
         if s.len() < 2 { return None; }
         do getdigit(s[0]).chain |a| {
@@ -34,7 +34,7 @@ impl Key {
         }
     }
 
-    /// Converts the first two letters of `s` to a `Key`. (C: `key2index`)
+    /// Converts the first two letters of `s` to a `Key`.
     pub fn from_str(s: &str) -> Option<Key> {
         if s.len() < 2 { return None; }
         let str::CharRange {ch:c1, next:p1} = s.char_range_at(0);
@@ -47,7 +47,7 @@ impl Key {
         }
     }
 
-    /// Returns if the alphanumeric key is in the proper range. Angolmois supports the full
+    /// Returns if the alphanumeric key is in the proper range. Sonorous supports the full
     /// range of 00-ZZ (0-1295) for every case.
     pub fn is_valid(self) -> bool {
         0 <= *self && *self < MAXKEY
@@ -81,7 +81,7 @@ impl Ord for Key {
 }
 
 impl ToStr for Key {
-    /// Returns a two-letter representation of alphanumeric key. (C: `TO_KEY`)
+    /// Returns a two-letter representation of alphanumeric key.
     fn to_str(&self) -> ~str {
         assert!(self.is_valid());
         let map = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";

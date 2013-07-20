@@ -15,7 +15,7 @@ pub static SCREENH: uint = 600;
 
 /// Creates a small screen for BGAs (`BGAW` by `BGAH` pixels) if `exclusive` is set,
 /// or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise. `fullscreen` is ignored
-/// when `exclusive` is set. (C: `init_video`)
+/// when `exclusive` is set.
 pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
     let (width, height, fullscreen) = if exclusive {
         (BGAW, BGAH, false)
@@ -33,7 +33,7 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
     screen
 }
 
-/// Initializes an SDL, SDL_image and SDL_mixer. (C: `init_ui`)
+/// Initializes an SDL, SDL_image and SDL_mixer.
 pub fn init_sdl() {
     if !init([InitVideo, InitAudio, InitJoystick]) {
         die!("SDL Initialization Failure: %s", get_error());

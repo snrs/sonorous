@@ -11,8 +11,7 @@ use format::bms::{Bms, Key, DoublePlay, CouplePlay};
 
 /**
  * Key kinds. They define an appearance of particular lane, but otherwise ignored for the game
- * play. Angolmois supports several key kinds in order to cover many potential uses.
- * (C: `KEYKIND_MNEMONICS`)
+ * play. Sonorous supports several key kinds in order to cover many potential uses.
  *
  * # Defaults
  *
@@ -98,7 +97,7 @@ impl KeyKind {
     }
 
     /**
-     * Returns true if a kind counts as a "key". (C: `KEYKIND_IS_KEY`)
+     * Returns true if a kind counts as a "key".
      *
      * This affects the number of keys displayed in the loading screen, and reflects a common
      * practice of counting "keys" in many games (e.g. Beatmania IIDX has 8 lanes including one
@@ -114,18 +113,18 @@ impl KeyKind {
 /// (e.g. `#PLAYER` value).
 pub struct KeySpec {
     /// The number of lanes on the left side. This number is significant only when Couple Play
-    /// is used. (C: `nleftkeys`)
+    /// is used.
     split: uint,
     /// The order of significant lanes. The first `nleftkeys` lanes go to the left side and
-    /// the remaining lanes (C: `nrightkeys`) go to the right side. (C: `keyorder`)
+    /// the remaining lanes go to the right side.
     order: ~[Lane],
-    /// The type of lanes. (C: `keykind`)
+    /// The type of lanes.
     kinds: ~[Option<KeyKind>]
 }
 
 impl KeySpec {
     /// Returns a number of lanes that count towards "keys". Notably scratches and pedals do not
-    /// count as keys. (C: `nkeys`)
+    /// count as keys.
     pub fn nkeys(&self) -> uint {
         let mut nkeys = 0;
         for self.kinds.iter().filter_map(|kind| *kind).advance |kind| {
@@ -146,13 +145,13 @@ impl KeySpec {
         self.order.slice(self.split, self.order.len()).iter().advance(f)
     }
 
-    /// Removes insignificant lanes. (C: `analyze_and_compact_bms`)
+    /// Removes insignificant lanes.
     pub fn filter_timeline<S:Copy,I:Copy>(&self, timeline: &mut Timeline<S,I>) {
         filter_lanes(timeline, self.order);
     }
 }
 
-/// Parses the key specification from the string. (C: `parse_key_spec`)
+/// Parses the key specification from the string.
 pub fn parse_key_spec(s: &str) -> Option<~[(Lane, KeyKind)]> {
     use util::std::str::StrUtil;
 
@@ -176,7 +175,7 @@ pub fn parse_key_spec(s: &str) -> Option<~[(Lane, KeyKind)]> {
     Some(specs)
 }
 
-/// A list of well-known key specifications. (C: `presets`)
+/// A list of well-known key specifications.
 static PRESETS: &'static [(&'static str, &'static str, &'static str)] = &[
     // 5-key BMS, SP/DP
     ("5",     "16s 11a 12b 13a 14b 15a", ""),
@@ -198,7 +197,7 @@ static PRESETS: &'static [(&'static str, &'static str, &'static str)] = &[
 
 /**
  * Determines the key specification from the preset name, in the absence of explicit key
- * specification with `-K` option. (C: `detect_preset`)
+ * specification with `-K` option.
  *
  * Besides from presets specified in `PRESETS`, this function also allows the following
  * pseudo-presets inferred from the BMS file:
