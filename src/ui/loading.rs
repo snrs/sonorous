@@ -205,7 +205,7 @@ pub fn text_update_status(path: Option<~str>, ticker: &mut Ticker, atexit: &fn()
     do ticker.on_tick(get_ticks()) {
         match ::std::util::replace(&mut path, None) { // XXX #4654
             Some(path) => {
-                let path = path.slice_upto(0, 63);
+                let path = if path.len() < 63 {path} else {path.slice_upto(0, 63).to_owned()};
                 update_line(~"Loading: " + path);
             }
             None => { update_line("Loading done."); }

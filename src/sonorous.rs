@@ -68,6 +68,7 @@ pub mod engine {
     pub mod keyspec;
     pub mod input;
     pub mod resource;
+    pub mod player;
 }
 #[macro_escape] pub mod ui {
     pub mod common;
@@ -75,7 +76,7 @@ pub mod engine {
     pub mod screen;
     pub mod init;
     pub mod loading;
-    pub mod player;
+    pub mod playing;
 }
 
 /// Returns a version string.
@@ -91,7 +92,8 @@ pub fn exename() -> ~str {
 /// loop.
 pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     use format::bms;
-    use ui::{init, player, loading};
+    use engine::player;
+    use ui::{init, loading, playing};
     use ui::common::{check_exit, update_line};
     use ui::screen::Screen;
 
@@ -194,38 +196,32 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
 
         // create the player and transfer ownership of other resources to it
         let duration = bms.timeline.duration(infos.originoffset, |sref| sndres[**sref].duration());
-        let player = player::Player(opts, bms, infos, duration, keyspec, keymap, sndres);
-
-        // Rust: `@mut` upcasting is unsupported as of 0.6. (#5725)
-        fn loop_with_display<T:player::Display>(mut player: player::Player, mut display: T) {
-            while player.tick() {
-                display.render(&player);
-            }
-            display.show_result(&player);
-
-            // remove all channels before sound resources are deallocated.
-            // halting alone is not sufficient due to rust-sdl's bug.
-            ::sdl::mixer::allocate_channels(0);
-        }
+        let mut player = player::Player(opts, bms, infos, duration, keyspec, keymap, sndres);
 
         // create the display and runs the actual game play loop
-        match screen {
+        let mut display = match screen {
             Some(screen) => {
                 if player.opts.is_exclusive() {
-                    loop_with_display(player, player::BGAOnlyDisplay(screen, imgres));
+                    @mut playing::BGAOnlyDisplay(screen, imgres) as @mut playing::Display
                 } else {
-                    let display_ = player::GraphicDisplay(player.opts, player.keyspec,
-                                                          screen, font, imgres);
-                    match display_ {
-                        Ok(display) => loop_with_display(player, display),
+                    match playing::GraphicDisplay(player.opts, player.keyspec,
+                                                  screen, font, imgres) {
+                        Ok(display) => @mut display as @mut playing::Display,
                         Err(err) => die!("%s", err)
                     }
                 }
             }
-            None => {
-                loop_with_display(player, player::TextDisplay());
-            }
+            None => @mut playing::TextDisplay() as @mut playing::Display
+        };
+
+        while player.tick() {
+            display.render(&player);
         }
+        display.show_result(&player);
+
+        // remove all channels before sound resources are deallocated.
+        // halting alone is not sufficient due to rust-sdl's bug.
+        ::sdl::mixer::allocate_channels(0);
 
         // it's done!
         atexit();
