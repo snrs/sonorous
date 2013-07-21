@@ -7,7 +7,7 @@
 use std::{char, uint, float, str};
 
 /// Game play modes.
-#[deriving(Eq)]
+#[deriving(Eq,Clone)]
 pub enum Mode {
     /// Normal game play. The graphical display and input is enabled.
     PlayMode,
@@ -20,7 +20,7 @@ pub enum Mode {
 }
 
 /// Modifiers that affect the game data.
-#[deriving(Eq)]
+#[deriving(Eq,Clone)]
 pub enum Modf {
     /// Swaps all "key" (i.e. `KeyKind::counts_as_key` returns true) lanes in the reverse order.
     /// See `player::apply_mirror_modf` for the detailed algorithm.
@@ -38,7 +38,7 @@ pub enum Modf {
 }
 
 /// Specifies how the BGA is displayed.
-#[deriving(Eq)]
+#[deriving(Eq,Clone)]
 pub enum Bga {
     /// Both the BGA image and movie is displayed.
     BgaAndMovie,
@@ -50,6 +50,7 @@ pub enum Bga {
 }
 
 /// Global options set from the command line and environment variables.
+#[deriving(Eq,Clone)]
 pub struct Options {
     /// Game play mode.
     mode: Mode,
@@ -72,6 +73,11 @@ pub struct Options {
     rightkeys: Option<~str>,
     /// An initial play speed.
     playspeed: float,
+
+    /// If set, prints the recognized BMS commands after parsing and exits.
+    debug_dumpbmscommand: bool,
+    /// If set, prints the fully calculated timeline and exits.
+    debug_dumptimeline: bool,
 }
 
 impl Options {
@@ -93,6 +99,7 @@ impl Options {
 }
 
 /// A return value from `parse_opts`.
+#[deriving(Eq,Clone)]
 pub enum ParsingResult {
     /// The caller is expected to show the version information.
     ShowVersion,
@@ -118,6 +125,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
         (~"--random", 'r'), (~"--random-ex", 'R'), (~"--preset", 'k'),
         (~"--key-spec", 'K'), (~"--bga", ' '), (~"--no-bga", 'B'),
         (~"--movie", ' '), (~"--no-movie", 'M'), (~"--joystick", 'j'),
+        (~"--debug", 'Z'),
     ]);
 
     let nargs = args.len();
@@ -133,6 +141,8 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
     let mut leftkeys = None;
     let mut rightkeys = None;
     let mut playspeed = 1.0;
+    let mut debug_dumpbmscommand = false;
+    let mut debug_dumptimeline = false;
 
     let mut i = 0;
     while i < nargs {
@@ -215,6 +225,11 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
                             _ => { return Error(fmt!("Invalid argument to option -j")); }
                         }
                     }
+                    'Z' => match fetch_arg!('Z') {
+                        &"dump-bmscommand" => { debug_dumpbmscommand = true; }
+                        &"dump-timeline" => { debug_dumptimeline = true; }
+                        arg => { return Error(fmt!("Unknown debugging option: -Z %s", arg)); }
+                    },
                     ' ' => {} // for ignored long options
                     '1'..'9' => { playspeed = char::to_digit(c, 10).get() as float; }
                     _ => { return Error(fmt!("Invalid option: -%c", c)); }
@@ -233,9 +248,17 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
     match bmspath {
         None => ShowUsage,
         Some(bmspath) => PathAndOptions(bmspath, ~Options {
-            mode: mode, modf: modf, bga: bga, showinfo: showinfo, fullscreen: fullscreen,
-            joystick: joystick, preset: preset, leftkeys: leftkeys, rightkeys: rightkeys,
-            playspeed: playspeed
+            mode: mode,
+            modf: modf,
+            bga: bga,
+            showinfo: showinfo,
+            fullscreen: fullscreen,
+            joystick: joystick,
+            preset: preset,
+            leftkeys: leftkeys, rightkeys: rightkeys,
+            playspeed: playspeed,
+            debug_dumpbmscommand: debug_dumpbmscommand,
+            debug_dumptimeline: debug_dumptimeline,
         })
     }
 }

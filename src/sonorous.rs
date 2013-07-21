@@ -97,6 +97,20 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     use ui::common::{check_exit, update_line};
     use ui::screen::Screen;
 
+    if opts.debug_dumpbmscommand {
+        let f = match std::io::file_reader(&Path(bmspath)) {
+            Ok(f) => f,
+            Err(err) => die!("Couldn't load BMS file: %s", err)
+        };
+        for bms::parse::each_bms_command(f) |cmd| {
+            match cmd {
+                bms::parse::BmsUnknown(*) => {}
+                cmd => { println(cmd.to_str()); }
+            }
+        }
+        ui::common::exit(0);
+    }
+
     // parses the file and sanitizes it
     let mut r = std::rand::rng();
     let mut bms = match bms::parse_bms(bmspath, &mut r) {
@@ -119,6 +133,11 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         if keyspec.split < keyspec.order.len() {
             player::apply_modf(&mut bms, modf, &mut r, keyspec, keyspec.split, keyspec.order.len());
         }
+    }
+
+    if opts.debug_dumptimeline {
+        bms.timeline.dump(std::io::stdout());
+        ui::common::exit(0);
     }
 
     let (port, chan) = std::comm::stream();
@@ -262,7 +281,8 @@ Options:
   --bga                   Loads and shows the BGA (default)
   -B, --no-bga            Do not load and show the BGA
   -M, --no-movie          Do not load and show the BGA movie
-  -j #, --joystick #      Enable the joystick with index # (normally 0)
+  -j #, --joystick #      Enables the joystick with index # (normally 0)
+  -Z OPTION               Enables the specified debugging option
 
 Environment Variables:
   SNRS_1P_KEYS=<scratch>|<key 1>|<2>|<3>|<4>|<5>|<6>|<7>|<pedal>
@@ -273,6 +293,10 @@ Environment Variables:
     Sets keys used for game play. Use either SDL key names or joystick names
     like 'button #' or 'axis #' can be used. Separate multiple keys by '%%'.
     See the manual for more information.
+
+Available debugging options:
+  -Z dump-bmscommand      Dumps recognized BMS commands and exit
+  -Z dump-timeline        Dumps precalculated timeline and exit
 
 ", version(), exename()));
     ui::common::exit(1);
