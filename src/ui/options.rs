@@ -107,7 +107,6 @@ pub enum ParsingResult {
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
 pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResult {
-    use util::std::str::StrUtil;
     use util::std::hashmap::map_from_vec;
 
     let longargs = map_from_vec([
@@ -155,7 +154,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
                         None => { return Error(fmt!("Invalid option: %s", args[i])); }
                     }
                 } else {
-                    args[i].slice_to_end(1).to_owned()
+                    args[i].slice_from(1).to_owned()
                 };
             let nshortargs = shortargs.len();
 
@@ -167,7 +166,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
                     let nextarg =
                         if inside && off < nshortargs {
                             // remaining portion of `args[i]` is an argument
-                            shortargs.slice_to_end(off)
+                            shortargs.slice_from(off)
                         } else {
                             // `args[i+1]` is an argument as a whole
                             i += 1;

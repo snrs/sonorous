@@ -200,11 +200,12 @@ pub fn graphic_update_status(path: Option<~str>, screen: &Screen, scene: &Loadin
 
 /// A callback template for `load_resource` with the textual loading screen.
 pub fn text_update_status(path: Option<~str>, ticker: &mut Ticker, atexit: &fn()) {
+    use util::std::str::StrUtil;
     let mut path = path; // XXX #4654
     do ticker.on_tick(get_ticks()) {
         match ::std::util::replace(&mut path, None) { // XXX #4654
             Some(path) => {
-                let path = if path.len() < 63 {path} else {path.slice(0, 63).to_owned()};
+                let path = path.slice_upto(0, 63);
                 update_line(~"Loading: " + path);
             }
             None => { update_line("Loading done."); }

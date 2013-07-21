@@ -29,6 +29,8 @@
  *
  * - `Key [-> e2]`: Consumes a two-letter alphanumeric key and optionally saves it to `e2`.
  * - `Measure [-> e2]`: Consumes exactly three digits and optionally saves it to `e2`.
+ * - `ARGB [-> e2]`: Almost same as `uint [-> e2a], ',', uint [-> e2r], ',', uint [-> e2g], ',',
+ *   uint [-> e2b]` but `e2` is a tuple of four `u8` values and overflows are considered an error.
  */
 // Rust: - there is no `std::libc::sscanf` due to the varargs. maybe regex support will make
 //         this obsolete in the future, but not now.
@@ -50,38 +52,37 @@ macro_rules! lex(
         // Rust: `std::num::from_str_bytes_common` does not recognize a number followed
         //        by garbage, so we need to parse it ourselves.
         do _line.scan_int().map_default(false) |&_endpos| {
-            let _prefix = _line.slice(0, _endpos);
+            let _prefix = _line.slice_to(_endpos);
             do ::std::int::from_str(_prefix).map_default(false) |&_value| {
                 $dst = _value;
-                lex!(_line.slice_to_end(_endpos); $($tail)*)
+                lex!(_line.slice_from(_endpos); $($tail)*)
             }
         }
     });
     ($e:expr; uint -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
         do _line.scan_uint().map_default(false) |&_endpos| {
-            let _prefix = _line.slice(0, _endpos);
+            let _prefix = _line.slice_to(_endpos);
             do ::std::uint::from_str(_prefix).map_default(false) |&_value| {
                 $dst = _value;
-                lex!(_line.slice_to_end(_endpos); $($tail)*)
+                lex!(_line.slice_from(_endpos); $($tail)*)
             }
         }
     });
     ($e:expr; float -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
         do _line.scan_float().map_default(false) |&_endpos| {
-            let _prefix = _line.slice(0, _endpos);
+            let _prefix = _line.slice_to(_endpos);
             do ::std::float::from_str(_prefix).map_default(false) |&_value| {
                 $dst = _value;
-                lex!(_line.slice_to_end(_endpos); $($tail)*)
+                lex!(_line.slice_from(_endpos); $($tail)*)
             }
         }
     });
     ($e:expr; str -> $dst:expr, ws*, $($tail:tt)*) => ({
         let _line: &str = $e;
         if !_line.is_empty() {
-            // Rust: we should be able to avoid a copy here. (#5550)
-            $dst = _line.trim_right().to_owned(); // XXX #5550
+            $dst = _line.trim_right();
             lex!(""; $($tail)*) // optimization!
         } else {
             false
@@ -90,7 +91,7 @@ macro_rules! lex(
     ($e:expr; str -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
         if !_line.is_empty() {
-            $dst = _line.to_owned(); // XXX #5550
+            $dst = _line.slice_from(0); // Rust: why we need to reborrow `_line` here?!
             lex!(""; $($tail)*) // optimization!
         } else {
             false
@@ -98,12 +99,12 @@ macro_rules! lex(
     });
     ($e:expr; str* -> $dst:expr, ws*, $($tail:tt)*) => ({
         let _line: &str = $e;
-        $dst = _line.trim_right().to_owned(); // XXX #5550
+        $dst = _line.trim_right();
         lex!(""; $($tail)*) // optimization!
     });
     ($e:expr; str* -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        $dst = _line.to_owned(); // XXX #5550
+        $dst = _line.slice_from(0); // Rust: why we need to reborrow `_line` here?!
         lex!(""; $($tail)*) // optimization!
     });
     ($e:expr; char -> $dst:expr, $($tail:tt)*) => ({
@@ -111,7 +112,7 @@ macro_rules! lex(
         if !_line.is_empty() {
             let _range = _line.char_range_at(0);
             $dst = _range.ch;
-            lex!(_line.slice_to_end(_range.next); $($tail)*)
+            lex!(_line.slice_from(_range.next); $($tail)*)
         } else {
             false
         }
@@ -121,7 +122,7 @@ macro_rules! lex(
         let _line: &str = $e;
         do ::format::bms::types::Key::from_str(_line).map_default(false) |&_value| {
             $dst = _value;
-            lex!(_line.slice_to_end(2u); $($tail)*)
+            lex!(_line.slice_from(2u); $($tail)*)
         }
     });
     ($e:expr; Measure -> $dst:expr, $($tail:tt)*) => ({
@@ -130,8 +131,23 @@ macro_rules! lex(
         // Rust: this is plain annoying.
         if _line.len() >= 3 && _isdigit(_line.char_at(0)) && _isdigit(_line.char_at(1)) &&
                 _isdigit(_line.char_at(2)) {
-            $dst = ::std::uint::from_str(_line.slice(0u, 3u)).unwrap();
-            lex!(_line.slice_to_end(3u); $($tail)*)
+            $dst = ::std::uint::from_str(_line.slice_to(3u)).unwrap();
+            lex!(_line.slice_from(3u); $($tail)*)
+        } else {
+            false
+        }
+    });
+    ($e:expr; ARGB -> $dst:expr, $($tail:tt)*) => ({
+        let mut _a: uint = 0;
+        let mut _r: uint = 0;
+        let mut _g: uint = 0;
+        let mut _b: uint = 0;
+        let mut _remainder: &str = "";
+        if lex!($e; uint -> _a, ws*, ',', ws*, uint -> _r, ws*, ',', ws*,
+                    uint -> _g, ws*, ',', ws*, uint -> _b, str* -> _remainder, !) &&
+           _a < 256 && _r < 256 && _g < 256 && _b < 256 {
+            $dst = (_a as u8, _r as u8, _g as u8, _b as u8);
+            lex!(_remainder; $($tail)*)
         } else {
             false
         }
@@ -181,6 +197,10 @@ macro_rules! lex(
         let mut _dummy: uint = 0;
         lex!($e; Measure -> _dummy, $($tail)*)
     });
+    ($e:expr; ARGB, $($tail:tt)*) => ({
+        let mut _dummy: (u8,u8,u8,u8) = (0,0,0,0);
+        lex!($e; ARGB -> _dummy, $($tail)*)
+    });
     // end Sonorous-specific
     ($e:expr; $lit:expr, $($tail:tt)*) => ({
         do $lit.prefix_shifted($e).map_default(false) |&_line| {
@@ -199,6 +219,7 @@ macro_rules! lex(
     // start Sonorous-specific
     ($e:expr; Key -> $dst:expr) => (lex!($e; Key -> $dst, ));
     ($e:expr; Measure -> $dst:expr) => (lex!($e; Measure -> $dst, ));
+    ($e:expr; ARGB -> $dst:expr) => (lex!($e; ARGB -> $dst, ));
     // end Sonorous-specific
 
     ($e:expr; ws) => (lex!($e; ws, ));
@@ -212,6 +233,7 @@ macro_rules! lex(
     // start Sonorous-specific
     ($e:expr; Key) => (lex!($e; Key, ));
     ($e:expr; Measure) => (lex!($e; Measure, ));
+    ($e:expr; ARGB) => (lex!($e; ARGB, ));
     // end Sonorous-specific
     ($e:expr; $lit:expr) => (lex!($e; $lit, ))
 )

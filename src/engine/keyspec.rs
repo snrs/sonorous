@@ -153,18 +153,14 @@ impl KeySpec {
 
 /// Parses the key specification from the string.
 pub fn parse_key_spec(s: &str) -> Option<~[(Lane, KeyKind)]> {
-    use util::std::str::StrUtil;
-
     let mut specs = ~[];
-    let mut s = s.trim_left().to_owned();
+    let mut s = s.trim_left();
     while !s.is_empty() {
         let mut chan = Key(0);
         let mut kind = '\x00';
-        let mut s2 = ~"";
-        if !lex!(s; Key -> chan, char -> kind, ws*, str* -> s2, !) {
+        if !lex!(s; Key -> chan, char -> kind, ws*, str* -> s, !) {
             return None;
         }
-        s = s2;
         match (chan, KeyKind::from_char(kind)) {
             (Key(36/*1*36*/..107/*3*36-1*/), Some(kind)) => {
                 specs.push((Lane(*chan as uint - 1*36), kind));

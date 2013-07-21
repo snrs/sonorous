@@ -60,7 +60,7 @@ pub fn resolve_relative_path(basedir: &Path, path: &str, exts: &[&str]) -> Optio
         if !found {
             match next_.rfind('.') {
                 Some(idx) => {
-                    let nextnoext = next_.slice(0, idx).to_owned();
+                    let nextnoext = next_.slice_to(idx).to_owned();
                     for exts.iter().advance |ext| {
                         if nextnoext + ext.to_owned() == lastpart {
                             found = true;

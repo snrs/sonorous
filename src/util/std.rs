@@ -51,14 +51,6 @@ pub mod str {
 
     /// Extensions to `str`.
     pub trait StrUtil<'self> {
-        /// Returns a slice of the given string starting from `begin`.
-        ///
-        /// # Failure
-        ///
-        /// If `begin` does not point to valid characters or beyond the last character of
-        /// the string
-        fn slice_to_end(&self, begin: uint) -> &'self str;
-
         /// Returns a slice of the given string starting from `begin` and up to the byte
         /// position `end`. `end` doesn't have to point to valid characters.
         ///
@@ -102,10 +94,6 @@ pub mod str {
     }
 
     impl<'self> StrUtil<'self> for &'self str {
-        fn slice_to_end(&self, begin: uint) -> &'self str {
-            self.slice(begin, self.len())
-        }
-
         fn slice_upto(&self, begin: uint, end: uint) -> &'self str {
             self.slice(begin, begin + self.count_bytes_upto(begin, end))
         }
@@ -139,7 +127,7 @@ pub mod str {
 
         fn scan_int(&self) -> Option<uint> {
             if self.starts_with("-") || self.starts_with("+") {
-                self.slice_to_end(1u).scan_uint().map(|&pos| pos + 1u)
+                self.slice_from(1u).scan_uint().map(|&pos| pos + 1u)
             } else {
                 self.scan_uint()
             }
@@ -148,7 +136,7 @@ pub mod str {
         fn scan_float(&self) -> Option<uint> {
             do self.scan_int().chain |pos| {
                 if self.len() > pos && self.char_at(pos) == '.' {
-                    let pos2 = self.slice_to_end(pos + 1u).scan_uint();
+                    let pos2 = self.slice_from(pos + 1u).scan_uint();
                     pos2.map(|&pos2| pos + pos2 + 1u)
                 } else {
                     Some(pos)
@@ -176,15 +164,15 @@ pub mod str {
     pub trait ShiftablePrefix {
         /// Returns a slice of given string with `self` at the start of the string stripped only
         /// once, if any.
-        fn prefix_shifted(&self, s: &str) -> Option<~str>;
+        fn prefix_shifted<'r>(&self, s: &'r str) -> Option<&'r str>;
     }
 
     impl ShiftablePrefix for char {
-        fn prefix_shifted(&self, s: &str) -> Option<~str> {
+        fn prefix_shifted<'r>(&self, s: &'r str) -> Option<&'r str> {
             if !s.is_empty() {
                 let CharRange {ch, next} = s.char_range_at(0u);
                 if ch == *self {
-                    return Some(s.slice_to_end(next).to_owned());
+                    return Some(s.slice_from(next));
                 }
             }
             None
@@ -192,9 +180,9 @@ pub mod str {
     }
 
     impl<'self> ShiftablePrefix for &'self str {
-        fn prefix_shifted(&self, s: &str) -> Option<~str> {
+        fn prefix_shifted<'r>(&self, s: &'r str) -> Option<&'r str> {
             if s.starts_with(*self) {
-                Some(s.slice_to_end(self.len()).to_owned())
+                Some(s.slice_from(self.len()))
             } else {
                 None
             }
