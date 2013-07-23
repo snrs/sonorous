@@ -169,19 +169,12 @@ impl<'self> ToStr for BmsCommand<'self> {
 /// Parser options for BMS format.
 pub struct BmsParserOptions<'self> {
     /// Message callback. Callback may return false in order to terminate the parsing.
-    callback: Option<&'self fn:Copy(line: Option<uint>, message: BmsMessage) -> bool>,
-}
-
-impl<'self> BmsParserOptions<'self> {
-    /// Creates default parser options.
-    pub fn new() -> BmsParserOptions<'self> {
-        BmsParserOptions { callback: None }
-    }
+    callback: Option<BmsMessageCallback<'self>>,
 }
 
 /// Iterates over the parsed BMS commands.
-pub fn each_bms_command_with_options<'r>(f: @::std::io::Reader, opts: &BmsParserOptions<'r>,
-                                         blk: &fn(BmsCommand) -> bool) -> bool {
+pub fn each_bms_command<'r>(f: @::std::io::Reader, opts: &BmsParserOptions<'r>,
+                            blk: &fn(BmsCommand) -> bool) -> bool {
     use util::std::str::StrUtil;
 
     macro_rules! diag(
@@ -576,10 +569,5 @@ pub fn each_bms_command_with_options<'r>(f: @::std::io::Reader, opts: &BmsParser
         yield!(BmsUnknown(line));
     }
     true
-}
-
-/// Iterates over the parsed BMS commands with default options.
-pub fn each_bms_command<'r>(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> bool {
-    each_bms_command_with_options(f, &BmsParserOptions::new(), blk)
 }
 

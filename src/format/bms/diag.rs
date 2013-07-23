@@ -140,3 +140,7 @@ impl ToStr for BmsMessage {
     }
 }
 
+/// A standard callback for BMS messages. The line is optional for global messages.
+pub type BmsMessageCallback<'self> =
+    &'self fn:Copy(line: Option<uint>, message: BmsMessage) -> bool;
+

@@ -97,12 +97,19 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     use ui::common::{check_exit, update_line};
     use ui::screen::Screen;
 
+    let callback: bms::diag::BmsMessageCallback = |line, msg| {
+        let atline = match line { Some(line) => fmt!(" at line %u", line), None => ~"" };
+        warn!("[%s%s] %s", msg.severity().to_str(), atline, msg.to_str());
+        true
+    };
+
     if opts.debug_dumpbmscommand {
         let f = match std::io::file_reader(&Path(bmspath)) {
             Ok(f) => f,
             Err(err) => die!("Couldn't load BMS file: %s", err)
         };
-        for bms::parse::each_bms_command(f) |cmd| {
+        let parseropts = bms::parse::BmsParserOptions { callback: Some(callback) };
+        for bms::parse::each_bms_command(f, &parseropts) |cmd| {
             match cmd {
                 bms::parse::BmsUnknown(*) => {}
                 cmd => { println(cmd.to_str()); }
@@ -113,7 +120,8 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
 
     // parses the file and sanitizes it
     let mut r = std::rand::rng();
-    let mut bms = match bms::parse_bms(bmspath, &mut r) {
+    let loaderopts = bms::load::BmsLoaderOptions { callback: Some(callback) };
+    let mut bms = match bms::load::load_bms(bmspath, &mut r, &loaderopts) {
         Ok(bms) => bms,
         Err(err) => die!("Couldn't load BMS file: %s", err)
     };
