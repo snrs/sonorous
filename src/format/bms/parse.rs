@@ -7,6 +7,7 @@
 use std::{uint, vec};
 use format::obj::{BPM, Duration, Seconds, Measures};
 use format::bms::types::{Key};
+use format::bms::diag::*;
 use format::bms::{ImageRef, BlitCmd};
 
 /// A tuple of four `u8` values. Mainly used for BMS #ARGB command and its family.
@@ -165,28 +166,74 @@ impl<'self> ToStr for BmsCommand<'self> {
     }
 }
 
+/// Parser options for BMS format.
+pub struct BmsParserOptions<'self> {
+    /// Message callback. Callback may return false in order to terminate the parsing.
+    callback: Option<&'self fn:Copy(line: Option<uint>, message: BmsMessage) -> bool>,
+}
+
+impl<'self> BmsParserOptions<'self> {
+    /// Creates default parser options.
+    pub fn new() -> BmsParserOptions<'self> {
+        BmsParserOptions { callback: None }
+    }
+}
+
 /// Iterates over the parsed BMS commands.
-pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> bool {
+pub fn each_bms_command_with_options<'r>(f: @::std::io::Reader, opts: &BmsParserOptions<'r>,
+                                         blk: &fn(BmsCommand) -> bool) -> bool {
     use util::std::str::StrUtil;
 
+    macro_rules! diag(
+        ($e:expr) => (
+            if opts.callback.is_some() && !opts.callback.get()(None, $e) { return false; }
+        );
+        ($e:expr at $line:expr) => (
+            if opts.callback.is_some() && !opts.callback.get()(Some($line), $e) { return false; }
+        )
+    )
+
     let lines = vec::split(f.read_whole_stream(), |&ch| ch == 10u8);
+    let mut lineno = 0;
     for lines.iter().advance |&line0| {
         let line0 = ::util::std::str::from_fixed_utf8_bytes(line0, |_| ~"\ufffd");
+        lineno += 1;
 
         // skip non-command lines
         let line = line0.trim_left();
         if line.is_empty() { loop; }
         let (ch, line) = line.slice_shift_char();
-        if !(ch == '#' || ch == '\uff03') { loop; } // typo (full-width sharp)
+        if ch == '\uff03' {
+            diag!(BmsHasFullWidthSharp at lineno);
+        } else if ch != '#' {
+            loop;
+        }
 
         let upperline = line.to_ascii_upper();
 
+        // yields a `BmsCommand` and restarts the loop
+        macro_rules! yield(
+            ($e:expr) => ({
+                if blk($e) { loop; } else { return false; }
+            })
+        )
+
+        // matches a prefix and performs predefined or custom actions
         macro_rules! if_prefix(
             ($prefix:expr -> $constr:ident string) => (
                 if_prefix!($prefix { // #<command> <string>
                     let mut text = "";
                     if lex!(line; ws, str* -> text, ws*, !) {
-                        if !blk($constr(text)) { return false; }
+                        yield!($constr(text));
+                    }
+                })
+            );
+            ($prefix:expr -> $constr:ident string ($diag:expr)) => (
+                if_prefix!($prefix { // #<command> <string>
+                    let mut text = "";
+                    if lex!(line; ws, str* -> text, ws*, !) {
+                        diag!($diag at lineno);
+                        yield!($constr(text));
                     }
                 })
             );
@@ -194,15 +241,27 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
                 if_prefix!($prefix { // #<command> <int>
                     let mut value = 0;
                     if lex!(line; ws, int -> value) {
-                        if !blk($constr(value)) { return false; }
+                        yield!($constr(value));
                     }
                 })
             );
-            ($prefix:expr -> $constr:ident (ws) value) => (
+            ($prefix:expr -> $constr:ident value ($diag:expr)) => (
+                if_prefix!($prefix { // #<command> <int>
+                    let mut value = 0;
+                    if lex!(line; ws, int -> value) {
+                        diag!($diag at lineno);
+                        yield!($constr(value));
+                    }
+                })
+            );
+            ($prefix:expr -> $constr:ident (ws) value ($diag:expr)) => (
                 if_prefix!($prefix { // #<command> <int>, but the whitespace is omissible
                     let mut value = 0;
-                    if lex!(line; ws*, int -> value) {
-                        if !blk($constr(value)) { return false; }
+                    if lex!(line; ws, int -> value) {
+                        yield!($constr(value));
+                    } else if lex!(line; int -> value) {
+                        diag!($diag at lineno);
+                        yield!($constr(value));
                     }
                 })
             );
@@ -211,22 +270,39 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
                     let mut key = Key(-1);
                     let mut text = "";
                     if lex!(line; Key -> key, ws, str -> text, ws*, !) {
-                        if !blk($constr(key, text)) { return false; }
+                        yield!($constr(key, text));
+                    }
+                })
+            );
+            ($prefix:expr -> $constr:ident key string ($diag:expr)) => (
+                if_prefix!($prefix { // #<command>xx <string>
+                    let mut key = Key(-1);
+                    let mut text = "";
+                    if lex!(line; Key -> key, ws, str -> text, ws*, !) {
+                        diag!($diag at lineno);
+                        yield!($constr(key, text));
                     }
                 })
             );
             ($prefix:expr -> $constr:ident) => (
-                if_prefix!($prefix { // #<command>
-                    if !blk($constr) { return false; }
-                })
+                // Rust: unreachable code sometimes causes an ICE. (#7344)
+                if upperline.starts_with($prefix) {
+                    yield!($constr);
+                }
             );
-            ($prefix:expr $blk:expr) => ({
+            ($prefix:expr -> $constr:ident ($diag:expr)) => (
+                if upperline.starts_with($prefix) {
+                    diag!($diag at lineno);
+                    yield!($constr);
+                }
+            );
+            ($prefix:expr $then:expr) => ({
                 let prefix: &'static str = $prefix;
                 if upperline.starts_with(prefix) {
                     let line = line.slice_from(prefix.len());
                     let _ = line; // removes warning
-                    $blk;
-                    loop;
+                    $then;
+                    yield!(BmsUnknown(line)); // no more matching possible
                 }
             })
         )
@@ -234,7 +310,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
         if_prefix!("TITLE"     -> BmsTitle     string)
         if_prefix!("SUBTITLE"  -> BmsSubtitle  string)
         if_prefix!("GENRE"     -> BmsGenre     string)
-        if_prefix!("GENLE"     -> BmsGenre     string) // typo
+        if_prefix!("GENLE"     -> BmsGenre     string (BmsHasGENLE))
         if_prefix!("ARTIST"    -> BmsArtist    string)
         if_prefix!("SUBARTIST" -> BmsSubartist string)
         if_prefix!("MAKER"     -> BmsMaker     string)
@@ -247,9 +323,18 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
             let mut key = Key(-1);
             let mut bpm = 0.0;
             if lex!(line; Key -> key, ws, float -> bpm) {
-                if !blk(BmsExBPM(key, BPM(bpm))) { return false; }
+                yield!(BmsExBPM(key, BPM(bpm)));
             } else if lex!(line; ws, float -> bpm) {
-                if !blk(BmsBPM(BPM(bpm))) { return false; }
+                yield!(BmsBPM(BPM(bpm)));
+            }
+        })
+
+        if_prefix!("EXBPM" { // #EXBPMxx <float>
+            let mut key = Key(-1);
+            let mut bpm = 0.0;
+            if lex!(line; Key -> key, ws, float -> bpm) {
+                diag!(BmsHasEXBPM at lineno);
+                yield!(BmsExBPM(key, BPM(bpm)));
             }
         })
 
@@ -264,7 +349,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
         if_prefix!("LNOBJ" { // #LNOBJ <key>
             let mut key = Key(-1);
             if lex!(line; ws, Key -> key) {
-                if !blk(BmsLNObj(key)) { return false; }
+                yield!(BmsLNObj(key));
             }
         })
 
@@ -272,7 +357,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
             let mut key = Key(-1);
             let mut value = 0;
             if lex!(line; Key -> key, ws, int -> value) {
-                if !blk(BmsExRank(key, value)) { return false; }
+                yield!(BmsExRank(key, value));
             }
         })
 
@@ -289,7 +374,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
                     }
                 }
                 if okay {
-                    if !blk(BmsLanes(lanes)) { return false; }
+                    yield!(BmsLanes(lanes));
                 }
             }
         })
@@ -299,7 +384,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
             let mut key = Key(0);
             let mut value = 0;
             if lex!(line; ws, int -> cmd, ws, Key -> key, ws, int -> value) {
-                if !blk(BmsWAVCmd(cmd, key, value)) { return false; }
+                yield!(BmsWAVCmd(cmd, key, value));
             }
         })
 
@@ -342,7 +427,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
                         if okay {
                             let mut text = "";
                             if lex!(line_; ws, str -> text, ws*, !) {
-                                if !blk(BmsExWAV(key, pan, vol, freq, text)) { return false; }
+                                yield!(BmsExWAV(key, pan, vol, freq, text));
                             }
                         }
                     }
@@ -351,16 +436,16 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
             }
         })
 
-        if_prefix!("BMP"      -> BmsBMP key string)
-        if_prefix!("BACKBMP"  -> BmsBackBMP string)
-        if_prefix!("POORBGA"  -> BmsPoorBGA  value)
+        if_prefix!("BMP"     -> BmsBMP key string)
+        if_prefix!("BACKBMP" -> BmsBackBMP string)
+        if_prefix!("POORBGA" -> BmsPoorBGA  value)
 
         if_prefix!("EXBMP" { // #EXBMPxx <int8>,<int8>,<int8>,<int8> <string>
             let mut key = Key(0);
             let mut argb = (0,0,0,0);
             let mut text = "";
             if lex!(line; Key -> key, ws, ARGB -> argb, ws, str -> text, ws*, !) {
-                if !blk(BmsExBMP(key, argb, text)) { return false; }
+                yield!(BmsExBMP(key, argb, text));
             }
         })
 
@@ -373,7 +458,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
                     int -> bc.x2, ws, int -> bc.y2, ws, int -> bc.dx, ws, int -> bc.dy) {
                 bc.src = ImageRef(src);
                 bc.dst = ImageRef(dst);
-                if !blk(BmsBGA(bc)) { return false; }
+                yield!(BmsBGA(bc));
             }
         })
 
@@ -388,7 +473,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
                 bc.dst = ImageRef(dst);
                 bc.x2 += bc.x1;
                 bc.y2 += bc.y1;
-                if !blk(BmsBGA(bc)) { return false; }
+                yield!(BmsBGA(bc));
             }
         })
 
@@ -404,9 +489,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
                           Key -> linekey, ws*, ':', ws*, int -> doloop, ws*, ':', ws*,
                           ARGB -> argb, ws, str -> pattern, ws*, !) {
                 if doloop == 0 || doloop == 1 {
-                    if !blk(BmsSwBGA(key, fr, time, linekey, doloop == 1, argb, pattern)) {
-                        return false;
-                    }
+                    yield!(BmsSwBGA(key, fr, time, linekey, doloop == 1, argb, pattern));
                 }
             }
         })
@@ -415,7 +498,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
             let mut key = Key(0);
             let mut argb = (0,0,0,0);
             if lex!(line; Key -> key, ws, ARGB -> argb) {
-                if !blk(BmsARGB(key, argb)) { return false; }
+                yield!(BmsARGB(key, argb));
             }
         })
 
@@ -427,7 +510,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
             let mut width = 0;
             let mut height = 0;
             if lex!(line; ws, int -> width, ws, int -> height) {
-                if !blk(BmsCanvasSize(width, height)) { return false; }
+                yield!(BmsCanvasSize(width, height));
             }
         })
 
@@ -436,7 +519,7 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
             let mut duration = 0;
             if lex!(line; Key -> key, ws, int -> duration) {
                 let duration = Measures(duration as float / 192.0);
-                if !blk(BmsStop(key, duration)) { return false; }
+                yield!(BmsStop(key, duration));
             }
         })
 
@@ -445,10 +528,10 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
             let mut frac = 0;
             let mut duration = 0;
             if lex!(line; Measure -> measure, '.', uint -> frac, ws,
-                    int -> duration) && duration > 0 {
+                          int -> duration) && duration > 0 {
                 let pos = measure as float + frac as float * 0.001;
                 let duration = Seconds(duration as float * 0.001);
-                if !blk(BmsStp(pos, duration)) { return false; }
+                yield!(BmsStp(pos, duration));
             }
         })
 
@@ -465,15 +548,16 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
         if_prefix!("SKIP"      -> BmsSkip           )
         if_prefix!("DEF"       -> BmsDef            )
 
-        if_prefix!("RANDOM"    -> BmsRandom (ws) value) // typo (omissible whitespace)
-        if_prefix!("RONDAM"    -> BmsRandom      value) // typo
+        if_prefix!("RANDOM"    -> BmsRandom (ws) value (BmsHasRANDOMWithoutWhitespace))
+        if_prefix!("RONDAM"    -> BmsRandom      value (BmsHasRONDAM))
         if_prefix!("SETRANDOM" -> BmsSetRandom   value)
         if_prefix!("ENDRANDOM" -> BmsEndRandom        )
-        if_prefix!("IFEND"     -> BmsEndIf            ) // typo
-        if_prefix!("IF"        -> BmsIf     (ws) value) // typo (omissible whitespace)
+        if_prefix!("IFEND"     -> BmsEndIf             (BmsHasIFEND))
+        if_prefix!("IF"        -> BmsIf     (ws) value (BmsHasIFWithoutWhitespace))
         if_prefix!("ELSEIF"    -> BmsElseIf      value)
         if_prefix!("ELSE"      -> BmsElse             )
-        if_prefix!("END"       -> BmsEndIf            )
+        if_prefix!("ENDIF"     -> BmsEndIf            )
+        if_prefix!("END"       -> BmsEndIf             (BmsHasENDNotFollowedByIF))
 
         let mut measure = 0;
         let mut chan = Key(0);
@@ -482,17 +566,20 @@ pub fn each_bms_command(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> 
             if chan == Key(2) { // #xxx02:<float>
                 let mut shorten = 0.0;
                 if lex!(data; ws*, float -> shorten) {
-                    if !blk(BmsShorten(measure, shorten)) { return false; }
-                    loop;
+                    yield!(BmsShorten(measure, shorten));
                 }
             } else {
-                if !blk(BmsData(measure, chan, data)) { return false; }
-                loop;
+                yield!(BmsData(measure, chan, data));
             }
         }
 
-        if !blk(BmsUnknown(line)) { return false; }
+        yield!(BmsUnknown(line));
     }
     true
+}
+
+/// Iterates over the parsed BMS commands with default options.
+pub fn each_bms_command<'r>(f: @::std::io::Reader, blk: &fn(BmsCommand) -> bool) -> bool {
+    each_bms_command_with_options(f, &BmsParserOptions::new(), blk)
 }
 

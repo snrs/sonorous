@@ -41,6 +41,7 @@ use format::pointer::Pointer;
 pub use format::bms::types::{Key, MAXKEY};
 
 pub mod types;
+pub mod diag;
 pub mod parse;
 
 /// Sound reference.
