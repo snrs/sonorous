@@ -155,14 +155,8 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         let ~(opts, bms, infos, keyspec) = port.recv();
 
         // initialize SDL
-        init::init_sdl();
+        init::init_audio();
         for opts.joystick.iter().advance |&joyidx| { init::init_joystick(joyidx); }
-
-        // read the input mapping (dependent to the SDL initialization)
-        let keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
-            Ok(map) => ~map,
-            Err(err) => die!("%s", err)
-        };
 
         // uncompress and populate the bitmap font.
         let mut font = ~util::bmfont::Font();
@@ -172,8 +166,17 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
 
         // initialize the screen if required
         let mut screen = None;
+        let keymap;
         if opts.has_screen() {
             screen = Some(init::init_video(opts.is_exclusive(), opts.fullscreen));
+            // this requires a video subsystem.
+            keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
+                Ok(map) => ~map,
+                Err(err) => die!("%s", err)
+            };
+        } else {
+            // in this case we explicitly ignore keymaps
+            keymap = ~std::hashmap::HashMap::new();
         }
 
         // Rust: `|| { if opts.is_exclusive() { update_line(~""); } }` segfaults due to

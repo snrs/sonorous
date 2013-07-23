@@ -13,10 +13,15 @@ pub static SCREENW: uint = 800;
 /// The height of screen, unless the exclusive mode.
 pub static SCREENH: uint = 600;
 
-/// Creates a small screen for BGAs (`BGAW` by `BGAH` pixels) if `exclusive` is set,
-/// or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise. `fullscreen` is ignored
-/// when `exclusive` is set.
+/// Initializes SDL video subsystem, and creates a small screen for BGAs (`BGAW` by `BGAH` pixels)
+/// if `exclusive` is set, or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise.
+/// `fullscreen` is ignored when `exclusive` is set.
 pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
+    if !init([InitVideo]) {
+        die!("SDL Initialization Failure: %s", get_error());
+    }
+    img::init([img::InitJPG, img::InitPNG]);
+
     let (width, height, fullscreen) = if exclusive {
         (BGAW, BGAH, false)
     } else {
@@ -29,16 +34,16 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
     if !exclusive {
         mouse::set_cursor_visible(false);
     }
+
     wm::set_caption(::version(), "");
     screen
 }
 
-/// Initializes an SDL, SDL_image and SDL_mixer.
-pub fn init_sdl() {
-    if !init([InitVideo, InitAudio, InitJoystick]) {
+/// Initializes SDL audio subsystem and SDL_mixer.
+pub fn init_audio() {
+    if !init([InitAudio]) {
         die!("SDL Initialization Failure: %s", get_error());
     }
-    img::init([img::InitJPG, img::InitPNG]);
     //mixer::init([mixer::InitOGG, mixer::InitMP3]); // TODO
     if mixer::open(SAMPLERATE, audio::S16AudioFormat, audio::Stereo, 2048).is_err() {
         die!("SDL Mixer Initialization Failure");
@@ -47,6 +52,9 @@ pub fn init_sdl() {
 
 /// Initializes a joystick with given index.
 pub fn init_joystick(joyidx: uint) -> ~joy::Joystick {
+    if !init([InitJoystick]) {
+        die!("SDL Initialization Failure: %s", get_error());
+    }
     unsafe {
         joy::ll::SDL_JoystickEventState(1); // TODO rust-sdl patch
     }
