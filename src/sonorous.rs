@@ -39,6 +39,7 @@
 extern mod extra;
 extern mod sdl;
 extern mod opengles;
+extern mod encoding;
 
 // see below for specifics.
 use self::util::std::str::*;

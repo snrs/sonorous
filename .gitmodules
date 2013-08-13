@@ -7,3 +7,6 @@
 [submodule "libs/w32api-directx-standalone"]
 	path = libs/w32api-directx-standalone
 	url = https://github.com/lifthrasiir/w32api-directx-standalone.git
+[submodule "libs/rust-encoding"]
+	path = libs/rust-encoding
+	url = https://github.com/lifthrasiir/rust-encoding.git
