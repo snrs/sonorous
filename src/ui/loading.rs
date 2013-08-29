@@ -7,9 +7,9 @@
 use sdl::*;
 use format::timeline::TimelineInfo;
 use format::bms::{Bms, Key};
-use util::gl::Texture;
+use util::gl::{Texture, ShadedDrawingTraits, TexturedDrawingTraits};
 use util::gfx::*;
-use util::bmfont::{Font, LeftAligned, Centered, RightAligned};
+use util::bmfont::{LeftAligned, Centered, RightAligned};
 use engine::keyspec::KeySpec;
 use engine::resource::{SoundResource, NoSound, ImageResource, NoImage, Image};
 use engine::resource::{get_basedir, load_sound, load_image, apply_blitcmd};
@@ -87,7 +87,7 @@ impl LoadingScene {
 
     /// Renders the graphical loading screen by blitting BMS #STAGEFILE image (if any) and showing
     /// the metadata.
-    pub fn render(&self, screen: &Screen, font: &Font, msg: Option<~str>) {
+    pub fn render(&self, screen: &Screen, msg: Option<~str>) {
         let msg = msg.get_or_default(~"loading...");
 
         screen.clear();
@@ -95,9 +95,9 @@ impl LoadingScene {
         let W = SCREENW as f32;
         let H = SCREENH as f32;
 
-        do screen.draw_shaded() |d| {
-            font.draw_string(d, W/2.0, H/2.0-16.0, 2.0, Centered, "loading bms file...",
-                             Gradient(RGB(0x80,0x80,0x80), RGB(0x20,0x20,0x20)));
+        do screen.draw_shaded_with_font |d| {
+            d.string(W/2.0, H/2.0-16.0, 2.0, Centered, "loading bms file...",
+                     Gradient(RGB(0x80,0x80,0x80), RGB(0x20,0x20,0x20)));
         }
 
         if self.stagefile_tex.is_some() {
@@ -110,15 +110,15 @@ impl LoadingScene {
         if self.showinfo {
             let bg = RGBA(0x10,0x10,0x10,0xc0);
             let fg = Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80));
-            do screen.draw_shaded() |d| {
+            do screen.draw_shaded_with_font |d| {
                 d.rect(0.0, 0.0, W, 42.0, bg);
                 d.rect(0.0, H-20.0, W, H, bg);
-                font.draw_string(d, 6.0, 4.0, 2.0, LeftAligned, self.title, fg);
-                font.draw_string(d, W-8.0, 4.0, 1.0, RightAligned, self.genre, fg);
-                font.draw_string(d, W-8.0, 20.0, 1.0, RightAligned, self.artist, fg);
-                font.draw_string(d, 3.0, H-18.0, 1.0, LeftAligned, self.brief, fg);
-                font.draw_string(d, W-3.0, H-18.0, 1.0, RightAligned, msg,
-                                 Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x80,0x80,0x80)));
+                d.string(6.0, 4.0, 2.0, LeftAligned, self.title, fg);
+                d.string(W-8.0, 4.0, 1.0, RightAligned, self.genre, fg);
+                d.string(W-8.0, 20.0, 1.0, RightAligned, self.artist, fg);
+                d.string(3.0, H-18.0, 1.0, LeftAligned, self.brief, fg);
+                d.string(W-3.0, H-18.0, 1.0, RightAligned, msg,
+                         Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x80,0x80,0x80)));
             }
         }
 
@@ -186,14 +186,14 @@ pub fn load_resource(bms: &Bms, opts: &Options,
 
 /// A callback template for `load_resource` with the graphical loading screen.
 pub fn graphic_update_status(path: Option<~str>, screen: &Screen, scene: &LoadingScene,
-                             font: &Font, ticker: &mut Ticker, atexit: &fn()) {
+                             ticker: &mut Ticker, atexit: &fn()) {
     // Rust: `on_tick` calls the closure at most once so `path` won't be referenced twice,
     //       but the analysis can't reason that. (#4654) an "option dance" via
     //       `Option<T>::swap_unwrap` is not helpful here since `path` can be `None`.
     let mut path = path; // XXX #4654
     do ticker.on_tick(get_ticks()) {
         let path = ::std::util::replace(&mut path, None); // XXX #4654
-        scene.render(screen, font, path);
+        scene.render(screen, path);
     }
     check_exit(atexit);
 }

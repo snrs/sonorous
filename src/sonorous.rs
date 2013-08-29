@@ -159,12 +159,6 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         init::init_audio();
         for opts.joystick.iter().advance |&joyidx| { init::init_joystick(joyidx); }
 
-        // uncompress and populate the bitmap font.
-        let mut font = ~util::bmfont::Font();
-        font.create_zoomed_font(1);
-        font.create_zoomed_font(2);
-        let font = font;
-
         // initialize the screen if required
         let mut screen = None;
         let keymap;
@@ -192,16 +186,16 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         if !opts.is_exclusive() {
             let screen_: &Screen = screen.get_ref();
             let mut scene = loading::LoadingScene::new(&bms, &infos, keyspec, opts);
-            scene.render(screen_, font, None);
+            scene.render(screen_, None);
             scene.load_stagefile();
-            scene.render(screen_, font, None);
+            scene.render(screen_, None);
             if opts.showinfo {
                 loading_scene = Some(scene);
                 update_status = |path| {
                     let screen: &Screen = screen.get_ref();
                     let loading_scene: &loading::LoadingScene = loading_scene.get_ref();
                     loading::graphic_update_status(path, screen, loading_scene,
-                                                   font, &mut ticker, || atexit()) // XXX #7363
+                                                   &mut ticker, || atexit()) // XXX #7363
                 };
             } else {
                 update_status = |_path| {};
@@ -236,7 +230,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
                     @mut playing::BGAOnlyDisplay(screen, imgres) as @mut playing::Display
                 } else {
                     match playing::GraphicDisplay(player.opts, player.keyspec,
-                                                  screen, font, imgres) {
+                                                  screen, imgres) {
                         Ok(display) => @mut display as @mut playing::Display,
                         Err(err) => die!("%s", err)
                     }

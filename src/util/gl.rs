@@ -581,59 +581,6 @@ impl ShadedDrawing {
         ShadedDrawing { prim: prim, vertices: ~[] }
     }
 
-    /// Adds a point to the state, with a direct RGBA color.
-    pub fn point_rgba(&mut self, x: f32, y: f32, (r, g, b, a): (u8,u8,u8,u8)) {
-        self.vertices.push((x, y, r, g, b, a));
-    }
-
-    /// Adds a point to the state.
-    pub fn point(&mut self, x: f32, y: f32, c: video::Color) {
-        self.point_rgba(x, y, to_rgba(c));
-    }
-
-    /// Adds a triangle to the state, with an uniform color.
-    pub fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32,
-                    c: video::Color) {
-        let (r, g, b, a) = to_rgba(c);
-        self.vertices.push_all([(x1, y1, r, g, b, a), (x2, y2, r, g, b, a), (x3, y3, r, g, b, a)]);
-    }
-
-    /// Adds four points of a rectangle to the state, with direct RGBA colors.
-    pub fn rect_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
-                     (r11, g11, b11, a11): (u8,u8,u8,u8), (r12, g12, b12, a12): (u8,u8,u8,u8),
-                     (r21, g21, b21, a21): (u8,u8,u8,u8), (r22, g22, b22, a22): (u8,u8,u8,u8)) {
-        if self.prim == gl::LINES || self.prim == gl::TRIANGLES {
-            self.vertices.push_all([(x1, y1, r11, g11, b11, a11), (x1, y2, r12, g12, b12, a12),
-                                    (x2, y2, r22, g22, b22, a22), (x1, y1, r11, g11, b11, a11),
-                                    (x2, y2, r22, g22, b22, a22), (x2, y1, r21, g21, b21, a21)]);
-        } else {
-            self.vertices.push_all([(x1, y1, r11, g11, b11, a11), (x1, y2, r12, g12, b12, a12),
-                                    (x2, y2, r22, g22, b22, a22), (x2, y1, r21, g21, b21, a21)]);
-        }
-    }
-
-    /// Adds four points of a rectangle to the state, with a horizontal gradient.
-    pub fn rect_horiz(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
-                      cx1: video::Color, cx2: video::Color) {
-        let rgbax1 = to_rgba(cx1);
-        let rgbax2 = to_rgba(cx2);
-        self.rect_rgba(x1, y1, x2, y2, rgbax1, rgbax2, rgbax1, rgbax2);
-    }
-
-    /// Adds four points of a rectangle to the state, with a vertical gradient.
-    pub fn rect_vert(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
-                     cy1: video::Color, cy2: video::Color) {
-        let rgbay1 = to_rgba(cy1);
-        let rgbay2 = to_rgba(cy2);
-        self.rect_rgba(x1, y1, x2, y2, rgbay1, rgbay1, rgbay2, rgbay2);
-    }
-
-    /// Adds four points of a rectangle to the state, with an uniform color.
-    pub fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: video::Color) {
-        let rgba = to_rgba(c);
-        self.rect_rgba(x1, y1, x2, y2, rgba, rgba, rgba, rgba);
-    }
-
     /// Draws specified primitives. The suitable program and scratch VBO should be supplied.
     pub fn draw_prim(~self, program: &ProgramForShades, buffer: &Buffer) {
         program.bind();
@@ -647,6 +594,81 @@ impl ShadedDrawing {
 
         buffer.upload(self.vertices, gl::DYNAMIC_DRAW);
         gl::draw_arrays(self.prim, 0, self.vertices.len() as GLsizei);
+    }
+}
+
+/// Common trait for shaded rendering interface.
+pub trait ShadedDrawingTraits {
+    /// Adds a point to the state, with a direct RGBA color.
+    pub fn point_rgba(&mut self, x: f32, y: f32, rgba: (u8,u8,u8,u8));
+
+    /// Adds a point to the state.
+    pub fn point(&mut self, x: f32, y: f32, c: video::Color);
+
+    /// Adds a triangle to the state, with an uniform color.
+    pub fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32,
+                    c: video::Color);
+
+    /// Adds four points of a rectangle to the state, with direct RGBA colors.
+    pub fn rect_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, rgba11: (u8,u8,u8,u8),
+                     rgba12: (u8,u8,u8,u8), rgba21: (u8,u8,u8,u8), rgba22: (u8,u8,u8,u8));
+
+    /// Adds four points of a rectangle to the state, with a horizontal gradient.
+    pub fn rect_horiz(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                      cx1: video::Color, cx2: video::Color);
+
+    /// Adds four points of a rectangle to the state, with a vertical gradient.
+    pub fn rect_vert(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                     cy1: video::Color, cy2: video::Color);
+
+    /// Adds four points of a rectangle to the state, with an uniform color.
+    pub fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: video::Color);
+}
+
+impl ShadedDrawingTraits for ShadedDrawing {
+    fn point_rgba(&mut self, x: f32, y: f32, (r, g, b, a): (u8,u8,u8,u8)) {
+        self.vertices.push((x, y, r, g, b, a));
+    }
+
+    fn point(&mut self, x: f32, y: f32, c: video::Color) {
+        self.point_rgba(x, y, to_rgba(c));
+    }
+
+    fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, c: video::Color) {
+        let (r, g, b, a) = to_rgba(c);
+        self.vertices.push_all([(x1, y1, r, g, b, a), (x2, y2, r, g, b, a), (x3, y3, r, g, b, a)]);
+    }
+
+    fn rect_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                 (r11, g11, b11, a11): (u8,u8,u8,u8), (r12, g12, b12, a12): (u8,u8,u8,u8),
+                 (r21, g21, b21, a21): (u8,u8,u8,u8), (r22, g22, b22, a22): (u8,u8,u8,u8)) {
+        if self.prim == gl::LINES || self.prim == gl::TRIANGLES {
+            self.vertices.push_all([(x1, y1, r11, g11, b11, a11), (x1, y2, r12, g12, b12, a12),
+                                    (x2, y2, r22, g22, b22, a22), (x1, y1, r11, g11, b11, a11),
+                                    (x2, y2, r22, g22, b22, a22), (x2, y1, r21, g21, b21, a21)]);
+        } else {
+            self.vertices.push_all([(x1, y1, r11, g11, b11, a11), (x1, y2, r12, g12, b12, a12),
+                                    (x2, y2, r22, g22, b22, a22), (x2, y1, r21, g21, b21, a21)]);
+        }
+    }
+
+    fn rect_horiz(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                  cx1: video::Color, cx2: video::Color) {
+        let rgbax1 = to_rgba(cx1);
+        let rgbax2 = to_rgba(cx2);
+        self.rect_rgba(x1, y1, x2, y2, rgbax1, rgbax2, rgbax1, rgbax2);
+    }
+
+    fn rect_vert(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                 cy1: video::Color, cy2: video::Color) {
+        let rgbay1 = to_rgba(cy1);
+        let rgbay2 = to_rgba(cy2);
+        self.rect_rgba(x1, y1, x2, y2, rgbay1, rgbay1, rgbay2, rgbay2);
+    }
+
+    fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: video::Color) {
+        let rgba = to_rgba(c);
+        self.rect_rgba(x1, y1, x2, y2, rgba, rgba, rgba, rgba);
     }
 }
 
@@ -668,42 +690,6 @@ impl TexturedDrawing {
                           prim: prim, vertices: ~[] }
     }
 
-    /// Adds a point to the state, with direct texture coordinates.
-    pub fn point_st(&mut self, x: f32, y: f32, (s, t): (f32,f32)) {
-        self.vertices.push((x, y, s, t));
-    }
-
-    /// Adds a point to the state.
-    pub fn point(&mut self, x: f32, y: f32, s: f32, t: f32) {
-        self.point_st(x, y, (s * self.width_recip, t * self.height_recip));
-    }
-
-    /// Adds four points of a rectangle to the state, with direct texture coordinates.
-    pub fn rect_st(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
-                   (s1, t1): (f32,f32), (s2, t2): (f32,f32)) {
-        if self.prim == gl::LINES || self.prim == gl::TRIANGLES {
-            self.vertices.push_all([(x1, y1, s1, t1), (x1, y2, s1, t2), (x2, y2, s2, t2),
-                                    (x1, y1, s1, t1), (x2, y2, s2, t2), (x2, y1, s2, t1)]);
-        } else {
-            self.vertices.push_all([(x1, y1, s1, t1), (x1, y2, s1, t2),
-                                    (x2, y2, s2, t2), (x2, y1, s2, t1)]);
-        }
-    }
-
-    /// Adds four points of a rectangle to the state, with a specified pixel area.
-    pub fn rect_area(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
-                     s1: f32, t1: f32, s2: f32, t2: f32) {
-        self.rect_st(x1, y1, x2, y2,
-                     (s1 * self.width_recip, t1 * self.height_recip),
-                     (s2 * self.width_recip, t2 * self.height_recip));
-    }
-
-    /// Adds four points of a rectangle to the state, where the whole texture is used for that
-    /// rectangle.
-    pub fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
-        self.rect_st(x1, y1, x2, y2, (0.0, 0.0), (1.0, 1.0));
-    }
-
     /// Draws specified primitives with given texture. The suitable program and scratch VBO
     /// should be supplied.
     pub fn draw_prim(~self, program: &ProgramForTextures, buffer: &Buffer, texture: &Texture) {
@@ -720,6 +706,58 @@ impl TexturedDrawing {
 
         buffer.upload(self.vertices, gl::DYNAMIC_DRAW);
         gl::draw_arrays(self.prim, 0, self.vertices.len() as GLsizei);
+    }
+}
+
+/// Common trait for textured rendering interface.
+pub trait TexturedDrawingTraits {
+    /// Adds a point to the state, with direct texture coordinates.
+    pub fn point_st(&mut self, x: f32, y: f32, st: (f32,f32));
+
+    /// Adds a point to the state.
+    pub fn point(&mut self, x: f32, y: f32, s: f32, t: f32);
+
+    /// Adds four points of a rectangle to the state, with direct texture coordinates.
+    pub fn rect_st(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, st1: (f32,f32), st2: (f32,f32));
+
+    /// Adds four points of a rectangle to the state, with a specified pixel area.
+    pub fn rect_area(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                     s1: f32, t1: f32, s2: f32, t2: f32);
+
+    /// Adds four points of a rectangle to the state, where the whole texture is used for that
+    /// rectangle.
+    pub fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32);
+}
+
+impl TexturedDrawingTraits for TexturedDrawing {
+    fn point_st(&mut self, x: f32, y: f32, (s, t): (f32,f32)) {
+        self.vertices.push((x, y, s, t));
+    }
+
+    fn point(&mut self, x: f32, y: f32, s: f32, t: f32) {
+        self.point_st(x, y, (s * self.width_recip, t * self.height_recip));
+    }
+
+    fn rect_st(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+               (s1, t1): (f32,f32), (s2, t2): (f32,f32)) {
+        if self.prim == gl::LINES || self.prim == gl::TRIANGLES {
+            self.vertices.push_all([(x1, y1, s1, t1), (x1, y2, s1, t2), (x2, y2, s2, t2),
+                                    (x1, y1, s1, t1), (x2, y2, s2, t2), (x2, y1, s2, t1)]);
+        } else {
+            self.vertices.push_all([(x1, y1, s1, t1), (x1, y2, s1, t2),
+                                    (x2, y2, s2, t2), (x2, y1, s2, t1)]);
+        }
+    }
+
+    fn rect_area(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                 s1: f32, t1: f32, s2: f32, t2: f32) {
+        self.rect_st(x1, y1, x2, y2,
+                     (s1 * self.width_recip, t1 * self.height_recip),
+                     (s2 * self.width_recip, t2 * self.height_recip));
+    }
+
+    fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
+        self.rect_st(x1, y1, x2, y2, (0.0, 0.0), (1.0, 1.0));
     }
 }
 

@@ -5,8 +5,10 @@
 //! Abstracted graphical screen.
 
 use sdl::video;
+use util::gl::{Buffer, Texture, ProgramForShades, ProgramForTextures,
+               ShadedDrawing, TexturedDrawing};
+use util::bmfont::{Font, FontDrawingUtils, ShadedFontDrawing};
 use gl = opengles::gl2;
-use glutil = util::gl;
 
 #[cfg(target_os="win32")] use opengles::egl;
 #[cfg(target_os="win32")] use ext::sdl::syswm;
@@ -123,11 +125,13 @@ pub struct Screen {
     /// OpenGL state if required.
     glstate: GLState,
     /// Shared vertex buffer object for drawing.
-    buffer: glutil::Buffer,
+    buffer: Buffer,
     /// OpenGL program for non-textured triangles.
-    program_for_shades: glutil::ProgramForShades,
+    program_for_shades: ProgramForShades,
     /// OpenGL program for textured triangles.
-    program_for_textures: glutil::ProgramForTextures,
+    program_for_textures: ProgramForTextures,
+    /// Shared bitmap font.
+    font: Font,
 }
 
 impl Screen {
@@ -171,8 +175,8 @@ impl Screen {
         ];
 
         // initialize shaders
-        let program_for_shades = earlyexit!(glutil::ProgramForShades::new());
-        let program_for_textures = earlyexit!(glutil::ProgramForTextures::new());
+        let program_for_shades = earlyexit!(ProgramForShades::new());
+        let program_for_textures = earlyexit!(ProgramForTextures::new());
         program_for_shades.bind();
         program_for_shades.projection.set_matrix_4f(false, projection);
         program_for_shades.local_transform.set_matrix_3f(false, local_transform);
@@ -182,9 +186,10 @@ impl Screen {
         program_for_textures.sampler.set_1i(0);
 
         Ok(Screen { width: width, height: height, sdl_surface: screen,
-                    glstate: glstate, buffer: glutil::Buffer::new(),
+                    glstate: glstate, buffer: Buffer::new(),
                     program_for_shades: program_for_shades,
-                    program_for_textures: program_for_textures })
+                    program_for_textures: program_for_textures,
+                    font: Font::new() })
     }
 
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
@@ -197,30 +202,42 @@ impl Screen {
 
     /// Draws shaded primitives to the screen. The block receives a mutable reference to
     /// `util::gl::ShadedDrawing`, to which it should add points.
-    pub fn draw_shaded_prim(&self, prim: gl::GLenum, f: &fn(&mut glutil::ShadedDrawing)) {
-        let mut drawing = ~glutil::ShadedDrawing::new(prim);
+    pub fn draw_shaded_prim(&self, prim: gl::GLenum, f: &fn(&mut ShadedDrawing)) {
+        let mut drawing = ~ShadedDrawing::new(prim);
         f(&mut *drawing);
+        drawing.draw_prim(&self.program_for_shades, &self.buffer);
+    }
+
+    /// Same as `draw_shaded_prim` but with a default font.
+    pub fn draw_shaded_prim_with_font(&self, prim: gl::GLenum, f: &fn(&mut ShadedFontDrawing)) {
+        let mut drawing = ~ShadedDrawing::new(prim);
+        drawing.with_font(&self.font, f);
         drawing.draw_prim(&self.program_for_shades, &self.buffer);
     }
 
     /// Draws shaded triangles to the screen. The block receives a mutable reference to
     /// `util::gl::ShadedDrawing`, to which it should add points.
-    pub fn draw_shaded(&self, f: &fn(&mut glutil::ShadedDrawing)) {
+    pub fn draw_shaded(&self, f: &fn(&mut ShadedDrawing)) {
         self.draw_shaded_prim(gl::TRIANGLES, f)
+    }
+
+    /// Same as `draw_shaded` but with a default font.
+    pub fn draw_shaded_with_font(&self, f: &fn(&mut ShadedFontDrawing)) {
+        self.draw_shaded_prim_with_font(gl::TRIANGLES, f)
     }
 
     /// Draws textured primitives to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
-    pub fn draw_textured_prim(&self, prim: gl::GLenum, texture: &glutil::Texture,
-                              f: &fn(&mut glutil::TexturedDrawing)) {
-        let mut drawing = ~glutil::TexturedDrawing::new(prim, texture);
+    pub fn draw_textured_prim(&self, prim: gl::GLenum, texture: &Texture,
+                              f: &fn(&mut TexturedDrawing)) {
+        let mut drawing = ~TexturedDrawing::new(prim, texture);
         f(&mut *drawing);
         drawing.draw_prim(&self.program_for_textures, &self.buffer, texture);
     }
 
     /// Draws textured triangles to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
-    pub fn draw_textured(&self, texture: &glutil::Texture, f: &fn(&mut glutil::TexturedDrawing)) {
+    pub fn draw_textured(&self, texture: &Texture, f: &fn(&mut TexturedDrawing)) {
         self.draw_textured_prim(gl::TRIANGLES, texture, f)
     }
 }

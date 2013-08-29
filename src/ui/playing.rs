@@ -8,9 +8,9 @@ use std::{int, uint, cmp, num};
 
 use ext::sdl::mpeg;
 use format::obj::*;
-use util::gl::{Texture, ShadedDrawing, TexturedDrawing};
+use util::gl::{Texture, ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
 use util::gfx::*;
-use util::bmfont::{Font, LeftAligned, Centered};
+use util::bmfont::{FontDrawingUtils, LeftAligned, Centered};
 use engine::keyspec::*;
 use engine::resource::{BGAW, BGAH};
 use engine::resource::{ImageResource, NoImage, Image, Movie};
@@ -337,8 +337,6 @@ pub struct GraphicDisplay {
     sprite: Texture,
     /// Display screen.
     screen: Screen,
-    /// Bitmap font.
-    font: ~Font,
     /// Image resources.
     imgres: ~[ImageResource],
 
@@ -366,9 +364,9 @@ pub struct GraphicDisplay {
 }
 
 /// Creates a new graphic display from the options, key specification, pre-allocated (usually
-/// by `init_video`) screen, pre-created bitmap fonts and pre-loaded image resources. The last
-/// three are owned by the display, others are not (in fact, should be owned by `Player`).
-pub fn GraphicDisplay(opts: &Options, keyspec: &KeySpec, screen: Screen, font: ~Font,
+/// by `init_video`) screen and pre-loaded image resources. The last three are owned by the display,
+/// others are not (in fact, should be owned by `Player`).
+pub fn GraphicDisplay(opts: &Options, keyspec: &KeySpec, screen: Screen,
                       imgres: ~[ImageResource]) -> Result<GraphicDisplay,~str> {
     let (leftmost, rightmost, styles) = match build_lane_styles(keyspec) {
         Ok(styles) => styles,
@@ -381,7 +379,7 @@ pub fn GraphicDisplay(opts: &Options, keyspec: &KeySpec, screen: Screen, font: ~
     let bgastate = BGARenderState::new(imgres);
 
     let display = GraphicDisplay {
-        sprite: sprite, screen: screen, font: font, imgres: imgres,
+        sprite: sprite, screen: screen, imgres: imgres,
         leftmost: leftmost, rightmost: rightmost, lanestyles: styles, bgax: bgax, bgay: bgay,
         poorlimit: None, gradelimit: None, lastbga: bgastate,
     };
@@ -401,8 +399,6 @@ static GRADES: &'static [(&'static str,Gradient)] = &[
 
 impl Display for GraphicDisplay {
     fn render(&mut self, player: &Player) {
-        let font = &*self.font;
-
         let W = SCREENW as f32;
         let H = SCREENH as f32;
 
@@ -507,7 +503,7 @@ impl Display for GraphicDisplay {
             }
         }
 
-        do self.screen.draw_shaded |d| {
+        do self.screen.draw_shaded_with_font |d| {
             // render non-note objects (currently, measure bars)
             for bottom.upto(&top) |ptr| {
                 match ptr.data() {
@@ -531,15 +527,14 @@ impl Display for GraphicDisplay {
                 let delta = (cmp::max(gradelimit - player.now, 400) as f32 - 400.0) / 15.0;
                 let cx = (self.leftmost / 2) as f32; // avoids half-pixels
                 let cy = H / 2.0 - delta; // offseted center
-                font.draw_string(d, cx, cy - 40.0, 2.0, Centered, gradename, gradecolor);
+                d.string(cx, cy - 40.0, 2.0, Centered, gradename, gradecolor);
                 if player.lastcombo > 1 {
-                    font.draw_string(d, cx, cy - 12.0, 1.0, Centered,
-                                     fmt!("%u COMBO", player.lastcombo),
-                                     Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80)));
+                    d.string(cx, cy - 12.0, 1.0, Centered, fmt!("%u COMBO", player.lastcombo),
+                             Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80)));
                 }
                 if player.opts.is_autoplay() {
-                    font.draw_string(d, cx, cy + 2.0, 1.0, Centered, "(AUTO)",
-                                     Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x40,0x40,0x40)));
+                    d.string(cx, cy + 2.0, 1.0, Centered, "(AUTO)",
+                             Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x40,0x40,0x40)));
                 }
             }
         }
@@ -549,28 +544,24 @@ impl Display for GraphicDisplay {
             d.rect_area(0.0, 0.0, W, 30.0, 0.0, 0.0, W, 30.0);
             d.rect_area(0.0, H-80.0, W, H, 0.0, H-80.0, W, H);
         }
-        do self.screen.draw_shaded |d| {
+        do self.screen.draw_shaded_with_font |d| {
             let elapsed = (player.now - player.origintime) / 1000;
             let duration = player.duration as uint;
             let durationmsec = (player.duration * 1000.0) as uint;
 
             // render panel text
             let black = RGB(0,0,0);
-            font.draw_string(d, 10.0, 8.0, 1.0, LeftAligned,
-                             fmt!("SCORE %07u", player.score), black);
+            d.string(10.0, 8.0, 1.0, LeftAligned, fmt!("SCORE %07u", player.score), black);
             let nominalplayspeed = player.nominal_playspeed();
-            font.draw_string(d, 5.0, H-78.0, 2.0, LeftAligned,
-                             fmt!("%4.1fx", nominalplayspeed), black);
-            font.draw_string(d, (self.leftmost-94) as f32, H-35.0, 1.0, LeftAligned,
-                             fmt!("%02u:%02u / %02u:%02u", elapsed/60, elapsed%60,
-                                                           duration/60, duration%60), black);
-            font.draw_string(d, 95.0, H-62.0, 1.0, LeftAligned,
-                             fmt!("@%9.4f", player.cur.loc.vpos), black);
-            font.draw_string(d, 95.0, H-78.0, 1.0, LeftAligned,
-                             fmt!("BPM %6.2f", *player.bpm), black);
+            d.string(5.0, H-78.0, 2.0, LeftAligned, fmt!("%4.1fx", nominalplayspeed), black);
+            d.string((self.leftmost-94) as f32, H-35.0, 1.0, LeftAligned,
+                     fmt!("%02u:%02u / %02u:%02u", elapsed/60, elapsed%60,
+                                                   duration/60, duration%60), black);
+            d.string(95.0, H-62.0, 1.0, LeftAligned, fmt!("@%9.4f", player.cur.loc.vpos), black);
+            d.string(95.0, H-78.0, 1.0, LeftAligned, fmt!("BPM %6.2f", *player.bpm), black);
             let timetick = cmp::min(self.leftmost, (player.now - player.origintime) *
                                                    self.leftmost / durationmsec);
-            font.draw_glyph(d, 6.0 + timetick as f32, H-52.0, 1.0, 95, RGB(0x40,0x40,0x40));
+            d.glyph(6.0 + timetick as f32, H-52.0, 1.0, 95, RGB(0x40,0x40,0x40));
 
             // render gauge
             if !player.opts.is_autoplay() {
