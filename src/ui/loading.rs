@@ -4,24 +4,64 @@
 
 //! Loading screen. Displays the STAGEFILE image and metadata while loading resources.
 
+use std::vec;
+use extra::deque::Deque;
+
 use sdl::*;
 use format::timeline::TimelineInfo;
 use format::bms::{Bms, Key};
 use util::gl::{Texture, ShadedDrawingTraits, TexturedDrawingTraits};
 use util::gfx::*;
 use util::bmfont::{LeftAligned, Centered, RightAligned};
+use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
 use engine::resource::{SoundResource, NoSound, ImageResource, NoImage, Image};
 use engine::resource::{get_basedir, load_sound, load_image, apply_blitcmd};
-use ui::common::{Ticker, check_exit, update_line};
+use engine::player::Player;
+use ui::common::{update_line};
 use ui::screen::Screen;
 use ui::options::Options;
 use ui::init::{SCREENW, SCREENH};
+use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, ReplaceScene, Exit};
+use ui::playing::PlayingScene;
+use ui::viewing::{ViewingScene, TextualViewingScene};
 
-/// Loading scene context.
-pub struct LoadingScene {
-    /// Same as `Options::showinfo`.
-    showinfo: bool,
+/// Jobs to be executed.
+pub enum LoadingJob {
+    LoadStageFile,
+    LoadSound(uint),
+    LoadImage(uint),
+}
+
+/// Scene-independent loading context.
+pub struct LoadingContext {
+    /// Game play options.
+    opts: ~Options,
+    /// Yet-to-be-loaded BMS data.
+    bms: Bms,
+    /// The derived timeline information.
+    infos: TimelineInfo,
+    /// The key specification.
+    keyspec: ~KeySpec,
+    /// The input mapping.
+    keymap: ~KeyMap,
+
+    /// The latest message from the resource loader.
+    message: Option<~str>,
+    /// A list of jobs to be executed.
+    jobs: Deque<LoadingJob>,
+    /// A number of total jobs queued.
+    ntotaljobs: uint,
+
+    /// The resource directory associated to the BMS data.
+    basedir: Path,
+    /// A loaded OpenGL texture for #STAGEFILE image.
+    stagefile: Option<Texture>,
+    /// A list of loaded sound resources. Initially populated with `NoSound`.
+    sndres: ~[SoundResource],
+    /// A list of loaded image resources. Initially populated with `NoImage`.
+    imgres: ~[ImageResource],
+
     /// Metadata string (level, BPM, number of notes etc).
     brief: ~str,
     /// Title string.
@@ -30,11 +70,6 @@ pub struct LoadingScene {
     genre: ~str,
     /// Artist string.
     artist: ~str,
-    /// A path to #STAGEFILE image. Since the resource engine performs its own path resolution
-    /// we just keep basedir and let the engine resolve it.
-    stagefile_path: Option<(Path,~str)>, // basedir, path
-    /// A loaded OpenGL texture for #STAGEFILE image.
-    stagefile_tex: Option<Texture>,
 }
 
 /// Returns the interface string common to the graphical and textual loading screen.
@@ -50,23 +85,45 @@ fn displayed_info(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec) -> (~str, 
     (brief, title, genre, artist)
 }
 
-impl LoadingScene {
-    /// Creates a state required for rendering the graphical loading screen.
-    pub fn new(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec, opts: &Options) -> LoadingScene {
-        let (brief, title, genre, artist) = displayed_info(bms, infos, keyspec);
-        let stagefile_path = do bms.meta.stagefile.map |&path| { (get_basedir(bms), path) };
-        LoadingScene { showinfo: opts.showinfo, brief: brief, title: title, genre: genre,
-                       artist: artist, stagefile_path: stagefile_path, stagefile_tex: None }
+impl LoadingContext {
+    /// Creates a loading context.
+    pub fn new(bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec, keymap: ~KeyMap,
+               opts: ~Options) -> LoadingContext {
+        let basedir = get_basedir(&bms);
+        let sndres = vec::from_elem(bms.meta.sndpath.len(), NoSound);
+        let imgres = vec::from_elem(bms.meta.imgpath.len(), NoImage);
+        let (brief, title, genre, artist) = displayed_info(&bms, &infos, keyspec);
+
+        let mut jobs = Deque::new();
+        if opts.has_bga() { // should go first
+            jobs.add_back(LoadStageFile);
+        }
+        for bms.meta.sndpath.iter().enumerate().advance |(i, path)| {
+            if path.is_some() { jobs.add_back(LoadSound(i)); }
+        }
+        if opts.has_bga() {
+            for bms.meta.imgpath.iter().enumerate().advance |(i, path)| {
+                if path.is_some() { jobs.add_back(LoadImage(i)); }
+            }
+        }
+        let njobs = jobs.len();
+
+        LoadingContext {
+            opts: opts, bms: bms, infos: infos, keyspec: keyspec, keymap: keymap,
+            message: None, jobs: jobs, ntotaljobs: njobs,
+            basedir: basedir, stagefile: None, sndres: sndres, imgres: imgres,
+            brief: brief, title: title, genre: genre, artist: artist,
+        }
     }
 
     /// Loads the BMS #STAGEFILE image and creates an OpenGL texture for it.
     pub fn load_stagefile(&mut self) {
-        let (basedir, path) = match self.stagefile_path {
-            Some((ref basedir, ref path)) => (basedir, path),
+        let path = match self.bms.meta.stagefile {
+            Some(ref path) => path,
             None => { return; }
         };
 
-        let tex_or_err = do load_image(*path, basedir, false).chain |res| {
+        let tex_or_err = do load_image(*path, &self.basedir, false).chain |res| {
             match res {
                 Image(surface) => {
                     // in principle we don't need this, but some STAGEFILEs mistakenly uses alpha
@@ -80,137 +137,238 @@ impl LoadingScene {
             }
         };
         match tex_or_err {
-            Ok(tex) => { self.stagefile_tex = Some(tex); }
+            Ok(tex) => { self.stagefile = Some(tex); }
             Err(_err) => { warn!("failed to load image #STAGEFILE (%s)", path.to_str()); }
         }
     }
 
-    /// Renders the graphical loading screen by blitting BMS #STAGEFILE image (if any) and showing
-    /// the metadata.
-    pub fn render(&self, screen: &Screen, msg: Option<~str>) {
-        let msg = msg.get_or_default(~"loading...");
+    /// Loads the sound and creates a `Chunk` for it.
+    pub fn load_sound(&mut self, i: uint) {
+        let path = self.bms.meta.sndpath[i].get_ref().clone();
+        self.message = Some(path.clone());
 
-        screen.clear();
+        match load_sound(path, &self.basedir) {
+            Ok(res) => { self.sndres[i] = res; }
+            Err(_) => { warn!("failed to load sound #WAV%s (%s)", Key(i as int).to_str(), path); }
+        }
+    }
+
+    /// Loads the image or movie and creates an OpenGL texture for it.
+    pub fn load_image(&mut self, i: uint) {
+        let path = self.bms.meta.imgpath[i].get_ref().clone();
+        self.message = Some(path.clone());
+
+        match load_image(path, &self.basedir, self.opts.has_movie()) {
+            Ok(res) => { self.imgres[i] = res; }
+            Err(_) => { warn!("failed to load image #BMP%s (%s)", Key(i as int).to_str(), path); }
+        }
+    }
+
+    /// Processes pending jobs. Returns true if there are any processed jobs.
+    pub fn process_jobs(&mut self) -> bool {
+        if self.jobs.is_empty() {
+            self.message = None;
+            false
+        } else {
+            match self.jobs.pop_front() {
+                LoadStageFile => { self.load_stagefile(); }
+                LoadSound(i)  => { self.load_sound(i); }
+                LoadImage(i)  => { self.load_image(i); }
+            }
+            true
+        }
+    }
+
+    /// Returns a ratio of processed jobs over all jobs.
+    pub fn processed_jobs_ratio(&self) -> float {
+        1.0 - (self.jobs.len() as float) / (self.ntotaljobs as float)
+    }
+
+    /// Returns completely loaded `Player` and `ImageResource`s.
+    pub fn to_player(self) -> (Player,~[ImageResource]) {
+        let LoadingContext {
+            opts: opts, bms: bms, infos: infos, keyspec: keyspec, keymap: keymap,
+            message: _, jobs: jobs, ntotaljobs: _,
+            basedir: _, stagefile: _, sndres: sndres, imgres: imgres,
+            brief: _, title: _, genre: _, artist: _
+        } = self;
+        assert!(jobs.is_empty());
+
+        let mut imgres = imgres;
+        for bms.meta.blitcmd.iter().advance |bc| {
+            apply_blitcmd(imgres, bc);
+        }
+
+        let duration = bms.timeline.duration(infos.originoffset,
+                                             |sref| sndres[**sref].duration());
+        let player = Player::new(opts, bms, infos, duration, keyspec, keymap, sndres);
+        (player, imgres)
+    }
+}
+
+/// Graphical loading scene context.
+pub struct LoadingScene {
+    /// Loading context.
+    context: LoadingContext,
+    /// Display screen.
+    screen: Screen,
+    /// The minimum number of ticks (as per `sdl::get_ticks()`) until the scene proceeds.
+    /// It is currently 3 seconds after the beginning of the scene.
+    waituntil: uint,
+}
+
+impl LoadingScene {
+    /// Creates a scene context required for rendering the graphical loading screen.
+    pub fn new(screen: Screen, bms: Bms, infos: TimelineInfo,
+               keyspec: ~KeySpec, keymap: ~KeyMap, opts: ~Options) -> ~LoadingScene {
+        ~LoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
+                        screen: screen, waituntil: 0 }
+    }
+}
+
+impl Scene for LoadingScene {
+    fn activate(&mut self) -> SceneCommand {
+        self.waituntil = get_ticks() + 3000;
+        Continue
+    }
+
+    fn scene_options(&self) -> SceneOptions { SceneOptions::new().fpslimit(20) }
+
+    fn tick(&mut self) -> SceneCommand {
+        loop {
+            match event::poll_event() {
+                event::KeyEvent(event::EscapeKey,_,_,_) => { return PopScene; }
+                event::QuitEvent => { return Exit; }
+                event::NoEvent => { break; },
+                _ => {}
+            }
+        }
+
+        if !self.context.process_jobs() {
+            if get_ticks() > self.waituntil { return ReplaceScene; }
+        }
+        Continue
+    }
+
+    fn render(&self) {
+        let msg = match self.context.message {
+            None => ~"loading...",
+            Some(ref msg) => fmt!("%s (%.0f%%)", *msg, 100.0 * self.context.processed_jobs_ratio()),
+        };
+
+        self.screen.clear();
 
         let W = SCREENW as f32;
         let H = SCREENH as f32;
 
-        do screen.draw_shaded_with_font |d| {
+        do self.screen.draw_shaded_with_font |d| {
             d.string(W/2.0, H/2.0-16.0, 2.0, Centered, "loading bms file...",
                      Gradient(RGB(0x80,0x80,0x80), RGB(0x20,0x20,0x20)));
         }
 
-        if self.stagefile_tex.is_some() {
-            let tex = self.stagefile_tex.get_ref();
-            do screen.draw_textured(tex) |d| {
+        if self.context.stagefile.is_some() {
+            let tex = self.context.stagefile.get_ref();
+            do self.screen.draw_textured(tex) |d| {
                 d.rect(0.0, 0.0, W, H);
             }
         }
 
-        if self.showinfo {
+        if self.context.opts.showinfo {
             let bg = RGBA(0x10,0x10,0x10,0xc0);
             let fg = Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80));
-            do screen.draw_shaded_with_font |d| {
+            do self.screen.draw_shaded_with_font |d| {
                 d.rect(0.0, 0.0, W, 42.0, bg);
                 d.rect(0.0, H-20.0, W, H, bg);
-                d.string(6.0, 4.0, 2.0, LeftAligned, self.title, fg);
-                d.string(W-8.0, 4.0, 1.0, RightAligned, self.genre, fg);
-                d.string(W-8.0, 20.0, 1.0, RightAligned, self.artist, fg);
-                d.string(3.0, H-18.0, 1.0, LeftAligned, self.brief, fg);
+                d.string(6.0, 4.0, 2.0, LeftAligned, self.context.title, fg);
+                d.string(W-8.0, 4.0, 1.0, RightAligned, self.context.genre, fg);
+                d.string(W-8.0, 20.0, 1.0, RightAligned, self.context.artist, fg);
+                d.string(3.0, H-18.0, 1.0, LeftAligned, self.context.brief, fg);
                 d.string(W-3.0, H-18.0, 1.0, RightAligned, msg,
                          Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x80,0x80,0x80)));
             }
         }
 
-        screen.swap_buffers();
+        self.screen.swap_buffers();
     }
-}
 
-/// Renders the textual loading screen by printing the metadata.
-pub fn show_stagefile_noscreen(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec, opts: &Options) {
-    if opts.showinfo {
-        let (brief, title, genre, artist) = displayed_info(bms, infos, keyspec);
-        ::std::io::stderr().write_line(fmt!("\
-----------------------------------------------------------------------------------------------
-Title:    %s\nGenre:    %s\nArtist:   %s\n%s
-----------------------------------------------------------------------------------------------",
-            title, genre, artist, brief));
-    }
-}
+    fn deactivate(&mut self) {}
 
-/// Loads the image and sound resources and calls a callback whenever a new resource has been
-/// loaded.
-pub fn load_resource(bms: &Bms, opts: &Options,
-                     callback: &fn(Option<~str>)) -> (~[SoundResource], ~[ImageResource]) {
-    let basedir = get_basedir(bms);
-
-    let sndres: ~[SoundResource] =
-        do bms.meta.sndpath.iter().enumerate().transform |(i, &path)| {
-            match path {
-                Some(path) => {
-                    callback(Some(path.clone()));
-                    match load_sound(path, &basedir) {
-                        Ok(res) => res,
-                        Err(_) => {
-                            warn!("failed to load sound #WAV%s (%s)", Key(i as int).to_str(), path);
-                            NoSound
-                        }
-                    }
-                },
-                None => NoSound
-            }
-        }.collect();
-    let mut imgres: ~[ImageResource] =
-        do bms.meta.imgpath.iter().enumerate().transform |(i, &path)| {
-            let path = if opts.has_bga() {path} else {None}; // skip loading BGAs if requested
-            match path {
-                Some(path) => {
-                    callback(Some(path.clone()));
-                    match load_image(path, &basedir, opts.has_movie()) {
-                        Ok(res) => res,
-                        Err(_) => {
-                            warn!("failed to load image #BMP%s (%s)", Key(i as int).to_str(), path);
-                            NoImage
-                        }
-                    }
-                },
-                None => NoImage
-            }
-        }.collect();
-
-    for bms.meta.blitcmd.iter().advance |bc| {
-        apply_blitcmd(imgres, bc);
-    }
-    (sndres, imgres)
-}
-
-/// A callback template for `load_resource` with the graphical loading screen.
-pub fn graphic_update_status(path: Option<~str>, screen: &Screen, scene: &LoadingScene,
-                             ticker: &mut Ticker, atexit: &fn()) {
-    // Rust: `on_tick` calls the closure at most once so `path` won't be referenced twice,
-    //       but the analysis can't reason that. (#4654) an "option dance" via
-    //       `Option<T>::swap_unwrap` is not helpful here since `path` can be `None`.
-    let mut path = path; // XXX #4654
-    do ticker.on_tick(get_ticks()) {
-        let path = ::std::util::replace(&mut path, None); // XXX #4654
-        scene.render(screen, path);
-    }
-    check_exit(atexit);
-}
-
-/// A callback template for `load_resource` with the textual loading screen.
-pub fn text_update_status(path: Option<~str>, ticker: &mut Ticker, atexit: &fn()) {
-    use util::std::str::StrUtil;
-    let mut path = path; // XXX #4654
-    do ticker.on_tick(get_ticks()) {
-        match ::std::util::replace(&mut path, None) { // XXX #4654
-            Some(path) => {
-                let path = if path.len() < 63 {path} else {path.slice_upto(0, 63).to_owned()};
-                update_line(~"Loading: " + path);
-            }
-            None => { update_line("Loading done."); }
+    fn consume(~self) -> ~Scene: {
+        let ~LoadingScene { context: context, screen: screen, waituntil: _ } = self;
+        let (player, imgres) = context.to_player();
+        match PlayingScene::new(player, screen, imgres) {
+            Ok(scene) => scene as ~Scene:,
+            Err(err) => die!("%s", err),
         }
     }
-    check_exit(atexit);
+}
+
+/// Textual loading scene context.
+pub struct TextualLoadingScene {
+    /// Loading context.
+    context: LoadingContext,
+    /// Display screen. This is not used by this scene but sent to the viewing scene.
+    screen: Option<Screen>,
+}
+
+impl TextualLoadingScene {
+    /// Creates a scene context required for rendering the textual loading screen.
+    pub fn new(screen: Option<Screen>, bms: Bms, infos: TimelineInfo,
+               keyspec: ~KeySpec, keymap: ~KeyMap, opts: ~Options) -> ~TextualLoadingScene {
+        ~TextualLoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
+                               screen: screen }
+    }
+}
+
+impl Scene for TextualLoadingScene {
+    fn activate(&mut self) -> SceneCommand {
+        if self.context.opts.showinfo {
+            ::std::io::stderr().write_line(fmt!("\
+----------------------------------------------------------------------------------------------
+Title:    %s
+Genre:    %s
+Artist:   %s
+%s
+----------------------------------------------------------------------------------------------",
+                self.context.title, self.context.genre, self.context.artist, self.context.brief));
+        }
+        Continue
+    }
+
+    fn scene_options(&self) -> SceneOptions { SceneOptions::new().fpslimit(20) }
+
+    fn tick(&mut self) -> SceneCommand {
+        if !self.context.process_jobs() {ReplaceScene} else {Continue}
+    }
+
+    fn render(&self) {
+        if self.context.opts.showinfo {
+            match self.context.message {
+                Some(ref msg) => {
+                    use util::std::str::StrUtil;
+                    let msg: &str = *msg;
+                    let msg = if msg.len() < 63 {msg} else {msg.slice_upto(0, 63)};
+                    update_line(fmt!("Loading: %s (%.0f%%)", msg,
+                                     100.0 * self.context.processed_jobs_ratio()));
+                }
+                None => { update_line("Loading done."); }
+            };
+        }
+    }
+
+    fn deactivate(&mut self) {
+        if self.context.opts.showinfo {
+            update_line("");
+        }
+    }
+
+    fn consume(~self) -> ~Scene: {
+        let ~TextualLoadingScene { context: context, screen: screen } = self;
+        let (player, imgres) = context.to_player();
+        match screen {
+            Some(screen) => ViewingScene::new(screen, imgres, player) as ~Scene:,
+            None => TextualViewingScene::new(player) as ~Scene:,
+        }
+    }
 }
 

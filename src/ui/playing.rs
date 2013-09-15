@@ -6,117 +6,19 @@
 
 use std::{int, uint, cmp, num};
 
-use ext::sdl::mpeg;
 use format::obj::*;
 use util::gl::{Texture, ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
 use util::gfx::*;
 use util::bmfont::{FontDrawingUtils, LeftAligned, Centered};
 use engine::keyspec::*;
 use engine::resource::{BGAW, BGAH};
-use engine::resource::{ImageResource, NoImage, Image, Movie};
-use engine::player::{BGAState, initial_bga_state, MISS, MAXGAUGE, Player};
-use ui::common::{Ticker, update_line};
+use engine::resource::ImageResource;
+use engine::player::{MISS, MAXGAUGE, Player};
 use ui::screen::Screen;
-use ui::options::*;
 use ui::init::{SCREENW, SCREENH};
-
-/// Similar to `BGAState` but also has a set of textures used to render the BGA.
-struct BGARenderState {
-    state: BGAState,
-    textures: ~[Texture]
-}
-
-trait Uploadable {
-    /// Uploads an associated surface to the texture if any.
-    pub fn upload_to_texture(&self, texture: &Texture);
-    /// Returns true if the resource should be updated continuously (i.e. movies or animations).
-    pub fn should_always_upload(&self) -> bool;
-}
-
-impl Uploadable for ImageResource {
-    pub fn upload_to_texture(&self, texture: &Texture) {
-        match *self {
-            NoImage => {}
-            Image(surface) | Movie(surface,_) => {
-                texture.upload_surface(surface, false, false);
-            }
-        }
-    }
-
-    pub fn should_always_upload(&self) -> bool {
-        match *self {
-            NoImage | Image(_) => false,
-            Movie(_,mpeg) => mpeg.status() == mpeg::SMPEG_PLAYING
-        }
-    }
-}
-
-impl BGARenderState {
-    /// Creates an initial state and textures.
-    pub fn new(imgres: &[ImageResource]) -> BGARenderState {
-        let state = initial_bga_state();
-        let textures = do state.map |&iref| {
-            let texture = match Texture::new(BGAW, BGAH) {
-                Ok(texture) => texture,
-                Err(err) => die!("Texture::new failed: %s", err)
-            };
-            for iref.iter().advance |&iref| {
-                imgres[**iref].upload_to_texture(&texture);
-            }
-            texture
-        };
-        BGARenderState { state: state, textures: textures }
-    }
-
-    /// Updates the BGA state. This method prepares given image resources for the next rendering,
-    /// notably by starting and stopping the movie playback and uploading textures as needed.
-    pub fn update(&mut self, current: &BGAState, imgres: &[ImageResource]) {
-        for uint::range(0, NLAYERS) |layer| {
-            // TODO this design can't handle the case that a BGA layer is updated to the same
-            // image reference, which should rewind the movie playback.
-            if self.state[layer] != current[layer] {
-                for self.state[layer].iter().advance |&iref| {
-                    imgres[**iref].stop_movie();
-                }
-                for current[layer].iter().advance |&iref| {
-                    imgres[**iref].start_movie();
-                    imgres[**iref].upload_to_texture(&self.textures[layer]);
-                }
-            } else {
-                for self.state[layer].iter().advance |&iref| {
-                    if imgres[**iref].should_always_upload() {
-                        imgres[**iref].upload_to_texture(&self.textures[layer]);
-                    }
-                }
-            }
-        }
-        self.state = *current;
-    }
-
-    /// Renders the image resources for the specified layers to the specified region of `screen`.
-    pub fn render(&self, screen: &Screen, layers: &[BGALayer], x: f32, y: f32) {
-        // the BGA area should have been already filled to black.
-        for layers.iter().advance |&layer| {
-            if self.state[layer as uint].is_some() {
-                do screen.draw_textured(&self.textures[layer as uint]) |d| {
-                    d.rect(x, y, x + BGAW as f32, y + BGAH as f32);
-                }
-            }
-        }
-    }
-}
-
-/// Display interface.
-pub trait Display {
-    /// Renders the current information from `player` to the screen or console. Called after
-    /// each call to `Player::tick`.
-    pub fn render(&mut self, player: &Player);
-    /// Shows the game play result from `player` to the screen or console. Called only once.
-    pub fn show_result(&self, player: &Player);
-}
-
-//----------------------------------------------------------------------------------------------
-// graphic display
+use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, ReplaceScene};
+use ui::viewing::BGARenderState;
+use ui::playresult::PlayResultScene;
 
 /// An appearance for each lane.
 struct LaneStyle {
@@ -265,14 +167,11 @@ fn build_lane_styles(keyspec: &KeySpec) ->
 }
 
 /// Creates a sprite.
-fn create_sprite(opts: &Options, leftmost: uint, rightmost: Option<uint>,
-                 styles: &[(Lane,LaneStyle)]) -> Texture {
+fn create_sprite(leftmost: uint, rightmost: Option<uint>, styles: &[(Lane,LaneStyle)]) -> Texture {
     let sprite = match new_surface(SCREENW + 400, SCREENH) {
         Ok(surface) => surface,
         Err(err) => die!("new_surface failed: %s", err)
     };
-    let black = RGB(0,0,0);
-    let gray = RGB(0x40,0x40,0x40); // gray used for separators
 
     // render notes and lane backgrounds
     for styles.iter().advance |&(_lane,style)| {
@@ -297,12 +196,13 @@ fn create_sprite(opts: &Options, leftmost: uint, rightmost: Option<uint>,
             }
         }
     }
-    sprite.fill_area((10, SCREENH-36), (leftmost, 1), gray);
+    sprite.fill_area((10, SCREENH-36), (leftmost, 1), RGB(0x40,0x40,0x40));
 
     // erase portions of panels left unused
     let leftgap = leftmost + 20;
     let rightgap = rightmost.map_default(SCREENW, |x| x - 20);
     let gapwidth = rightgap - leftgap;
+    let black = RGB(0,0,0);
     sprite.fill_area((leftgap, 0), (gapwidth, 30), black);
     sprite.fill_area((leftgap, SCREENH-80), (gapwidth, 80), black);
     do sprite.with_pixels |pixels| {
@@ -319,20 +219,16 @@ fn create_sprite(opts: &Options, leftmost: uint, rightmost: Option<uint>,
         }
     }
 
-    // draw the gauge bar if needed
-    if !opts.is_autoplay() {
-        sprite.fill_area((0, SCREENH-16), (368, 16), gray);
-        sprite.fill_area((4, SCREENH-12), (360, 8), black);
-    }
-
     match Texture::from_owned_surface(sprite, false, false) {
         Ok(tex) => tex,
         Err(err) => die!("Texture::from_owned_surface failed: %s", err)
     }
 }
 
-/// Full-featured graphic display. Used for the normal game play and automatic play mode.
-pub struct GraphicDisplay {
+/// Game play scene context. Used for the normal game play and automatic play mode.
+pub struct PlayingScene {
+    /// Game play state with various non-graphic resources.
+    player: Player,
     /// Sprite texture generated by `create_sprite`.
     sprite: Texture,
     /// Display screen.
@@ -363,28 +259,28 @@ pub struct GraphicDisplay {
     lastbga: BGARenderState,
 }
 
-/// Creates a new graphic display from the options, key specification, pre-allocated (usually
-/// by `init_video`) screen and pre-loaded image resources. The last three are owned by the display,
-/// others are not (in fact, should be owned by `Player`).
-pub fn GraphicDisplay(opts: &Options, keyspec: &KeySpec, screen: Screen,
-                      imgres: ~[ImageResource]) -> Result<GraphicDisplay,~str> {
-    let (leftmost, rightmost, styles) = match build_lane_styles(keyspec) {
-        Ok(styles) => styles,
-        Err(err) => { return Err(err); }
-    };
-    let centerwidth = rightmost.get_or_default(SCREENW) - leftmost;
-    let bgax = leftmost + (centerwidth - BGAW) / 2;
-    let bgay = (SCREENH - BGAH) / 2;
-    let sprite = create_sprite(opts, leftmost, rightmost, styles);
-    let bgastate = BGARenderState::new(imgres);
+impl PlayingScene {
+    /// Creates a new game play scene from the player, pre-allocated (usually by `init_video`)
+    /// screen and pre-loaded image resources. Other resources including pre-loaded sound resources
+    /// are included in the `player`.
+    pub fn new(player: Player, screen: Screen,
+               imgres: ~[ImageResource]) -> Result<~PlayingScene,~str> {
+        let (leftmost, rightmost, styles) = match build_lane_styles(player.keyspec) {
+            Ok(styles) => styles,
+            Err(err) => { return Err(err); }
+        };
+        let centerwidth = rightmost.get_or_default(SCREENW) - leftmost;
+        let bgax = leftmost + (centerwidth - BGAW) / 2;
+        let bgay = (SCREENH - BGAH) / 2;
+        let sprite = create_sprite(leftmost, rightmost, styles);
+        let bgastate = BGARenderState::new(imgres);
 
-    let display = GraphicDisplay {
-        sprite: sprite, screen: screen, imgres: imgres,
-        leftmost: leftmost, rightmost: rightmost, lanestyles: styles, bgax: bgax, bgay: bgay,
-        poorlimit: None, gradelimit: None, lastbga: bgastate,
-    };
-
-    Ok(display)
+        Ok(~PlayingScene {
+            player: player, sprite: sprite, screen: screen, imgres: imgres,
+            leftmost: leftmost, rightmost: rightmost, lanestyles: styles, bgax: bgax, bgay: bgay,
+            poorlimit: None, gradelimit: None, lastbga: bgastate,
+        })
+    }
 }
 
 /// The list of grade names and corresponding color scheme.
@@ -397,34 +293,56 @@ static GRADES: &'static [(&'static str,Gradient)] = &[
     ("COOL",  Gradient { zero: RGB(0xc0,0xc0,0xff), one: RGB(0x40,0x40,0xff) }),
 ];
 
-impl Display for GraphicDisplay {
-    fn render(&mut self, player: &Player) {
+impl Scene for PlayingScene {
+    fn activate(&mut self) -> SceneCommand { Continue }
+
+    fn scene_options(&self) -> SceneOptions { SceneOptions::new() }
+
+    fn tick(&mut self) -> SceneCommand {
+        // TODO `QuitEvent` should be handled by the scene and not the player!
+        if self.player.tick() {
+            // update display states
+            let mut poorlimit = self.poorlimit;
+            let mut gradelimit = self.gradelimit;
+            for self.player.lastgrade.iter().advance |&(grade,when)| {
+                if grade == MISS {
+                    // switches to the normal BGA after 600ms
+                    poorlimit = poorlimit.merge(Some(when + 600), cmp::max);
+                }
+                // grade disappears after 700ms
+                gradelimit = gradelimit.merge(Some(when + 700), cmp::max);
+            }
+            if poorlimit < Some(self.player.now) { poorlimit = None; }
+            if gradelimit < Some(self.player.now) { gradelimit = None; }
+            self.lastbga.update(&self.player.bga, self.imgres);
+            *&mut self.poorlimit = poorlimit;
+            *&mut self.gradelimit = gradelimit;
+
+            Continue
+        } else {
+            if self.player.opts.is_autoplay() { return PopScene; }
+
+            // check if the song reached the last gradable object (otherwise the game play was
+            // terminated by the user)
+            let nextgradable = self.player.cur.find_next_of_type(|obj| obj.is_gradable());
+            if nextgradable.is_some() { return PopScene; }
+
+            // otherwise move to the result screen
+            ReplaceScene
+        }
+    }
+
+    fn render(&self) {
         let W = SCREENW as f32;
         let H = SCREENH as f32;
-
-        // update display states
-        let mut poorlimit = self.poorlimit;
-        let mut gradelimit = self.gradelimit;
-        for player.lastgrade.iter().advance |&(grade,when)| {
-            if grade == MISS {
-                // switches to the normal BGA after 600ms
-                poorlimit = poorlimit.merge(Some(when + 600), cmp::max);
-            }
-            // grade disappears after 700ms
-            gradelimit = gradelimit.merge(Some(when + 700), cmp::max);
-        }
-        if poorlimit < Some(player.now) { poorlimit = None; }
-        if gradelimit < Some(player.now) { gradelimit = None; }
-        self.lastbga.update(&player.bga, self.imgres);
-        *&mut self.poorlimit = poorlimit;
-        *&mut self.gradelimit = gradelimit;
 
         self.screen.clear();
 
         // render BGAs (should render before the lanes since lanes can overlap with BGAs)
-        if player.opts.has_bga() {
-            let layers = if poorlimit.is_some() {&[PoorBGA]} else {&[Layer1, Layer2, Layer3]};
-            self.lastbga.render(&self.screen, layers, self.bgax as f32, self.bgay as f32);
+        if self.player.opts.has_bga() {
+            let layers = if self.poorlimit.is_some() {&[PoorBGA]} else {&[Layer1, Layer2, Layer3]};
+            self.lastbga.render(&self.screen, layers, self.bgax as f32, self.bgay as f32,
+                                BGAW as f32, BGAH as f32);
         }
 
         do self.screen.draw_shaded |d| {
@@ -440,26 +358,26 @@ impl Display for GraphicDisplay {
             }
         }
 
-        //let bottom = player.cur.find(ActualPos, -0.03 / player.playspeed);
-        //let top = player.cur.find(ActualPos, 1.22 / player.playspeed);
-        let bottom = player.cur.clone();
-        let top = player.cur.find(ActualPos, 1.25 / player.playspeed);
+        //let bottom = self.player.cur.find(ActualPos, -0.03 / self.player.playspeed);
+        //let top = self.player.cur.find(ActualPos, 1.22 / self.player.playspeed);
+        let bottom = self.player.cur.clone();
+        let top = self.player.cur.find(ActualPos, 1.25 / self.player.playspeed);
 
         let loc_to_y = |loc: &ObjLoc<float>| {
             let offset = loc.pos - bottom.loc.pos;
-            (SCREENH-70) - (400.0 * player.playspeed * offset) as uint
+            (SCREENH-70) - (400.0 * self.player.playspeed * offset) as uint
         };
 
         do self.screen.draw_textured(&self.sprite) |d| {
             // if we are in the reverse motion, do not draw objects before the motion start.
-            let localbottom = match player.reverse {
+            let localbottom = match self.player.reverse {
                 Some(reverse) => reverse.clone(),
                 None => bottom
             };
 
             // render objects
             for self.lanestyles.iter().advance |&(lane,style)| {
-                if player.key_pressed(lane) { style.render_pressed_back(d); }
+                if self.player.key_pressed(lane) { style.render_pressed_back(d); }
 
                 let front = do localbottom.find_next_of_type |&obj| {
                     obj.object_lane() == Some(lane) && obj.is_renderable()
@@ -520,19 +438,19 @@ impl Display for GraphicDisplay {
             }
 
             // render grading text
-            if gradelimit.is_some() && player.lastgrade.is_some() {
-                let gradelimit = gradelimit.get();
-                let (lastgrade,_) = player.lastgrade.get();
+            if self.gradelimit.is_some() && self.player.lastgrade.is_some() {
+                let gradelimit = self.gradelimit.get();
+                let (lastgrade,_) = self.player.lastgrade.get();
                 let (gradename,gradecolor) = GRADES[lastgrade as uint];
-                let delta = (cmp::max(gradelimit - player.now, 400) as f32 - 400.0) / 15.0;
+                let delta = (cmp::max(gradelimit - self.player.now, 400) as f32 - 400.0) / 15.0;
                 let cx = (self.leftmost / 2) as f32; // avoids half-pixels
                 let cy = H / 2.0 - delta; // offseted center
                 d.string(cx, cy - 40.0, 2.0, Centered, gradename, gradecolor);
-                if player.lastcombo > 1 {
-                    d.string(cx, cy - 12.0, 1.0, Centered, fmt!("%u COMBO", player.lastcombo),
+                if self.player.lastcombo > 1 {
+                    d.string(cx, cy - 12.0, 1.0, Centered, fmt!("%u COMBO", self.player.lastcombo),
                              Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80)));
                 }
-                if player.opts.is_autoplay() {
+                if self.player.opts.is_autoplay() {
                     d.string(cx, cy + 2.0, 1.0, Centered, "(AUTO)",
                              Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x40,0x40,0x40)));
                 }
@@ -545,32 +463,39 @@ impl Display for GraphicDisplay {
             d.rect_area(0.0, H-80.0, W, H, 0.0, H-80.0, W, H);
         }
         do self.screen.draw_shaded_with_font |d| {
-            let elapsed = (player.now - player.origintime) / 1000;
-            let duration = player.duration as uint;
-            let durationmsec = (player.duration * 1000.0) as uint;
+            let elapsed = (self.player.now - self.player.origintime) / 1000;
+            let duration = self.player.duration as uint;
+            let durationmsec = (self.player.duration * 1000.0) as uint;
 
             // render panel text
             let black = RGB(0,0,0);
-            d.string(10.0, 8.0, 1.0, LeftAligned, fmt!("SCORE %07u", player.score), black);
-            let nominalplayspeed = player.nominal_playspeed();
+            d.string(10.0, 8.0, 1.0, LeftAligned, fmt!("SCORE %07u", self.player.score), black);
+            let nominalplayspeed = self.player.nominal_playspeed();
             d.string(5.0, H-78.0, 2.0, LeftAligned, fmt!("%4.1fx", nominalplayspeed), black);
             d.string((self.leftmost-94) as f32, H-35.0, 1.0, LeftAligned,
                      fmt!("%02u:%02u / %02u:%02u", elapsed/60, elapsed%60,
                                                    duration/60, duration%60), black);
-            d.string(95.0, H-62.0, 1.0, LeftAligned, fmt!("@%9.4f", player.cur.loc.vpos), black);
-            d.string(95.0, H-78.0, 1.0, LeftAligned, fmt!("BPM %6.2f", *player.bpm), black);
-            let timetick = cmp::min(self.leftmost, (player.now - player.origintime) *
+            d.string(95.0, H-62.0, 1.0, LeftAligned,
+                     fmt!("@%9.4f", self.player.cur.loc.vpos), black);
+            d.string(95.0, H-78.0, 1.0, LeftAligned,
+                     fmt!("BPM %6.2f", *self.player.bpm), black);
+            let timetick = cmp::min(self.leftmost, (self.player.now - self.player.origintime) *
                                                    self.leftmost / durationmsec);
             d.glyph(6.0 + timetick as f32, H-52.0, 1.0, 95, RGB(0x40,0x40,0x40));
 
             // render gauge
-            if !player.opts.is_autoplay() {
+            if !self.player.opts.is_autoplay() {
+                // draw the gauge bar
+                let gray = RGB(0x40,0x40,0x40);
+                d.rect(0.0, H-16.0, 368.0, 16.0, gray);
+                d.rect(4.0, H-12.0, 360.0, 8.0, black);
+
                 // cycles four times per measure, [0,40)
-                let cycle = (160.0 * player.cur.loc.vpos).floor() % 40.0;
-                let width = if player.gauge < 0 {0}
-                            else {player.gauge * 400 / MAXGAUGE - (cycle as int)};
+                let cycle = (160.0 * self.player.cur.loc.vpos).floor() % 40.0;
+                let width = if self.player.gauge < 0 {0}
+                            else {self.player.gauge * 400 / MAXGAUGE - (cycle as int)};
                 let width = ::util::std::cmp::clamp(5, width, 360);
-                let color = if player.gauge >= player.survival {RGB(0xc0,0,0)}
+                let color = if self.player.gauge >= self.player.survival {RGB(0xc0,0,0)}
                             else {RGB(0xc0 - ((cycle * 4.0) as u8), 0, 0)};
                 d.rect(4.0, H-12.0, 4.0 + width as f32, H-4.0, color);
             }
@@ -579,93 +504,10 @@ impl Display for GraphicDisplay {
         self.screen.swap_buffers();
     }
 
-    fn show_result(&self, player: &Player) {
-        if player.opts.is_autoplay() { return; }
+    fn deactivate(&mut self) {}
 
-        // check if the song reached the last gradable object (otherwise the game play was
-        // terminated by the user)
-        let nextgradable = player.cur.find_next_of_type(|obj| obj.is_gradable());
-        if nextgradable.is_some() { return; }
-
-        if player.gauge >= player.survival {
-            println(fmt!("*** CLEARED! ***\n\
-                          COOL  %4u    GREAT %4u    GOOD  %4u\n\
-                          BAD   %4u    MISS  %4u    MAX COMBO %u\n\
-                          SCORE %07u (max %07d)",
-                         player.gradecounts[4], player.gradecounts[3],
-                         player.gradecounts[2], player.gradecounts[1],
-                         player.gradecounts[0], player.bestcombo,
-                         player.score, player.infos.maxscore));
-        } else {
-            println("YOU FAILED!");
-        }
-    }
-}
-
-/// Text-only display. Used for the exclusive mode with BGA disabled.
-pub struct TextDisplay {
-    /// Ticker used for printing to the console.
-    ticker: Ticker
-}
-
-/// Creates a new text-only display.
-pub fn TextDisplay() -> TextDisplay {
-    TextDisplay { ticker: Ticker() }
-}
-
-impl Display for TextDisplay {
-    fn render(&mut self, player: &Player) {
-        if !player.opts.showinfo { return; }
-
-        do self.ticker.on_tick(player.now) {
-            let elapsed = (player.now - player.origintime) / 100;
-            let duration = (player.duration * 10.0) as uint;
-            update_line(fmt!("%02u:%02u.%u / %02u:%02u.%u (@%9.4f) | BPM %6.2f | %u / %d notes",
-                             elapsed/600, elapsed/10%60, elapsed%10,
-                             duration/600, duration/10%60, duration%10,
-                             player.cur.loc.vpos, *player.bpm,
-                             player.lastcombo, player.infos.nnotes));
-        }
-    }
-
-    fn show_result(&self, _player: &Player) {
-        update_line("");
-    }
-}
-
-/// BGA-only display. Used for the exclusive mode with BGA enabled.
-pub struct BGAOnlyDisplay {
-    /// The underlying text-only display (as the BGA-only display lacks the on-screen display).
-    textdisplay: TextDisplay,
-    /// Display screen.
-    screen: Screen,
-    /// Image resources.
-    imgres: ~[ImageResource],
-    /// Currently known state of BGAs.
-    lastbga: BGARenderState,
-}
-
-/// Creates a new BGA-only display from the pre-created screen (usually by `init_video`) and
-/// pre-loaded image resources.
-pub fn BGAOnlyDisplay(screen: Screen, imgres: ~[ImageResource]) -> BGAOnlyDisplay {
-    let bgastate = BGARenderState::new(imgres);
-    BGAOnlyDisplay { textdisplay: TextDisplay(), screen: screen, imgres: imgres, lastbga: bgastate }
-}
-
-impl Display for BGAOnlyDisplay {
-    fn render(&mut self, player: &Player) {
-        self.screen.clear();
-        self.lastbga.update(&player.bga, self.imgres);
-
-        let layers = &[Layer1, Layer2, Layer3];
-        self.lastbga.render(&self.screen, layers, 0.0, 0.0);
-        self.screen.swap_buffers();
-
-        self.textdisplay.render(player);
-    }
-
-    fn show_result(&self, player: &Player) {
-        self.textdisplay.show_result(player);
+    fn consume(~self) -> ~Scene: {
+        PlayResultScene::new(self.player) as ~Scene:
     }
 }
 

@@ -143,13 +143,22 @@ pub struct Ticker {
 }
 
 /// Returns a new ticker with a default display interval.
-pub fn Ticker() -> Ticker {
-    /// A reasonable interval for the console and graphic display. Currently set to about 21fps.
-    static INFO_INTERVAL: uint = 47;
-    Ticker { interval: INFO_INTERVAL, lastinfo: None }
-}
+pub fn Ticker() -> Ticker { Ticker::new() }
 
 impl Ticker {
+    /// Returns a new ticker with a default display interval.
+    pub fn new() -> Ticker {
+        /// A reasonable interval for the console and graphic display. Currently set to about 21fps.
+        static INFO_INTERVAL: uint = 47;
+        Ticker::with_interval(INFO_INTERVAL)
+    }
+
+    /// Same as `Ticker::new` but uses a custom display interval. Interval of zero makes the ticker
+    /// tick every time `on_tick` is called.
+    pub fn with_interval(interval: uint) -> Ticker {
+        Ticker { interval: interval, lastinfo: None }
+    }
+
     /// Calls `f` only when required milliseconds have passed after the last display.
     /// `now` should be a return value from `sdl::get_ticks`.
     pub fn on_tick(&mut self, now: uint, f: &fn()) {

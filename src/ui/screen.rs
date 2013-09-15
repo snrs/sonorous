@@ -92,6 +92,7 @@ impl GLState {
 #[cfg(target_os="win32")]
 impl Drop for GLState {
     fn drop(&self) {
+        println("GLState::drop");
         match egl::terminate(self.egl_display) {
             Ok(()) => {}
             Err(err) => fail!(fmt!("EGL error 0x%x", err as uint))

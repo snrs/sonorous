@@ -245,50 +245,50 @@ fn create_beep() -> ~mixer::Chunk {
     mixer::Chunk::new(unsafe { ::std::cast::transmute(samples) }, 128)
 }
 
-/// Creates a new player object. The player object owns other related structures, including
-/// the options, BMS file, key specification, input mapping and sound resources.
-pub fn Player(opts: ~Options, bms: Bms, infos: TimelineInfo, duration: float, keyspec: ~KeySpec,
-              keymap: ~KeyMap, sndres: ~[SoundResource]) -> Player {
-    // we no longer need the full `Bms` structure.
-    let Bms { bmspath: _, meta: meta, timeline: timeline } = bms;
-    let timeline = @timeline;
-
-    let now = get_ticks();
-    let initplayspeed = opts.playspeed;
-    let originoffset = infos.originoffset;
-    let gradefactor = 1.5 - cmp::min(meta.rank, 5) as float * 0.25;
-    let initialgauge = MAXGAUGE * 500 / 1000;
-    let survival = MAXGAUGE * 293 / 1000;
-    let initbpm = timeline.initbpm;
-    let nobjs = timeline.objs.len();
-    let nsounds = sndres.len();
-
-    // we initially set all pointers to the origin, and let the `tick` do the initial calculation.
-    let origin = timeline.pointer(VirtualPos, originoffset);
-    let mut player = Player {
-        opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
-        keyspec: keyspec, keymap: keymap,
-
-        nograding: vec::from_elem(nobjs, false), sndres: sndres, beep: create_beep(),
-        sndlastch: vec::from_elem(nsounds, None), lastchsnd: ~[], bga: initial_bga_state(),
-
-        playspeed: initplayspeed, targetspeed: None, bpm: initbpm, now: now, origintime: now,
-
-        origin: origin.clone(), cur: origin.clone(), checked: origin.clone(),
-        thru: [None, ..NLANES], reverse: None,
-
-        gradefactor: gradefactor, lastgrade: None, gradecounts: [0, ..NGRADES],
-        lastcombo: 0, bestcombo: 0, score: 0, gauge: initialgauge, survival: survival,
-
-        keymultiplicity: [0, ..NLANES], joystate: [Neutral, ..NLANES],
-    };
-
-    player.allocate_more_channels(64);
-    mixer::reserve_channels(1); // so that the beep won't be affected
-    player
-}
-
 impl Player {
+    /// Creates a new player object. The player object owns other related structures, including
+    /// the options, BMS file, key specification, input mapping and sound resources.
+    pub fn new(opts: ~Options, bms: Bms, infos: TimelineInfo, duration: float, keyspec: ~KeySpec,
+               keymap: ~KeyMap, sndres: ~[SoundResource]) -> Player {
+        // we no longer need the full `Bms` structure.
+        let Bms { bmspath: _, meta: meta, timeline: timeline } = bms;
+        let timeline = @timeline;
+
+        let now = get_ticks();
+        let initplayspeed = opts.playspeed;
+        let originoffset = infos.originoffset;
+        let gradefactor = 1.5 - cmp::min(meta.rank, 5) as float * 0.25;
+        let initialgauge = MAXGAUGE * 500 / 1000;
+        let survival = MAXGAUGE * 293 / 1000;
+        let initbpm = timeline.initbpm;
+        let nobjs = timeline.objs.len();
+        let nsounds = sndres.len();
+
+        // set all pointers to the origin and let the `tick` do the initial calculation
+        let origin = timeline.pointer(VirtualPos, originoffset);
+        let mut player = Player {
+            opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
+            keyspec: keyspec, keymap: keymap,
+
+            nograding: vec::from_elem(nobjs, false), sndres: sndres, beep: create_beep(),
+            sndlastch: vec::from_elem(nsounds, None), lastchsnd: ~[], bga: initial_bga_state(),
+
+            playspeed: initplayspeed, targetspeed: None, bpm: initbpm, now: now, origintime: now,
+
+            origin: origin.clone(), cur: origin.clone(), checked: origin.clone(),
+            thru: [None, ..NLANES], reverse: None,
+
+            gradefactor: gradefactor, lastgrade: None, gradecounts: [0, ..NGRADES],
+            lastcombo: 0, bestcombo: 0, score: 0, gauge: initialgauge, survival: survival,
+
+            keymultiplicity: [0, ..NLANES], joystate: [Neutral, ..NLANES],
+        };
+
+        player.allocate_more_channels(64);
+        mixer::reserve_channels(1); // so that the beep won't be affected
+        player
+    }
+
     /// Returns true if the specified lane is being pressed, either by keyboard, joystick
     /// buttons or axes.
     pub fn key_pressed(&self, lane: Lane) -> bool {
@@ -416,7 +416,7 @@ impl Player {
         self.beep.play(Some(0), 0);
     }
 
-    /// Updates the player state.
+    /// Updates the player state. Returns `true` if the caller should keep calling `tick`.
     pub fn tick(&mut self) -> bool {
         // smoothly change the play speed
         if self.targetspeed.is_some() {
@@ -675,6 +675,15 @@ impl Player {
         } else {
             true
         }
+    }
+}
+
+#[unsafe_destructor]
+impl Drop for Player {
+    fn drop(&self) {
+        // remove all channels before sound resources are deallocated.
+        // halting alone is not sufficient due to rust-sdl's bug.
+        mixer::allocate_channels(0);
     }
 }
 

@@ -76,8 +76,11 @@ pub mod engine {
     pub mod options;
     pub mod screen;
     pub mod init;
+    pub mod scene;
     pub mod loading;
+    pub mod viewing;
     pub mod playing;
+    pub mod playresult;
 }
 
 /// Returns a version string.
@@ -94,9 +97,9 @@ pub fn exename() -> ~str {
 pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     use format::bms;
     use engine::player;
-    use ui::{init, loading, playing};
-    use ui::common::{check_exit, update_line};
-    use ui::screen::Screen;
+    use ui::init::{init_audio, init_video, init_joystick};
+    use ui::scene::{Scene, run_scene};
+    use ui::loading::{LoadingScene, TextualLoadingScene};
 
     let callback: bms::diag::BmsMessageCallback = |line, msg| {
         let atline = match line { Some(line) => fmt!(" at line %u", line), None => ~"" };
@@ -156,100 +159,31 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         let ~(opts, bms, infos, keyspec) = port.recv();
 
         // initialize SDL
-        init::init_audio();
-        for opts.joystick.iter().advance |&joyidx| { init::init_joystick(joyidx); }
+        init_audio();
+        for opts.joystick.iter().advance |&joyidx| { init_joystick(joyidx); }
 
         // initialize the screen if required
-        let mut screen = None;
+        let screen;
         let keymap;
         if opts.has_screen() {
-            screen = Some(init::init_video(opts.is_exclusive(), opts.fullscreen));
+            screen = Some(init_video(opts.is_exclusive(), opts.fullscreen));
             // this requires a video subsystem.
             keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
                 Ok(map) => ~map,
                 Err(err) => die!("%s", err)
             };
         } else {
+            screen = None;
             // in this case we explicitly ignore keymaps
             keymap = ~std::hashmap::HashMap::new();
         }
 
-        // Rust: `|| { if opts.is_exclusive() { update_line(~""); } }` segfaults due to
-        //       the moved `opts`. (#2202)
-        let atexit = if opts.is_exclusive() { || update_line("") } else { || {} };
-
-        // render the loading screen
-        let mut ticker = ui::common::Ticker();
-        let mut loading_scene = None; // XXX should be in a trait actually
-        let _ = loading_scene; // Rust: avoids incorrect warning. (#3796)
-        let update_status;
-        if !opts.is_exclusive() {
-            let screen_: &Screen = screen.get_ref();
-            let mut scene = loading::LoadingScene::new(&bms, &infos, keyspec, opts);
-            scene.render(screen_, None);
-            scene.load_stagefile();
-            scene.render(screen_, None);
-            if opts.showinfo {
-                loading_scene = Some(scene);
-                update_status = |path| {
-                    let screen: &Screen = screen.get_ref();
-                    let loading_scene: &loading::LoadingScene = loading_scene.get_ref();
-                    loading::graphic_update_status(path, screen, loading_scene,
-                                                   &mut ticker, || atexit()) // XXX #7363
-                };
-            } else {
-                update_status = |_path| {};
-            }
-        } else if opts.showinfo {
-            loading::show_stagefile_noscreen(&bms, &infos, keyspec, opts);
-            update_status = |path| {
-                loading::text_update_status(path, &mut ticker, || atexit()) // XXX #7363
-            };
+        let scene = if opts.is_exclusive() {
+            TextualLoadingScene::new(screen, bms, infos, keyspec, keymap, opts) as ~Scene:
         } else {
-            update_status = |_path| {};
-        }
-
-        // wait for resources
-        let start = ::sdl::get_ticks() + 3000;
-        let (sndres, imgres) =
-            loading::load_resource(&bms, opts, |msg| update_status(msg)); // XXX #7363
-        if opts.showinfo {
-            ticker.reset(); // force update
-            update_status(None);
-        }
-        while ::sdl::get_ticks() < start { check_exit(|| atexit()); } // XXX #7363
-
-        // create the player and transfer ownership of other resources to it
-        let duration = bms.timeline.duration(infos.originoffset, |sref| sndres[**sref].duration());
-        let mut player = player::Player(opts, bms, infos, duration, keyspec, keymap, sndres);
-
-        // create the display and runs the actual game play loop
-        let mut display = match screen {
-            Some(screen) => {
-                if player.opts.is_exclusive() {
-                    @mut playing::BGAOnlyDisplay(screen, imgres) as @mut playing::Display
-                } else {
-                    match playing::GraphicDisplay(player.opts, player.keyspec,
-                                                  screen, imgres) {
-                        Ok(display) => @mut display as @mut playing::Display,
-                        Err(err) => die!("%s", err)
-                    }
-                }
-            }
-            None => @mut playing::TextDisplay() as @mut playing::Display
+            LoadingScene::new(screen.unwrap(), bms, infos, keyspec, keymap, opts) as ~Scene:
         };
-
-        while player.tick() {
-            display.render(&player);
-        }
-        display.show_result(&player);
-
-        // remove all channels before sound resources are deallocated.
-        // halting alone is not sufficient due to rust-sdl's bug.
-        ::sdl::mixer::allocate_channels(0);
-
-        // it's done!
-        atexit();
+        run_scene(scene);
     }
 }
 
