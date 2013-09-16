@@ -487,8 +487,8 @@ impl Scene for PlayingScene {
             if !self.player.opts.is_autoplay() {
                 // draw the gauge bar
                 let gray = RGB(0x40,0x40,0x40);
-                d.rect(0.0, H-16.0, 368.0, 16.0, gray);
-                d.rect(4.0, H-12.0, 360.0, 8.0, black);
+                d.rect(0.0, H-16.0, 368.0, H, gray);
+                d.rect(4.0, H-12.0, 360.0, H-4.0, black);
 
                 // cycles four times per measure, [0,40)
                 let cycle = (160.0 * self.player.cur.loc.vpos).floor() % 40.0;

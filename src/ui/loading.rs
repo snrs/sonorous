@@ -294,7 +294,8 @@ impl Scene for LoadingScene {
     fn deactivate(&mut self) {}
 
     fn consume(~self) -> ~Scene: {
-        let ~LoadingScene { context: context, screen: screen, waituntil: _ } = self;
+        // Rust: do not destruct owned box in 0.7, it is seriously broken.
+        let LoadingScene { context: context, screen: screen, waituntil: _ } = *self;
         let (player, imgres) = context.to_player();
         match PlayingScene::new(player, screen, imgres) {
             Ok(scene) => scene as ~Scene:,
@@ -363,7 +364,8 @@ Artist:   %s
     }
 
     fn consume(~self) -> ~Scene: {
-        let ~TextualLoadingScene { context: context, screen: screen } = self;
+        // Rust: do not destruct owned box in 0.7, it is seriously broken.
+        let TextualLoadingScene { context: context, screen: screen } = *self;
         let (player, imgres) = context.to_player();
         match screen {
             Some(screen) => ViewingScene::new(screen, imgres, player) as ~Scene:,
