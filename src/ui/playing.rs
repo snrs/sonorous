@@ -4,7 +4,7 @@
 
 //! Game play screen. Renders the screen from `engine::player::Player` state.
 
-use std::{int, uint, cmp, num};
+use std::{cmp, num, iter};
 
 use format::obj::*;
 use util::gl::{Texture, ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
@@ -64,7 +64,7 @@ impl LaneStyle {
 
         // render a background sprite (0 at top, <1 at bottom)
         let backcolor = Gradient { zero: RGB(0,0,0), one: self.basecolor };
-        for uint::range(140, SCREENH - 80) |i| {
+        for i in range(140, SCREENH - 80) {
             sprite.fill_area((left, i), (self.width, 1), backcolor.blend(i as int - 140, 1000));
         }
 
@@ -72,7 +72,7 @@ impl LaneStyle {
         let denom = self.width as int;
         let notecolor = Gradient { zero: RGB(0xff,0xff,0xff), one: self.basecolor };
         let bombcolor = Gradient { zero: RGB(0,0,0),          one: RGB(0xc0,0,0) };
-        for uint::range(0, self.width / 2) |i| {
+        for i in range(0, self.width / 2) {
             let num = (self.width - i) as int;
             sprite.fill_area((noteleft+i, 0), (self.width-i*2, SCREENH),
                              notecolor.blend(num, denom));
@@ -118,10 +118,10 @@ fn build_lane_styles(keyspec: &KeySpec) ->
     let mut leftmost = 0;
     let mut rightmost = SCREENW;
     let mut styles = ~[];
-    for keyspec.each_left_lanes |&lane| {
+    for &lane in keyspec.left_lanes().iter() {
         let kind = keyspec.kinds[*lane];
         assert!(kind.is_some());
-        let kind = kind.get();
+        let kind = kind.unwrap();
         let style = LaneStyle::from_kind(kind, Left(leftmost));
         styles.push((lane, style));
         leftmost += style.width + 1;
@@ -129,10 +129,10 @@ fn build_lane_styles(keyspec: &KeySpec) ->
             return Err(~"The screen can't hold that many lanes");
         }
     }
-    for keyspec.each_right_lanes |&lane| {
+    for &lane in keyspec.right_lanes().iter() {
         let kind = keyspec.kinds[*lane];
         assert!(kind.is_some());
-        let kind = kind.get();
+        let kind = kind.unwrap();
         let style = LaneStyle::from_kind(kind, Right(rightmost));
         styles.push((lane, style));
         if rightmost < leftmost + 40 {
@@ -145,7 +145,7 @@ fn build_lane_styles(keyspec: &KeySpec) ->
     // move lanes to the center if there are too small number of lanes
     let cutoff = 165;
     if leftmost < cutoff {
-        for uint::range(0, keyspec.split) |i| {
+        for i in range(0, keyspec.split) {
             let (lane, style) = styles[i];
             let mut style = style;
             style.left += (cutoff - leftmost) / 2;
@@ -154,10 +154,10 @@ fn build_lane_styles(keyspec: &KeySpec) ->
         leftmost = cutoff;
     }
     if rightmost.map_default(false, |&x| x > SCREENW - cutoff) {
-        for uint::range(keyspec.split, styles.len()) |i| {
+        for i in range(keyspec.split, styles.len()) {
             let (lane, style) = styles[i];
             let mut style = style;
-            style.left -= (rightmost.get() - (SCREENW - cutoff)) / 2;
+            style.left -= (rightmost.unwrap() - (SCREENW - cutoff)) / 2;
             styles[i] = (lane, style);
         }
         rightmost = Some(SCREENW - cutoff);
@@ -170,11 +170,11 @@ fn build_lane_styles(keyspec: &KeySpec) ->
 fn create_sprite(leftmost: uint, rightmost: Option<uint>, styles: &[(Lane,LaneStyle)]) -> Texture {
     let sprite = match new_surface(SCREENW + 400, SCREENH) {
         Ok(surface) => surface,
-        Err(err) => die!("new_surface failed: %s", err)
+        Err(err) => die!("new_surface failed: {}", err)
     };
 
     // render notes and lane backgrounds
-    for styles.iter().advance |&(_lane,style)| {
+    for &(_lane,style) in styles.iter() {
         style.render_to_sprite(sprite);
     }
 
@@ -182,17 +182,17 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>, styles: &[(Lane,LaneSt
     do sprite.with_pixels |pixels| {
         let topgrad = Gradient { zero: RGB(0x60,0x60,0x60), one: RGB(0xc0,0xc0,0xc0) };
         let botgrad = Gradient { zero: RGB(0x40,0x40,0x40), one: RGB(0xc0,0xc0,0xc0) };
-        for int::range(-244, 556) |j| {
-            for int::range(-10, 20) |i| {
+        for j in range(-244, 556) {
+            for i in range(-10, 20) {
                 let c = (i*2+j*3+750) % 2000;
-                put_pixel(pixels, (j+244) as uint, (i+10) as uint, // XXX incorrect lifetime
-                          topgrad.blend(850 - num::abs(c-1000), 700));
+                pixels.put_pixel((j+244) as uint, (i+10) as uint,
+                                 topgrad.blend(850 - num::abs(c-1000), 700));
             }
-            for int::range(-20, 60) |i| {
+            for i in range(-20, 60) {
                 let c = (i*3+j*2+750) % 2000;
                 let bottom = (SCREENH - 60) as int;
-                put_pixel(pixels, (j+244) as uint, (i+bottom) as uint, // XXX incorrect lifetime
-                          botgrad.blend(850 - num::abs(c-1000), 700));
+                pixels.put_pixel((j+244) as uint, (i+bottom) as uint,
+                                 botgrad.blend(850 - num::abs(c-1000), 700));
             }
         }
     }
@@ -206,14 +206,16 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>, styles: &[(Lane,LaneSt
     sprite.fill_area((leftgap, 0), (gapwidth, 30), black);
     sprite.fill_area((leftgap, SCREENH-80), (gapwidth, 80), black);
     do sprite.with_pixels |pixels| {
-        for uint::range(0, 20) |i| {
-            for uint::range_rev(20, 0) |j| {
+        for i in range(0u, 20) {
+            // Rust: this cannot be `uint` since `-1u` underflows!
+            for j in iter::range_step(20, 0, -1) {
+                let j = j as uint;
                 if i*i + j*j <= 400 { break; } // circled border
-                put_pixel(pixels, leftmost + j, 10 + i, black); // XXX incorrect lifetime
-                put_pixel(pixels, leftmost + j, (SCREENH-61) - i, black); // XXX
-                for rightmost.iter().advance |&right| {
-                    put_pixel(pixels, (right-j) - 1, 10 + i, black); // XXX incorrect lifetime
-                    put_pixel(pixels, (right-j) - 1, (SCREENH-61) - i, black); // XXX
+                pixels.put_pixel(leftmost + j, 10 + i, black);
+                pixels.put_pixel(leftmost + j, (SCREENH-61) - i, black);
+                for &right in rightmost.iter() {
+                    pixels.put_pixel((right-j) - 1, 10 + i, black);
+                    pixels.put_pixel((right-j) - 1, (SCREENH-61) - i, black);
                 }
             }
         }
@@ -221,7 +223,7 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>, styles: &[(Lane,LaneSt
 
     match Texture::from_owned_surface(sprite, false, false) {
         Ok(tex) => tex,
-        Err(err) => die!("Texture::from_owned_surface failed: %s", err)
+        Err(err) => die!("Texture::from_owned_surface failed: {}", err)
     }
 }
 
@@ -269,7 +271,7 @@ impl PlayingScene {
             Ok(styles) => styles,
             Err(err) => { return Err(err); }
         };
-        let centerwidth = rightmost.get_or_default(SCREENW) - leftmost;
+        let centerwidth = rightmost.unwrap_or(SCREENW) - leftmost;
         let bgax = leftmost + (centerwidth - BGAW) / 2;
         let bgay = (SCREENH - BGAH) / 2;
         let sprite = create_sprite(leftmost, rightmost, styles);
@@ -304,7 +306,7 @@ impl Scene for PlayingScene {
             // update display states
             let mut poorlimit = self.poorlimit;
             let mut gradelimit = self.gradelimit;
-            for self.player.lastgrade.iter().advance |&(grade,when)| {
+            for &(grade,when) in self.player.lastgrade.iter() {
                 if grade == MISS {
                     // switches to the normal BGA after 600ms
                     poorlimit = poorlimit.merge(Some(when + 600), cmp::max);
@@ -348,12 +350,12 @@ impl Scene for PlayingScene {
         do self.screen.draw_shaded |d| {
             // fill the lanes to the border color
             d.rect(0.0, 30.0, self.leftmost as f32, H-80.0, RGB(0x40,0x40,0x40));
-            for self.rightmost.iter().advance |&rightmost| {
+            for &rightmost in self.rightmost.iter() {
                 d.rect(rightmost as f32, 30.0, H, 520.0, RGB(0x40,0x40,0x40));
             }
 
             // clear the lanes to the background color
-            for self.lanestyles.iter().advance |&(_lane,style)| {
+            for &(_lane,style) in self.lanestyles.iter() {
                 style.clear_back(d);
             }
         }
@@ -363,7 +365,7 @@ impl Scene for PlayingScene {
         let bottom = self.player.cur.clone();
         let top = self.player.cur.find(ActualPos, 1.25 / self.player.playspeed);
 
-        let loc_to_y = |loc: &ObjLoc<float>| {
+        let loc_to_y = |loc: &ObjLoc<f64>| {
             let offset = loc.pos - bottom.loc.pos;
             (SCREENH-70) - (400.0 * self.player.playspeed * offset) as uint
         };
@@ -376,21 +378,21 @@ impl Scene for PlayingScene {
             };
 
             // render objects
-            for self.lanestyles.iter().advance |&(lane,style)| {
+            for &(lane,style) in self.lanestyles.iter() {
                 if self.player.key_pressed(lane) { style.render_pressed_back(d); }
 
                 let front = do localbottom.find_next_of_type |&obj| {
                     obj.object_lane() == Some(lane) && obj.is_renderable()
                 };
                 if front.is_none() { loop; }
-                let front = front.get();
+                let front = front.unwrap();
 
                 // LN starting before the bottom and ending after the top
                 if front.loc.vpos > top.loc.vpos && front.is_lndone() {
                     style.render_note(d, 30, SCREENH - 80);
                 } else {
                     let mut nextbottom = None;
-                    for front.upto(&top) |ptr| {
+                    do front.upto(&top) |ptr| {
                         let y = loc_to_y(&ptr.loc);
                         match ptr.data() {
                             LNStart(lane0,_) if lane0 == lane => {
@@ -399,7 +401,7 @@ impl Scene for PlayingScene {
                             }
                             LNDone(lane0,_) if lane0 == lane => {
                                 let bottom = SCREENH-80;
-                                style.render_note(d, y, nextbottom.get_or_default(bottom));
+                                style.render_note(d, y, nextbottom.unwrap_or(bottom));
                                 nextbottom = None;
                             }
                             Visible(lane0,_) if lane0 == lane => {
@@ -412,9 +414,10 @@ impl Scene for PlayingScene {
                             }
                             _ => {}
                         }
-                    }
+                        true
+                    };
 
-                    for nextbottom.iter().advance |&y| {
+                    for &y in nextbottom.iter() {
                         style.render_note(d, 30, y);
                     }
                 }
@@ -423,31 +426,33 @@ impl Scene for PlayingScene {
 
         do self.screen.draw_shaded_with_font |d| {
             // render non-note objects (currently, measure bars)
-            for bottom.upto(&top) |ptr| {
+            do bottom.upto(&top) |ptr| {
                 match ptr.data() {
                     MeasureBar => {
                         let y = loc_to_y(&ptr.loc) as f32;
                         d.rect(0.0, y, self.leftmost as f32, y + 1.0, RGB(0xc0,0xc0,0xc0));
-                        for self.rightmost.iter().advance |&rightmost| {
+                        for &rightmost in self.rightmost.iter() {
                             d.rect(rightmost as f32, y,
                                    (SCREENW - rightmost) as f32, y + 1.0, RGB(0xc0,0xc0,0xc0));
                         }
                     }
                     _ => {}
                 }
-            }
+                true
+            };
 
             // render grading text
             if self.gradelimit.is_some() && self.player.lastgrade.is_some() {
-                let gradelimit = self.gradelimit.get();
-                let (lastgrade,_) = self.player.lastgrade.get();
+                let gradelimit = self.gradelimit.unwrap();
+                let (lastgrade,_) = self.player.lastgrade.unwrap();
                 let (gradename,gradecolor) = GRADES[lastgrade as uint];
                 let delta = (cmp::max(gradelimit - self.player.now, 400) as f32 - 400.0) / 15.0;
                 let cx = (self.leftmost / 2) as f32; // avoids half-pixels
                 let cy = H / 2.0 - delta; // offseted center
                 d.string(cx, cy - 40.0, 2.0, Centered, gradename, gradecolor);
                 if self.player.lastcombo > 1 {
-                    d.string(cx, cy - 12.0, 1.0, Centered, fmt!("%u COMBO", self.player.lastcombo),
+                    d.string(cx, cy - 12.0, 1.0, Centered,
+                             format!("{} COMBO", self.player.lastcombo),
                              Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80)));
                 }
                 if self.player.opts.is_autoplay() {
@@ -469,16 +474,16 @@ impl Scene for PlayingScene {
 
             // render panel text
             let black = RGB(0,0,0);
-            d.string(10.0, 8.0, 1.0, LeftAligned, fmt!("SCORE %07u", self.player.score), black);
+            d.string(10.0, 8.0, 1.0, LeftAligned, format!("SCORE {:07}", self.player.score), black);
             let nominalplayspeed = self.player.nominal_playspeed();
-            d.string(5.0, H-78.0, 2.0, LeftAligned, fmt!("%4.1fx", nominalplayspeed), black);
+            d.string(5.0, H-78.0, 2.0, LeftAligned, format!("{:4.1}x", nominalplayspeed), black);
             d.string((self.leftmost-94) as f32, H-35.0, 1.0, LeftAligned,
-                     fmt!("%02u:%02u / %02u:%02u", elapsed/60, elapsed%60,
-                                                   duration/60, duration%60), black);
+                     format!("{:02u}:{:02u} / {:02u}:{:02}", elapsed/60, elapsed%60,
+                                                             duration/60, duration%60), black);
             d.string(95.0, H-62.0, 1.0, LeftAligned,
-                     fmt!("@%9.4f", self.player.cur.loc.vpos), black);
+                     format!("@{:9.4}", self.player.cur.loc.vpos), black);
             d.string(95.0, H-78.0, 1.0, LeftAligned,
-                     fmt!("BPM %6.2f", *self.player.bpm), black);
+                     format!("BPM {:6.2}", *self.player.bpm), black);
             let timetick = cmp::min(self.leftmost, (self.player.now - self.player.origintime) *
                                                    self.leftmost / durationmsec);
             d.glyph(6.0 + timetick as f32, H-52.0, 1.0, 95, RGB(0x40,0x40,0x40));
@@ -494,7 +499,7 @@ impl Scene for PlayingScene {
                 let cycle = (160.0 * self.player.cur.loc.vpos).floor() % 40.0;
                 let width = if self.player.gauge < 0 {0}
                             else {self.player.gauge * 400 / MAXGAUGE - (cycle as int)};
-                let width = ::util::std::cmp::clamp(5, width, 360);
+                let width = num::clamp(width, 5, 360);
                 let color = if self.player.gauge >= self.player.survival {RGB(0xc0,0,0)}
                             else {RGB(0xc0 - ((cycle * 4.0) as u8), 0, 0)};
                 d.rect(4.0, H-12.0, 4.0 + width as f32, H-4.0, color);

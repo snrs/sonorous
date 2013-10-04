@@ -4,7 +4,7 @@
 
 //! Global game options.
 
-use std::{char, uint, float, str};
+use std::{char, str, hashmap};
 
 /// Game play modes.
 #[deriving(Eq,Clone)]
@@ -72,7 +72,7 @@ pub struct Options {
     /// A right-hand-side key specification if any. Can be an empty string.
     rightkeys: Option<~str>,
     /// An initial play speed.
-    playspeed: float,
+    playspeed: f64,
 
     /// If set, prints the recognized BMS commands after parsing and exits.
     debug_dumpbmscommand: bool,
@@ -114,9 +114,7 @@ pub enum ParsingResult {
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
 pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResult {
-    use util::std::hashmap::map_from_vec;
-
-    let longargs = map_from_vec([
+    let longargs = (~[
         (~"--help", 'h'), (~"--version", 'V'), (~"--speed", 'a'),
         (~"--autoplay", 'v'), (~"--exclusive", 'x'), (~"--sound-only", 'X'),
         (~"--windowed", 'w'), (~"--no-fullscreen", 'w'),
@@ -126,7 +124,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
         (~"--key-spec", 'K'), (~"--bga", ' '), (~"--no-bga", 'B'),
         (~"--movie", ' '), (~"--no-movie", 'M'), (~"--joystick", 'j'),
         (~"--debug", 'Z'),
-    ]);
+    ]).move_iter().collect::<hashmap::HashMap<~str,char>>();
 
     let nargs = args.len();
 
@@ -161,7 +159,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
                 if args[i].starts_with("--") {
                     match longargs.find(&args[i]) {
                         Some(&c) => str::from_char(c),
-                        None => { return Error(fmt!("Invalid option: %s", args[i])); }
+                        None => { return Error(format!("Invalid option: {}", args[i])); }
                     }
                 } else {
                     args[i].slice_from(1).to_owned()
@@ -169,7 +167,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
             let nshortargs = shortargs.len();
 
             let mut inside = true;
-            for shortargs.iter().enumerate().advance |(j, c)| {
+            for (j, c) in shortargs.iter().enumerate() {
                 // Reads the argument of the option. Option string should be consumed first.
                 macro_rules! fetch_arg(($opt:expr) => ({
                     let off = if inside {j+1} else {j};
@@ -184,7 +182,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
                                 let arg: &str = args[i];
                                 arg
                             } else {
-                                return Error(fmt!("No argument to the option -%c", $opt));
+                                return Error(format!("No argument to the option -{}", $opt));
                             }
                         };
                     inside = false;
@@ -208,31 +206,31 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
                     'K' => { leftkeys = Some(fetch_arg!('K').to_owned());
                              rightkeys = Some(fetch_arg!('K').to_owned()); }
                     'a' => {
-                        match float::from_str(fetch_arg!('a')) {
+                        match from_str::<f64>(fetch_arg!('a')) {
                             Some(speed) if speed > 0.0 => {
                                 playspeed = if speed < 0.1 {0.1}
                                             else if speed > 99.0 {99.0}
                                             else {speed};
                             }
-                            _ => { return Error(fmt!("Invalid argument to option -a")); }
+                            _ => { return Error(format!("Invalid argument to option -a")); }
                         }
                     }
                     'B' => { bga = NoBga; }
                     'M' => { bga = BgaButNoMovie; }
                     'j' => {
-                        match uint::from_str(fetch_arg!('j')) {
+                        match from_str::<uint>(fetch_arg!('j')) {
                             Some(n) => { joystick = Some(n); }
-                            _ => { return Error(fmt!("Invalid argument to option -j")); }
+                            _ => { return Error(format!("Invalid argument to option -j")); }
                         }
                     }
                     'Z' => match fetch_arg!('Z') {
                         &"dump-bmscommand" => { debug_dumpbmscommand = true; }
                         &"dump-timeline" => { debug_dumptimeline = true; }
-                        arg => { return Error(fmt!("Unknown debugging option: -Z %s", arg)); }
+                        arg => { return Error(format!("Unknown debugging option: -Z {}", arg)); }
                     },
                     ' ' => {} // for ignored long options
-                    '1'..'9' => { playspeed = char::to_digit(c, 10).get() as float; }
-                    _ => { return Error(fmt!("Invalid option: -%c", c)); }
+                    '1'..'9' => { playspeed = char::to_digit(c, 10).unwrap() as f64; }
+                    _ => { return Error(format!("Invalid option: -{}", c)); }
                 }
                 if !inside { break; }
             }

@@ -32,24 +32,24 @@ pub static NLAYERS: uint = 4;
 /// Beats per minute. Used as a conversion factor between the time position and actual time
 /// in BMS.
 #[deriving(Eq,ToStr,Clone)]
-pub struct BPM(float);
+pub struct BPM(f64);
 
 impl BPM {
     /// Converts a measure to a second.
-    pub fn measure_to_sec(self, measure: float) -> float { measure * 240.0 / *self }
+    pub fn measure_to_sec(self, measure: f64) -> f64 { measure * 240.0 / *self }
 
     /// Converts a second to a measure.
-    pub fn sec_to_measure(self, sec: float) -> float { sec * *self / 240.0 }
+    pub fn sec_to_measure(self, sec: f64) -> f64 { sec * *self / 240.0 }
 }
 
 /// A duration from the particular point. It may be specified in measures or seconds. Used in
 /// the `Stop` object.
 #[deriving(Eq,ToStr,Clone)]
-pub enum Duration { Seconds(float), Measures(float) }
+pub enum Duration { Seconds(f64), Measures(f64) }
 
 impl Duration {
     /// Calculates the actual seconds from the current BPM.
-    pub fn to_sec(&self, bpm: BPM) -> float {
+    pub fn to_sec(&self, bpm: BPM) -> f64 {
         match *self {
             Seconds(secs) => secs,
             Measures(measures) => bpm.measure_to_sec(measures)
@@ -61,7 +61,7 @@ impl Duration {
 /// (as in `MAXGAUGE`), but sometimes it may cause an instant death. Used in the `Bomb` object
 /// (normal note objects have a fixed value).
 #[deriving(Eq,ToStr,Clone)]
-pub enum Damage { GaugeDamage(float), InstantDeath }
+pub enum Damage { GaugeDamage(f64), InstantDeath }
 
 /// A data for objects (or object-like effects). Does not include the time information.
 #[deriving(Eq,Clone)]
@@ -107,7 +107,7 @@ pub enum ObjData<SoundRef,ImageRef> {
     /// (e.g. as specified by the BMS creators) and the interval in the actual position.
     /// This can be ignored for the game play, but we still keep this relation since the virtual
     /// position is often directly used to refer certain point in the chart.
-    SetMeasureFactor(float),
+    SetMeasureFactor(f64),
     /// Start of the measure, where the measure bar is drawn. This is derived from
     /// `SetMeasureFactor` but made into the separate object as an optimization.
     MeasureBar,
@@ -121,7 +121,7 @@ pub enum ObjData<SoundRef,ImageRef> {
 impl<S:ToStr,I:ToStr> ToStr for ObjData<S,I> {
     fn to_str(&self) -> ~str {
         fn lane_to_str(lane: Lane) -> ~str {
-            fmt!("%u:%02u", *lane / 36 + 1, *lane % 36)
+            format!("{}:{:02}", *lane / 36 + 1, *lane % 36)
         }
         fn to_str_or_default<T:ToStr>(v: &Option<T>, default: &str) -> ~str {
             match *v { Some(ref v) => v.to_str(), None => default.to_owned() }
@@ -130,29 +130,29 @@ impl<S:ToStr,I:ToStr> ToStr for ObjData<S,I> {
         match *self {
             Deleted => ~"Deleted",
             Visible(lane,ref sref) =>
-                fmt!("Visible(%s,%s)", lane_to_str(lane), to_str_or_default(sref, "--")),
+                format!("Visible({},{})", lane_to_str(lane), to_str_or_default(sref, "--")),
             Invisible(lane,ref sref) =>
-                fmt!("Invisible(%s,%s)", lane_to_str(lane), to_str_or_default(sref, "--")),
+                format!("Invisible({},{})", lane_to_str(lane), to_str_or_default(sref, "--")),
             LNStart(lane,ref sref) =>
-                fmt!("LNStart(%s,%s)", lane_to_str(lane), to_str_or_default(sref, "--")),
+                format!("LNStart({},{})", lane_to_str(lane), to_str_or_default(sref, "--")),
             LNDone(lane,ref sref) =>
-                fmt!("LNDone(%s,%s)", lane_to_str(lane), to_str_or_default(sref, "--")),
+                format!("LNDone({},{})", lane_to_str(lane), to_str_or_default(sref, "--")),
             Bomb(lane,ref sref,damage) =>
-                fmt!("Bomb(%s,%s,%s)", lane_to_str(lane), to_str_or_default(sref, "--"),
-                                       damage.to_str()),
+                format!("Bomb({},{},{})", lane_to_str(lane), to_str_or_default(sref, "--"),
+                                          damage.to_str()),
             BGM(ref sref) =>
-                fmt!("BGM(%s)", sref.to_str()),
+                format!("BGM({})", sref.to_str()),
             SetBGA(layer,ref iref) =>
-                fmt!("SetBGA(%s,%s)", layer.to_str(), to_str_or_default(iref, "--")),
+                format!("SetBGA({},{})", layer.to_str(), to_str_or_default(iref, "--")),
             SetBPM(BPM(bpm)) =>
-                fmt!("SetBPM(%f)", bpm),
+                format!("SetBPM({})", bpm),
             Stop(Seconds(secs)) =>
-                fmt!("Stop(%fs)", secs),
+                format!("Stop({}s)", secs),
             Stop(Measures(measures)) =>
-                fmt!("Stop(%f)", measures),
+                format!("Stop({})", measures),
             StopEnd => ~"StopEnd",
             SetMeasureFactor(factor) =>
-                fmt!("SetMeasureFactor(%f)", factor),
+                format!("SetMeasureFactor({})", factor),
             MeasureBar => ~"MeasureBar",
             End => ~"End",
         }
@@ -160,189 +160,189 @@ impl<S:ToStr,I:ToStr> ToStr for ObjData<S,I> {
 }
 
 /// Any type that contains `ObjData`.
-pub trait ToObjData<SoundRef:Copy,ImageRef:Copy> {
-    pub fn to_obj_data(&self) -> ObjData<SoundRef,ImageRef>;
+pub trait ToObjData<SoundRef:Clone,ImageRef:Clone> {
+    fn to_obj_data(&self) -> ObjData<SoundRef,ImageRef>;
 }
 
 /// Any type that contains and can individually update `ObjData`.
-pub trait WithObjData<SoundRef:Copy,ImageRef:Copy>: ToObjData<SoundRef,ImageRef> {
-    pub fn with_obj_data(&self, data: ObjData<SoundRef,ImageRef>) -> Self;
+pub trait WithObjData<SoundRef:Clone,ImageRef:Clone>: ToObjData<SoundRef,ImageRef> {
+    fn with_obj_data(&self, data: ObjData<SoundRef,ImageRef>) -> Self;
 }
 
-impl<S:Copy,I:Copy> ToObjData<S,I> for ObjData<S,I> {
-    pub fn to_obj_data(&self) -> ObjData<S,I> { copy *self }
+impl<S:Clone,I:Clone> ToObjData<S,I> for ObjData<S,I> {
+    fn to_obj_data(&self) -> ObjData<S,I> { self.clone() }
 }
 
-impl<S:Copy,I:Copy> WithObjData<S,I> for ObjData<S,I> {
-    pub fn with_obj_data(&self, data: ObjData<S,I>) -> ObjData<S,I> { data }
+impl<S:Clone,I:Clone> WithObjData<S,I> for ObjData<S,I> {
+    fn with_obj_data(&self, data: ObjData<S,I>) -> ObjData<S,I> { data }
 }
 
 /// Query operations for objects. Implicitly defined in terms of `ToObjData` trait.
-pub trait ObjQueryOps<SoundRef:Copy,ImageRef:Copy> {
+pub trait ObjQueryOps<SoundRef:Clone,ImageRef:Clone> {
     /// Returns true if the object is deleted (`Deleted`).
-    pub fn is_deleted(&self) -> bool;
+    fn is_deleted(&self) -> bool;
     /// Returns true if the object is a visible object (`Visible`).
-    pub fn is_visible(&self) -> bool;
+    fn is_visible(&self) -> bool;
     /// Returns true if the object is an invisible object (`Invisible`).
-    pub fn is_invisible(&self) -> bool;
+    fn is_invisible(&self) -> bool;
     /// Returns true if the object is a start of LN object (`LNStart`).
-    pub fn is_lnstart(&self) -> bool;
+    fn is_lnstart(&self) -> bool;
     /// Returns true if the object is an end of LN object (`LNEnd`).
-    pub fn is_lndone(&self) -> bool;
+    fn is_lndone(&self) -> bool;
     /// Returns true if the object is either a start or an end of LN object.
-    pub fn is_ln(&self) -> bool;
+    fn is_ln(&self) -> bool;
     /// Returns true if the object is a bomb (`Bomb`).
-    pub fn is_bomb(&self) -> bool;
+    fn is_bomb(&self) -> bool;
     /// Returns true if the object is soundable when it is the closest soundable object from
     /// the current position and the player pressed the key. Named "soundable" since it may
     /// choose not to play the associated sound. Note that not every object with sound is soundable.
-    pub fn is_soundable(&self) -> bool;
+    fn is_soundable(&self) -> bool;
     /// Returns true if the object is subject to grading.
-    pub fn is_gradable(&self) -> bool;
+    fn is_gradable(&self) -> bool;
     /// Returns true if the object has a visible representation.
-    pub fn is_renderable(&self) -> bool;
+    fn is_renderable(&self) -> bool;
     /// Returns true if the data is an object.
-    pub fn is_object(&self) -> bool;
+    fn is_object(&self) -> bool;
     /// Returns true if the data is a BGM.
-    pub fn is_bgm(&self) -> bool;
+    fn is_bgm(&self) -> bool;
     /// Returns true if the data is a BGA.
-    pub fn is_setbga(&self) -> bool;
+    fn is_setbga(&self) -> bool;
     /// Returns true if the data is a BPM change.
-    pub fn is_setbpm(&self) -> bool;
+    fn is_setbpm(&self) -> bool;
     /// Returns true if the data is a scroll stopper.
-    pub fn is_stop(&self) -> bool;
+    fn is_stop(&self) -> bool;
     /// Returns true if the data is the end of a scroll stopper.
-    pub fn is_stopend(&self) -> bool;
+    fn is_stopend(&self) -> bool;
     /// Returns true if the data is a change in the measure scaling factor.
-    pub fn is_setmeasurefactor(&self) -> bool;
+    fn is_setmeasurefactor(&self) -> bool;
     /// Returns true if the data is a measure bar.
-    pub fn is_measurebar(&self) -> bool;
+    fn is_measurebar(&self) -> bool;
     /// Returns true if the data is an end mark.
-    pub fn is_end(&self) -> bool;
+    fn is_end(&self) -> bool;
 
     /// Returns an associated lane if the data is an object.
-    pub fn object_lane(&self) -> Option<Lane>;
+    fn object_lane(&self) -> Option<Lane>;
     /// Returns all sounds associated to the data.
-    pub fn sounds(&self) -> ~[SoundRef];
+    fn sounds(&self) -> ~[SoundRef];
     /// Returns all sounds played when key is pressed.
-    pub fn keydown_sound(&self) -> Option<SoundRef>;
+    fn keydown_sound(&self) -> Option<SoundRef>;
     /// Returns all sounds played when key is unpressed.
-    pub fn keyup_sound(&self) -> Option<SoundRef>;
+    fn keyup_sound(&self) -> Option<SoundRef>;
     /// Returns all sounds played when the object is activated while the corresponding key is
     /// currently pressed. Bombs are the only instance of this kind of sounds.
-    pub fn through_sound(&self) -> Option<SoundRef>;
+    fn through_sound(&self) -> Option<SoundRef>;
     /// Returns all images associated to the data.
-    pub fn images(&self) -> ~[ImageRef];
+    fn images(&self) -> ~[ImageRef];
     /// Returns an associated damage value when the object is activated.
-    pub fn through_damage(&self) -> Option<Damage>;
+    fn through_damage(&self) -> Option<Damage>;
 }
 
 /// Conversion operations for objects. Implicitly defined in terms of `WithObjData` trait.
-pub trait ObjConvOps<SoundRef:Copy,ImageRef:Copy>: ObjQueryOps<SoundRef,ImageRef> {
+pub trait ObjConvOps<SoundRef:Clone,ImageRef:Clone>: ObjQueryOps<SoundRef,ImageRef> {
     /// Returns a visible object with the same time, lane and sound as given object.
-    pub fn to_visible(&self) -> Self;
+    fn to_visible(&self) -> Self;
     /// Returns an invisible object with the same time, lane and sound as given object.
-    pub fn to_invisible(&self) -> Self;
+    fn to_invisible(&self) -> Self;
     /// Returns a start of LN object with the same time, lane and sound as given object.
-    pub fn to_lnstart(&self) -> Self;
+    fn to_lnstart(&self) -> Self;
     /// Returns an end of LN object with the same time, lane and sound as given object.
-    pub fn to_lndone(&self) -> Self;
+    fn to_lndone(&self) -> Self;
     /// Returns a non-object version of given object. May return `Deleted` if it should be deleted.
-    pub fn to_effect(&self) -> Self;
+    fn to_effect(&self) -> Self;
     /// Returns an object with lane replaced with given lane. No effect on object-like effects.
-    pub fn with_object_lane(&self, lane: Lane) -> Self;
+    fn with_object_lane(&self, lane: Lane) -> Self;
 }
 
-impl<S:Copy,I:Copy,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
-    pub fn is_deleted(&self) -> bool {
+impl<S:Clone,I:Clone,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
+    fn is_deleted(&self) -> bool {
         match self.to_obj_data() { Deleted => true, _ => false }
     }
 
-    pub fn is_visible(&self) -> bool {
+    fn is_visible(&self) -> bool {
         match self.to_obj_data() { Visible(*) => true, _ => false }
     }
 
-    pub fn is_invisible(&self) -> bool {
+    fn is_invisible(&self) -> bool {
         match self.to_obj_data() { Invisible(*) => true, _ => false }
     }
 
-    pub fn is_lnstart(&self) -> bool {
+    fn is_lnstart(&self) -> bool {
         match self.to_obj_data() { LNStart(*) => true, _ => false }
     }
 
-    pub fn is_lndone(&self) -> bool {
+    fn is_lndone(&self) -> bool {
         match self.to_obj_data() { LNDone(*) => true, _ => false }
     }
 
-    pub fn is_ln(&self) -> bool {
+    fn is_ln(&self) -> bool {
         match self.to_obj_data() { LNStart(*) | LNDone(*) => true, _ => false }
     }
 
-    pub fn is_bomb(&self) -> bool {
+    fn is_bomb(&self) -> bool {
         match self.to_obj_data() { Bomb(*) => true, _ => false }
     }
 
-    pub fn is_soundable(&self) -> bool {
+    fn is_soundable(&self) -> bool {
         match self.to_obj_data() {
             Visible(*) | Invisible(*) | LNStart(*) | LNDone(*) => true,
             _ => false
         }
     }
 
-    pub fn is_gradable(&self) -> bool {
+    fn is_gradable(&self) -> bool {
         match self.to_obj_data() {
             Visible(*) | LNStart(*) | LNDone(*) => true,
             _ => false
         }
     }
 
-    pub fn is_renderable(&self) -> bool {
+    fn is_renderable(&self) -> bool {
         match self.to_obj_data() {
             Visible(*) | LNStart(*) | LNDone(*) | Bomb(*) => true,
             _ => false
         }
     }
 
-    pub fn is_object(&self) -> bool {
+    fn is_object(&self) -> bool {
         match self.to_obj_data() {
             Visible(*) | Invisible(*) | LNStart(*) | LNDone(*) | Bomb(*) => true,
             _ => false
         }
     }
 
-    pub fn is_bgm(&self) -> bool {
+    fn is_bgm(&self) -> bool {
         match self.to_obj_data() { BGM(*) => true, _ => false }
     }
 
-    pub fn is_setbga(&self) -> bool {
+    fn is_setbga(&self) -> bool {
         match self.to_obj_data() { SetBGA(*) => true, _ => false }
     }
 
-    pub fn is_setbpm(&self) -> bool {
+    fn is_setbpm(&self) -> bool {
         match self.to_obj_data() { SetBPM(*) => true, _ => false }
     }
 
-    pub fn is_stop(&self) -> bool {
+    fn is_stop(&self) -> bool {
         match self.to_obj_data() { Stop(*) => true, _ => false }
     }
 
-    pub fn is_stopend(&self) -> bool {
+    fn is_stopend(&self) -> bool {
         match self.to_obj_data() { StopEnd => true, _ => false }
     }
 
-    pub fn is_setmeasurefactor(&self) -> bool {
+    fn is_setmeasurefactor(&self) -> bool {
         match self.to_obj_data() { SetMeasureFactor(*) => true, _ => false }
     }
 
-    pub fn is_measurebar(&self) -> bool {
+    fn is_measurebar(&self) -> bool {
         match self.to_obj_data() { MeasureBar => true, _ => false }
     }
 
-    pub fn is_end(&self) -> bool {
+    fn is_end(&self) -> bool {
         match self.to_obj_data() { End => true, _ => false }
     }
 
-    pub fn object_lane(&self) -> Option<Lane> {
+    fn object_lane(&self) -> Option<Lane> {
         match self.to_obj_data() {
             Visible(lane,_) | Invisible(lane,_) | LNStart(lane,_) |
             LNDone(lane,_) | Bomb(lane,_,_) => Some(lane),
@@ -350,98 +350,98 @@ impl<S:Copy,I:Copy,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
         }
     }
 
-    pub fn sounds(&self) -> ~[S] {
+    fn sounds(&self) -> ~[S] {
         match self.to_obj_data() {
-            Visible(_,Some(ref sref)) => ~[copy *sref],
-            Invisible(_,Some(ref sref)) => ~[copy *sref],
-            LNStart(_,Some(ref sref)) => ~[copy *sref],
-            LNDone(_,Some(ref sref)) => ~[copy *sref],
-            Bomb(_,Some(ref sref),_) => ~[copy *sref],
-            BGM(ref sref) => ~[copy *sref],
+            Visible(_,Some(ref sref)) => ~[sref.clone()],
+            Invisible(_,Some(ref sref)) => ~[sref.clone()],
+            LNStart(_,Some(ref sref)) => ~[sref.clone()],
+            LNDone(_,Some(ref sref)) => ~[sref.clone()],
+            Bomb(_,Some(ref sref),_) => ~[sref.clone()],
+            BGM(ref sref) => ~[sref.clone()],
             _ => ~[]
         }
     }
 
-    pub fn keydown_sound(&self) -> Option<S> {
+    fn keydown_sound(&self) -> Option<S> {
         match self.to_obj_data() {
-            Visible(_,ref sref) | Invisible(_,ref sref) | LNStart(_,ref sref) => copy *sref,
+            Visible(_,ref sref) | Invisible(_,ref sref) | LNStart(_,ref sref) => sref.clone(),
             _ => None
         }
     }
 
-    pub fn keyup_sound(&self) -> Option<S> {
-        match self.to_obj_data() { LNDone(_,ref sref) => copy *sref, _ => None }
+    fn keyup_sound(&self) -> Option<S> {
+        match self.to_obj_data() { LNDone(_,ref sref) => sref.clone(), _ => None }
     }
 
-    pub fn through_sound(&self) -> Option<S> {
-        match self.to_obj_data() { Bomb(_,ref sref,_) => copy *sref, _ => None }
+    fn through_sound(&self) -> Option<S> {
+        match self.to_obj_data() { Bomb(_,ref sref,_) => sref.clone(), _ => None }
     }
 
-    pub fn images(&self) -> ~[I] {
-        match self.to_obj_data() { SetBGA(_,Some(ref iref)) => ~[copy *iref], _ => ~[] }
+    fn images(&self) -> ~[I] {
+        match self.to_obj_data() { SetBGA(_,Some(ref iref)) => ~[iref.clone()], _ => ~[] }
     }
 
-    pub fn through_damage(&self) -> Option<Damage> {
+    fn through_damage(&self) -> Option<Damage> {
         match self.to_obj_data() { Bomb(_,_,damage) => Some(damage), _ => None }
     }
 }
 
-impl<S:Copy,I:Copy,T:WithObjData<S,I>+Copy> ObjConvOps<S,I> for T {
-    pub fn to_visible(&self) -> T {
+impl<S:Clone,I:Clone,T:WithObjData<S,I>+Clone> ObjConvOps<S,I> for T {
+    fn to_visible(&self) -> T {
         let data = match self.to_obj_data() {
             Visible(lane,ref snd) | Invisible(lane,ref snd) |
-            LNStart(lane,ref snd) | LNDone(lane,ref snd) => Visible(lane,copy *snd),
+            LNStart(lane,ref snd) | LNDone(lane,ref snd) => Visible(lane,snd.clone()),
             _ => fail!(~"to_visible for non-object")
         };
         self.with_obj_data(data)
     }
 
-    pub fn to_invisible(&self) -> T {
+    fn to_invisible(&self) -> T {
         let data = match self.to_obj_data() {
             Visible(lane,ref snd) | Invisible(lane,ref snd) |
-            LNStart(lane,ref snd) | LNDone(lane,ref snd) => Invisible(lane,copy *snd),
+            LNStart(lane,ref snd) | LNDone(lane,ref snd) => Invisible(lane,snd.clone()),
             _ => fail!(~"to_invisible for non-object")
         };
         self.with_obj_data(data)
     }
 
-    pub fn to_lnstart(&self) -> T {
+    fn to_lnstart(&self) -> T {
         let data = match self.to_obj_data() {
             Visible(lane,ref snd) | Invisible(lane,ref snd) |
-            LNStart(lane,ref snd) | LNDone(lane,ref snd) => LNStart(lane,copy *snd),
+            LNStart(lane,ref snd) | LNDone(lane,ref snd) => LNStart(lane,snd.clone()),
             _ => fail!(~"to_lnstart for non-object")
         };
         self.with_obj_data(data)
     }
 
-    pub fn to_lndone(&self) -> T {
+    fn to_lndone(&self) -> T {
         let data = match self.to_obj_data() {
             Visible(lane,ref snd) | Invisible(lane,ref snd) |
-            LNStart(lane,ref snd) | LNDone(lane,ref snd) => LNDone(lane,copy *snd),
+            LNStart(lane,ref snd) | LNDone(lane,ref snd) => LNDone(lane,snd.clone()),
             _ => fail!(~"to_lndone for non-object")
         };
         self.with_obj_data(data)
     }
 
-    pub fn to_effect(&self) -> T {
+    fn to_effect(&self) -> T {
         let data = match self.to_obj_data() {
             Visible(_,Some(ref snd)) | Invisible(_,Some(ref snd)) |
-            LNStart(_,Some(ref snd)) | LNDone(_,Some(ref snd)) => BGM(copy *snd),
+            LNStart(_,Some(ref snd)) | LNDone(_,Some(ref snd)) => BGM(snd.clone()),
             Visible(_,None) | Invisible(_,None) |
             LNStart(_,None) | LNDone(_,None) | Bomb(_,_,_) => Deleted,
-            _ => { return copy *self; }
+            _ => { return self.clone(); }
         };
         self.with_obj_data(data)
     }
 
-    pub fn with_object_lane(&self, lane: Lane) -> T {
+    fn with_object_lane(&self, lane: Lane) -> T {
         let data = match self.to_obj_data() {
-            Visible(_,ref snd) => Visible(lane,copy *snd),
-            Invisible(_,ref snd) => Invisible(lane,copy *snd),
-            LNStart(_,ref snd) => LNStart(lane,copy *snd),
-            LNDone(_,ref snd) => LNDone(lane,copy *snd),
-            Bomb(_,ref snd,damage) => Bomb(lane,copy *snd,damage),
-            _ => { return copy *self; }
+            Visible(_,ref snd) => Visible(lane,snd.clone()),
+            Invisible(_,ref snd) => Invisible(lane,snd.clone()),
+            LNStart(_,ref snd) => LNStart(lane,snd.clone()),
+            LNDone(_,ref snd) => LNDone(lane,snd.clone()),
+            Bomb(_,ref snd,damage) => Bomb(lane,snd.clone(),damage),
+            _ => { return self.clone(); }
         };
         self.with_obj_data(data)
     }
@@ -475,17 +475,17 @@ pub struct ObjLoc<T> {
     time: T,
 }
 
-impl<T:Copy+Ord> Ord for ObjLoc<T> {
+impl<T:Clone+Ord> Ord for ObjLoc<T> {
     fn lt(&self, other: &ObjLoc<T>) -> bool { self.time < other.time }
     fn le(&self, other: &ObjLoc<T>) -> bool { self.time <= other.time }
     fn ge(&self, other: &ObjLoc<T>) -> bool { self.time >= other.time }
     fn gt(&self, other: &ObjLoc<T>) -> bool { self.time > other.time }
 }
 
-impl<T:Copy> Index<ObjAxis,T> for ObjLoc<T> {
+impl<T:Clone> Index<ObjAxis,T> for ObjLoc<T> {
     fn index(&self, axis: &ObjAxis) -> T {
-        match *axis { VirtualPos  => copy self.vpos,  ActualPos  => copy self.pos,
-                      VirtualTime => copy self.vtime, ActualTime => copy self.time }
+        match *axis { VirtualPos  => self.vpos.clone(),  ActualPos  => self.pos.clone(),
+                      VirtualTime => self.vtime.clone(), ActualTime => self.time.clone() }
     }
 }
 
@@ -531,24 +531,24 @@ impl<T:Copy> Index<ObjAxis,T> for ObjLoc<T> {
 #[deriving(Eq,ToStr,Clone)]
 pub struct Obj<SoundRef,ImageRef> {
     /// Object location.
-    loc: ObjLoc<float>,
+    loc: ObjLoc<f64>,
     /// Associated object data.
     data: ObjData<SoundRef,ImageRef>
 }
 
-impl<S:Copy,I:Copy> Ord for Obj<S,I> {
+impl<S:Clone,I:Clone> Ord for Obj<S,I> {
     fn lt(&self, other: &Obj<S,I>) -> bool { self.loc < other.loc }
     fn le(&self, other: &Obj<S,I>) -> bool { self.loc <= other.loc }
     fn ge(&self, other: &Obj<S,I>) -> bool { self.loc >= other.loc }
     fn gt(&self, other: &Obj<S,I>) -> bool { self.loc > other.loc }
 }
 
-impl<S:Copy,I:Copy> ToObjData<S,I> for Obj<S,I> {
-    pub fn to_obj_data(&self) -> ObjData<S,I> { copy self.data }
+impl<S:Clone,I:Clone> ToObjData<S,I> for Obj<S,I> {
+    fn to_obj_data(&self) -> ObjData<S,I> { self.data.clone() }
 }
 
-impl<S:Copy,I:Copy> WithObjData<S,I> for Obj<S,I> {
-    pub fn with_obj_data(&self, data: ObjData<S,I>) -> Obj<S,I> {
+impl<S:Clone,I:Clone> WithObjData<S,I> for Obj<S,I> {
+    fn with_obj_data(&self, data: ObjData<S,I>) -> Obj<S,I> {
         Obj { loc: self.loc.clone(), data: data }
     }
 }

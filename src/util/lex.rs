@@ -13,7 +13,7 @@
  * - `ws*`: Consumes zero or more whitespace.
  * - `int [-> e2]`: Consumes an integer and optionally saves it to `e2`. The integer syntax is
  *   slightly limited compared to `sscanf`.
- * - `float [-> e2]`: Consumes a real number and optionally saves it to `e2`. Again, the real number
+ * - `f64 [-> e2]`: Consumes a real number and optionally saves it to `e2`. Again, the real number
  *   syntax is slightly limited; especially an exponent support is missing.
  * - `str [-> e2]`: Consumes a remaining input as a string and optionally saves it to `e2`.
  *   The string is at least one character long. Implies `!`. It can be followed by `ws*` which
@@ -53,7 +53,7 @@ macro_rules! lex(
         //        by garbage, so we need to parse it ourselves.
         do _line.scan_int().map_default(false) |&_endpos| {
             let _prefix = _line.slice_to(_endpos);
-            do ::std::int::from_str(_prefix).map_default(false) |&_value| {
+            do from_str(_prefix).map_default(false) |&_value| {
                 $dst = _value;
                 lex!(_line.slice_from(_endpos); $($tail)*)
             }
@@ -63,17 +63,17 @@ macro_rules! lex(
         let _line: &str = $e;
         do _line.scan_uint().map_default(false) |&_endpos| {
             let _prefix = _line.slice_to(_endpos);
-            do ::std::uint::from_str(_prefix).map_default(false) |&_value| {
+            do from_str(_prefix).map_default(false) |&_value| {
                 $dst = _value;
                 lex!(_line.slice_from(_endpos); $($tail)*)
             }
         }
     });
-    ($e:expr; float -> $dst:expr, $($tail:tt)*) => ({
+    ($e:expr; f64 -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        do _line.scan_float().map_default(false) |&_endpos| {
+        do _line.scan_f64().map_default(false) |&_endpos| {
             let _prefix = _line.slice_to(_endpos);
-            do ::std::float::from_str(_prefix).map_default(false) |&_value| {
+            do from_str(_prefix).map_default(false) |&_value| {
                 $dst = _value;
                 lex!(_line.slice_from(_endpos); $($tail)*)
             }
@@ -131,7 +131,7 @@ macro_rules! lex(
         // Rust: this is plain annoying.
         if _line.len() >= 3 && _isdigit(_line.char_at(0)) && _isdigit(_line.char_at(1)) &&
                 _isdigit(_line.char_at(2)) {
-            $dst = ::std::uint::from_str(_line.slice_to(3u)).unwrap();
+            $dst = from_str(_line.slice_to(3u)).unwrap();
             lex!(_line.slice_from(3u); $($tail)*)
         } else {
             false
@@ -174,9 +174,9 @@ macro_rules! lex(
         let mut _dummy: uint = 0;
         lex!($e; uint -> _dummy, $($tail)*)
     });
-    ($e:expr; float, $($tail:tt)*) => ({
-        let mut _dummy: float = 0.0;
-        lex!($e; float -> _dummy, $($tail)*)
+    ($e:expr; f64, $($tail:tt)*) => ({
+        let mut _dummy: f64 = 0.0;
+        lex!($e; f64 -> _dummy, $($tail)*)
     });
     ($e:expr; str, $($tail:tt)*) => ({
         !$e.is_empty() && lex!(""; $($tail)*) // optimization!
@@ -210,7 +210,7 @@ macro_rules! lex(
 
     ($e:expr; int -> $dst:expr) => (lex!($e; int -> $dst, ));
     ($e:expr; uint -> $dst:expr) => (lex!($e; uint -> $dst, ));
-    ($e:expr; float -> $dst:expr) => (lex!($e; float -> $dst, ));
+    ($e:expr; f64 -> $dst:expr) => (lex!($e; f64 -> $dst, ));
     ($e:expr; str -> $dst:expr) => (lex!($e; str -> $dst, ));
     ($e:expr; str -> $dst:expr, ws*) => (lex!($e; str -> $dst, ws*, ));
     ($e:expr; str* -> $dst:expr) => (lex!($e; str* -> $dst, ));
@@ -226,7 +226,7 @@ macro_rules! lex(
     ($e:expr; ws*) => (lex!($e; ws*, ));
     ($e:expr; int) => (lex!($e; int, ));
     ($e:expr; uint) => (lex!($e; uint, ));
-    ($e:expr; float) => (lex!($e; float, ));
+    ($e:expr; f64) => (lex!($e; f64, ));
     ($e:expr; str) => (lex!($e; str, ));
     ($e:expr; str*) => (lex!($e; str*, ));
     ($e:expr; char) => (lex!($e; char, ));

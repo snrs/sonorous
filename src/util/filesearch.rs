@@ -23,7 +23,7 @@ pub fn resolve_relative_path(basedir: &Path, path: &str, exts: &[&str]) -> Optio
     use util::std::str::StrUtil;
 
     let mut parts = ~[];
-    for path.split_iter(|c: char| c == '/' || c == '\\').advance |part| {
+    for part in path.split_iter(|c: char| c == '/' || c == '\\') {
         if part.is_empty() { loop; }
         parts.push(part);
     }
@@ -31,17 +31,17 @@ pub fn resolve_relative_path(basedir: &Path, path: &str, exts: &[&str]) -> Optio
 
     let mut cur = basedir.clone();
     let lastpart = parts.pop();
-    for parts.iter().advance |part| {
+    for part in parts.iter() {
         // early exit if the intermediate path does not exist or is not a directory
         if !path_is_dir(&cur) { return None; }
 
         let part = part.to_ascii_upper();
         let mut found = false;
         let entries = list_dir(&cur); // XXX #3511
-        for entries.iter().advance |&next| {
-            if next == ~"." || next == ~".." { loop; }
+        for next in entries.iter() {
+            if ".".equiv(next) || "..".equiv(next) { loop; }
             if next.to_ascii_upper() == part {
-                cur = cur.push(next);
+                cur = cur.push(*next);
                 found = true;
                 break;
             }
@@ -53,15 +53,15 @@ pub fn resolve_relative_path(basedir: &Path, path: &str, exts: &[&str]) -> Optio
 
     let lastpart = lastpart.to_ascii_upper();
     let entries = list_dir(&cur); // XXX #3511
-    for entries.iter().advance |&next| {
-        if next == ~"." || next == ~".." { loop; }
+    for next in entries.iter() {
+        if ".".equiv(next) || "..".equiv(next) { loop; }
         let next_ = next.to_ascii_upper();
         let mut found = (next_ == lastpart);
         if !found {
             match next_.rfind('.') {
                 Some(idx) => {
                     let nextnoext = next_.slice_to(idx).to_owned();
-                    for exts.iter().advance |ext| {
+                    for ext in exts.iter() {
                         if nextnoext + ext.to_owned() == lastpart {
                             found = true;
                             break;
@@ -72,7 +72,7 @@ pub fn resolve_relative_path(basedir: &Path, path: &str, exts: &[&str]) -> Optio
             }
         }
         if found {
-            return Some(cur.push(next));
+            return Some(cur.push(*next));
         }
     }
 

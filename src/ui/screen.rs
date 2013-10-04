@@ -26,19 +26,20 @@ pub struct GLState {
 impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
     pub fn new() -> Result<GLState,~str> {
+        #[fixed_stack_segment]; #[inline(never)];
         use ext::win32::ll::*;
 
         macro_rules! return_on_err(
             ($e:expr) => {
                 match $e {
                     Ok(v) => v,
-                    Err(err) => { return Err(fmt!("EGL error 0x%x", err as uint)); }
+                    Err(err) => { return Err(format!("EGL error 0x{:x}", err)); }
                 }
             }
         )
 
         // we need to preload this before initializing EGL
-        do "d3dcompiler_43.dll".as_c_str() |dllname| {
+        do "d3dcompiler_43.dll".to_c_str().with_ref |dllname| {
             unsafe { LoadLibraryA(dllname); }
         }
 
@@ -91,10 +92,10 @@ impl GLState {
 
 #[cfg(target_os="win32")]
 impl Drop for GLState {
-    fn drop(&self) {
+    fn drop(&mut self) {
         match egl::terminate(self.egl_display) {
             Ok(()) => {}
-            Err(err) => fail!(fmt!("EGL error 0x%x", err as uint))
+            Err(err) => fail!(format!("EGL error 0x{:x}", err))
         }
     }
 }

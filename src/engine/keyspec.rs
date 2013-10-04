@@ -127,26 +127,26 @@ impl KeySpec {
     /// count as keys.
     pub fn nkeys(&self) -> uint {
         let mut nkeys = 0;
-        for self.kinds.iter().filter_map(|kind| *kind).advance |kind| {
+        for kind in self.kinds.iter().filter_map(|kind| *kind) {
             if kind.counts_as_key() { nkeys += 1; }
         }
         nkeys
     }
 
-    /// Iterates over lanes on the left side, from left to right.
-    pub fn each_left_lanes(&self, f: &fn(&Lane) -> bool) -> bool {
+    /// Returns a list of lanes on the left side, from left to right.
+    pub fn left_lanes<'r>(&'r self) -> &'r [Lane] {
         assert!(self.split <= self.order.len());
-        self.order.slice(0, self.split).iter().advance(f)
+        self.order.slice(0, self.split)
     }
 
-    /// Iterates over lanes on the right side if any, from left to right.
-    pub fn each_right_lanes(&self, f: &fn(&Lane) -> bool) -> bool {
+    /// Returns a list of lanes on the right side if any, from left to right.
+    pub fn right_lanes<'r>(&'r self) -> &'r [Lane] {
         assert!(self.split <= self.order.len());
-        self.order.slice(self.split, self.order.len()).iter().advance(f)
+        self.order.slice(self.split, self.order.len())
     }
 
     /// Removes insignificant lanes.
-    pub fn filter_timeline<S:Copy,I:Copy>(&self, timeline: &mut Timeline<S,I>) {
+    pub fn filter_timeline<S:Clone,I:Clone>(&self, timeline: &mut Timeline<S,I>) {
         filter_lanes(timeline, self.order);
     }
 }
@@ -205,9 +205,9 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
     use util::std::str::StrUtil;
 
     let mut present = [false, ..NLANES];
-    for bms.timeline.objs.iter().advance |&obj| {
+    for &obj in bms.timeline.objs.iter() {
         let lane = obj.object_lane(); // XXX #3511
-        for lane.iter().advance |&Lane(lane)| {
+        for &Lane(lane) in lane.iter() {
             present[lane] = true;
         }
     }
@@ -229,7 +229,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
         Some(preset) => preset
     };
 
-    for PRESETS.iter().advance |&(name, leftkeys, rightkeys)| {
+    for &(name, leftkeys, rightkeys) in PRESETS.iter() {
         if name == preset {
             return Some((leftkeys.to_owned(), rightkeys.to_owned()));
         }
@@ -253,15 +253,11 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
             match preset_to_key_spec(bms, preset.clone()) {
                 Some(leftright) => leftright,
                 None => {
-                    return Err(fmt!("Invalid preset name: %s",
-                                    preset.map_default(~"", |&v| v.clone())));
+                    return Err(format!("Invalid preset name: {}", preset.clone().unwrap_or(~"")));
                 }
             }
         } else {
-            // Rust: `Option` of managed pointer is not easy to use due to
-            //       implicit move. `Option<T>::clone_default` maybe?
-            (leftkeys.map_default(~"", |&v| v.clone()),
-             rightkeys.map_default(~"", |&v| v.clone()))
+            (leftkeys.clone().unwrap_or(~""), rightkeys.clone().unwrap_or(~""))
         };
 
     let mut keyspec = ~KeySpec { split: 0, order: ~[], kinds: ~[None, ..NLANES] };
@@ -269,27 +265,28 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
         match parse_key_spec(keys) {
             None | Some([]) => None,
             Some(left) => {
-                for left.iter().advance |&(lane,kind)| {
-                    if keyspec.kinds[*lane].is_some() { return None; }
+                let mut err = false;
+                for &(lane,kind) in left.iter() {
+                    if keyspec.kinds[*lane].is_some() { err = true; break; }
                     keyspec.order.push(lane);
                     keyspec.kinds[*lane] = Some(kind);
                 }
-                Some(left.len())
+                if err {None} else {Some(left.len())}
             }
         }
     };
 
     if !leftkeys.is_empty() {
         match parse_and_add(leftkeys) {
-            None => { return Err(fmt!("Invalid key spec for left hand side: %s", leftkeys)); }
+            None => { return Err(format!("Invalid key spec for left hand side: {}", leftkeys)); }
             Some(nkeys) => { keyspec.split += nkeys; }
         }
     } else {
-        return Err(fmt!("No key model is specified using -k or -K"));
+        return Err(~"No key model is specified using -k or -K");
     }
     if !rightkeys.is_empty() {
         match parse_and_add(rightkeys) {
-            None => { return Err(fmt!("Invalid key spec for right hand side: %s", rightkeys)); }
+            None => { return Err(format!("Invalid key spec for right hand side: {}", rightkeys)); }
             Some(nkeys) => { // no split panes except for #PLAYER 2
                 if bms.meta.player != CouplePlay { keyspec.split += nkeys; }
             }

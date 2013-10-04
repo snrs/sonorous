@@ -27,14 +27,14 @@ impl Scene for PlayResultScene {
     fn tick(&mut self) -> SceneCommand {
         // print the message and immediately terminates
         if self.player.gauge >= self.player.survival {
-            println(fmt!("*** CLEARED! ***\n\
-                          COOL  %4u    GREAT %4u    GOOD  %4u\n\
-                          BAD   %4u    MISS  %4u    MAX COMBO %u\n\
-                          SCORE %07u (max %07d)",
-                         self.player.gradecounts[4], self.player.gradecounts[3],
-                         self.player.gradecounts[2], self.player.gradecounts[1],
-                         self.player.gradecounts[0], self.player.bestcombo,
-                         self.player.score, self.player.infos.maxscore));
+            println(format!("*** CLEARED! ***\n\
+                             COOL  {:4}    GREAT {:4}    GOOD  {:4}\n\
+                             BAD   {:4}    MISS  {:4}    MAX COMBO {}\n\
+                             SCORE {:07} (max {:07})",
+                            self.player.gradecounts[4], self.player.gradecounts[3],
+                            self.player.gradecounts[2], self.player.gradecounts[1],
+                            self.player.gradecounts[0], self.player.bestcombo,
+                            self.player.score, self.player.infos.maxscore));
         } else {
             println("YOU FAILED!");
         }

@@ -117,7 +117,7 @@ impl Shader {
     pub fn from_str(shader_type: ShaderType, code: &str) -> Result<Shader,~str> {
         let shader = gl::create_shader(shader_type as GLenum);
         if shader == 0 {
-            return Err(fmt!("GL error 0x%x", gl::get_error() as uint));
+            return Err(format!("GL error 0x{:x}", gl::get_error()));
         }
 
         gl::shader_source(shader, ["#version 100\n".as_bytes().to_owned(),
@@ -134,14 +134,14 @@ impl Shader {
 
     /// Creates a shader from given file path.
     pub fn from_file(shader_type: ShaderType, path: &Path) -> Result<Shader,~str> {
-        do ::std::io::file_reader(path).chain |f| {
+        do ::std::io::file_reader(path).and_then |f| {
             Shader::from_str(shader_type, f.read_c_str())
         }
     }
 }
 
 impl Drop for Shader {
-    fn drop(&self) {
+    fn drop(&mut self) {
         gl::delete_shader(self.index);
     }
 }
@@ -180,14 +180,14 @@ impl Program {
     /// Returns a location for given attribute name.
     pub fn attrib_location(&self, attr: &str) -> Result<AttribLoc,~str> {
         let loc = gl::get_attrib_location(self.index, attr.to_owned());
-        if loc == -1 { return Err(fmt!("no attrib location: %s", attr)); }
+        if loc == -1 { return Err(format!("no attrib location: {}", attr)); }
         Ok(AttribLoc(loc))
     }
 
     /// Returns a location for given uniform variable name.
     pub fn uniform_location(&self, uniform: &str) -> Result<UniformLoc,~str> {
         let loc = gl::get_uniform_location(self.index, uniform.to_owned());
-        if loc == -1 { return Err(fmt!("no uniform location: %s", uniform)); }
+        if loc == -1 { return Err(format!("no uniform location: {}", uniform)); }
         Ok(UniformLoc(loc))
     }
 
@@ -478,7 +478,7 @@ pub struct Texture {
 }
 
 impl Drop for Texture {
-    fn drop(&self) {
+    fn drop(&mut self) {
         gl::delete_textures(&[self.index]);
     }
 }
@@ -545,7 +545,7 @@ pub struct Buffer {
 }
 
 impl Drop for Buffer {
-    fn drop(&self) {
+    fn drop(&mut self) {
         gl::delete_buffers(&[self.index]);
     }
 }
@@ -600,29 +600,28 @@ impl ShadedDrawing {
 /// Common trait for shaded rendering interface.
 pub trait ShadedDrawingTraits {
     /// Adds a point to the state, with a direct RGBA color.
-    pub fn point_rgba(&mut self, x: f32, y: f32, rgba: (u8,u8,u8,u8));
+    fn point_rgba(&mut self, x: f32, y: f32, rgba: (u8,u8,u8,u8));
 
     /// Adds a point to the state.
-    pub fn point(&mut self, x: f32, y: f32, c: video::Color);
+    fn point(&mut self, x: f32, y: f32, c: video::Color);
 
     /// Adds a triangle to the state, with an uniform color.
-    pub fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32,
-                    c: video::Color);
+    fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, c: video::Color);
 
     /// Adds four points of a rectangle to the state, with direct RGBA colors.
-    pub fn rect_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, rgba11: (u8,u8,u8,u8),
-                     rgba12: (u8,u8,u8,u8), rgba21: (u8,u8,u8,u8), rgba22: (u8,u8,u8,u8));
+    fn rect_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, rgba11: (u8,u8,u8,u8),
+                 rgba12: (u8,u8,u8,u8), rgba21: (u8,u8,u8,u8), rgba22: (u8,u8,u8,u8));
 
     /// Adds four points of a rectangle to the state, with a horizontal gradient.
-    pub fn rect_horiz(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
-                      cx1: video::Color, cx2: video::Color);
+    fn rect_horiz(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                  cx1: video::Color, cx2: video::Color);
 
     /// Adds four points of a rectangle to the state, with a vertical gradient.
-    pub fn rect_vert(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
-                     cy1: video::Color, cy2: video::Color);
+    fn rect_vert(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                 cy1: video::Color, cy2: video::Color);
 
     /// Adds four points of a rectangle to the state, with an uniform color.
-    pub fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: video::Color);
+    fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: video::Color);
 }
 
 impl ShadedDrawingTraits for ShadedDrawing {
@@ -712,21 +711,20 @@ impl TexturedDrawing {
 /// Common trait for textured rendering interface.
 pub trait TexturedDrawingTraits {
     /// Adds a point to the state, with direct texture coordinates.
-    pub fn point_st(&mut self, x: f32, y: f32, st: (f32,f32));
+    fn point_st(&mut self, x: f32, y: f32, st: (f32,f32));
 
     /// Adds a point to the state.
-    pub fn point(&mut self, x: f32, y: f32, s: f32, t: f32);
+    fn point(&mut self, x: f32, y: f32, s: f32, t: f32);
 
     /// Adds four points of a rectangle to the state, with direct texture coordinates.
-    pub fn rect_st(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, st1: (f32,f32), st2: (f32,f32));
+    fn rect_st(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, st1: (f32,f32), st2: (f32,f32));
 
     /// Adds four points of a rectangle to the state, with a specified pixel area.
-    pub fn rect_area(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
-                     s1: f32, t1: f32, s2: f32, t2: f32);
+    fn rect_area(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, s1: f32, t1: f32, s2: f32, t2: f32);
 
     /// Adds four points of a rectangle to the state, where the whole texture is used for that
     /// rectangle.
-    pub fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32);
+    fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32);
 }
 
 impl TexturedDrawingTraits for TexturedDrawing {

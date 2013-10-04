@@ -4,8 +4,6 @@
 
 //! Viewer portion of the game play screen. Also shared by exclusive modes.
 
-use std::uint;
-
 use ext::sdl::mpeg;
 use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
 use util::gl::{Texture, TexturedDrawingTraits};
@@ -24,13 +22,13 @@ struct BGARenderState {
 
 trait Uploadable {
     /// Uploads an associated surface to the texture if any.
-    pub fn upload_to_texture(&self, texture: &Texture);
+    fn upload_to_texture(&self, texture: &Texture);
     /// Returns true if the resource should be updated continuously (i.e. movies or animations).
-    pub fn should_always_upload(&self) -> bool;
+    fn should_always_upload(&self) -> bool;
 }
 
 impl Uploadable for ImageResource {
-    pub fn upload_to_texture(&self, texture: &Texture) {
+    fn upload_to_texture(&self, texture: &Texture) {
         match *self {
             NoImage => {}
             Image(surface) | Movie(surface,_) => {
@@ -39,7 +37,7 @@ impl Uploadable for ImageResource {
         }
     }
 
-    pub fn should_always_upload(&self) -> bool {
+    fn should_always_upload(&self) -> bool {
         match *self {
             NoImage | Image(_) => false,
             Movie(_,mpeg) => mpeg.status() == mpeg::SMPEG_PLAYING
@@ -54,9 +52,9 @@ impl BGARenderState {
         let textures = do state.map |&iref| {
             let texture = match Texture::new(BGAW, BGAH) {
                 Ok(texture) => texture,
-                Err(err) => die!("Texture::new failed: %s", err)
+                Err(err) => die!("Texture::new failed: {}", err)
             };
-            for iref.iter().advance |&iref| {
+            for &iref in iref.iter() {
                 imgres[**iref].upload_to_texture(&texture);
             }
             texture
@@ -67,19 +65,19 @@ impl BGARenderState {
     /// Updates the BGA state. This method prepares given image resources for the next rendering,
     /// notably by starting and stopping the movie playback and uploading textures as needed.
     pub fn update(&mut self, current: &BGAState, imgres: &[ImageResource]) {
-        for uint::range(0, NLAYERS) |layer| {
+        for layer in range(0, NLAYERS) {
             // TODO this design can't handle the case that a BGA layer is updated to the same
             // image reference, which should rewind the movie playback.
             if self.state[layer] != current[layer] {
-                for self.state[layer].iter().advance |&iref| {
+                for &iref in self.state[layer].iter() {
                     imgres[**iref].stop_movie();
                 }
-                for current[layer].iter().advance |&iref| {
+                for &iref in current[layer].iter() {
                     imgres[**iref].start_movie();
                     imgres[**iref].upload_to_texture(&self.textures[layer]);
                 }
             } else {
-                for self.state[layer].iter().advance |&iref| {
+                for &iref in self.state[layer].iter() {
                     if imgres[**iref].should_always_upload() {
                         imgres[**iref].upload_to_texture(&self.textures[layer]);
                     }
@@ -92,7 +90,7 @@ impl BGARenderState {
     /// Renders the image resources for the specified layers to the specified region of `screen`.
     pub fn render(&self, screen: &Screen, layers: &[BGALayer], x: f32, y: f32, w: f32, h: f32) {
         // the BGA area should have been already filled to black.
-        for layers.iter().advance |&layer| {
+        for &layer in layers.iter() {
             if self.state[layer as uint].is_some() {
                 do screen.draw_textured(&self.textures[layer as uint]) |d| {
                     d.rect(x, y, x + w, y + h);
@@ -131,11 +129,12 @@ impl Scene for TextualViewingScene {
 
         let elapsed = (self.player.now - self.player.origintime) / 100;
         let duration = (self.player.duration * 10.0) as uint;
-        update_line(fmt!("%02u:%02u.%u / %02u:%02u.%u (@%9.4f) | BPM %6.2f | %u / %d notes",
-                         elapsed/600, elapsed/10%60, elapsed%10,
-                         duration/600, duration/10%60, duration%10,
-                         self.player.cur.loc.vpos, *self.player.bpm,
-                         self.player.lastcombo, self.player.infos.nnotes));
+        update_line(format!("{:02}:{:02}.{} / {:02}:{:02}.{} (@{pos:9.4}) | \
+                             BPM {bpm:6.2} | {lastcombo} / {nnotes} notes",
+                            elapsed/600, elapsed/10%60, elapsed%10,
+                            duration/600, duration/10%60, duration%10,
+                            pos = self.player.cur.loc.vpos, bpm = *self.player.bpm,
+                            lastcombo = self.player.lastcombo, nnotes = self.player.infos.nnotes));
     }
 
     fn deactivate(&mut self) {

@@ -126,34 +126,34 @@ define_ToInt16!(u16)
 define_ToInt16!(u32)
 define_ToInt16!(u64)
 
-impl<X:ToInt16+Copy,Y:ToInt16+Copy> XyOpt for (X,Y) {
+impl<X:ToInt16+Clone,Y:ToInt16+Clone> XyOpt for (X,Y) {
     #[inline(always)]
     fn xy_opt(&self) -> Option<(i16,i16)> {
-        let (x, y) = copy *self;
+        let (x, y) = self.clone();
         Some((x.to_i16(), y.to_i16()))
     }
 }
 
-impl<X:ToInt16+Copy,Y:ToInt16+Copy> Xy for (X,Y) {
+impl<X:ToInt16+Clone,Y:ToInt16+Clone> Xy for (X,Y) {
     #[inline(always)]
     fn xy(&self) -> (i16,i16) {
-        let (x, y) = copy *self;
+        let (x, y) = self.clone();
         (x.to_i16(), y.to_i16())
     }
 }
 
-impl<W:ToInt16+Copy,H:ToInt16+Copy> WhOpt for (W,H) {
+impl<W:ToInt16+Clone,H:ToInt16+Clone> WhOpt for (W,H) {
     #[inline(always)]
     fn wh_opt(&self) -> Option<(u16,u16)> {
-        let (w, h) = copy *self;
+        let (w, h) = self.clone();
         Some((w.to_u16(), h.to_u16()))
     }
 }
 
-impl<W:ToInt16+Copy,H:ToInt16+Copy> Wh for (W,H) {
+impl<W:ToInt16+Clone,H:ToInt16+Clone> Wh for (W,H) {
     #[inline(always)]
     fn wh(&self) -> (u16,u16) {
-        let (w, h) = copy *self;
+        let (w, h) = self.clone();
         (w.to_u16(), h.to_u16())
     }
 }
@@ -171,7 +171,7 @@ fn rect_from_xy<XY:Xy>(xy: XY) -> Rect {
 #[inline(always)]
 fn rect_from_xywh<XY:Xy,WH:WhOpt>(xy: XY, wh: WH) -> Rect {
     let (x, y) = xy.xy();
-    let (w, h) = wh.wh_opt().get_or_default((0, 0));
+    let (w, h) = wh.wh_opt().unwrap_or((0, 0));
     Rect { x: x, y: y, w: w, h: h }
 }
 
@@ -224,6 +224,7 @@ pub fn to_rgba(c: Color) -> (u8, u8, u8, u8) {
 }
 
 /// Linear color gradient.
+#[deriving(Eq)]
 pub struct Gradient {
     /// A color at the position 0.0. Normally used as a topmost value.
     zero: Color,
@@ -238,18 +239,21 @@ pub fn Gradient(top: Color, bottom: Color) -> Gradient {
 
 /// A trait for color or color gradient. The color at the particular position can be calculated
 /// with `blend` method.
-//
-// Rust: `Copy` can't be inherited even when it's specified. (#3984)
 pub trait Blend {
+    /// Returns itself. This is same as `Clone::clone` but redefined here due to the inability
+    /// of implementing `Clone` for `Color`.
+    fn clone(&self) -> Self;
     /// Calculates the color at the position `num/denom`.
     fn blend(&self, num: int, denom: int) -> Color;
 }
 
 impl Blend for Color {
+    fn clone(&self) -> Color { *self }
     fn blend(&self, _num: int, _denom: int) -> Color { *self }
 }
 
 impl Blend for Gradient {
+    fn clone(&self) -> Gradient { *self }
     fn blend(&self, num: int, denom: int) -> Color {
         fn mix(x: u8, y: u8, num: int, denom: int) -> u8 {
             let x = x as int;
@@ -293,7 +297,7 @@ impl SurfacePixelsUtil for Surface {
     fn with_pixels<R>(&self, f: &fn(pixels: &mut SurfacePixels) -> R) -> R {
         do self.with_lock |pixels| {
             let fmt = unsafe {(*self.raw).format};
-            let pitch = unsafe {(*self.raw).pitch / 4 as uint};
+            let pitch = unsafe {((*self.raw).pitch / 4) as uint};
             let pixels = unsafe {::std::cast::transmute(pixels)};
             let mut proxy = SurfacePixels { fmt: fmt, width: self.get_width() as uint,
                                             height: self.get_height() as uint,
@@ -303,43 +307,28 @@ impl SurfacePixelsUtil for Surface {
     }
 }
 
-/// Returns a pixel at given position.
-//
-// Rust: this and subsequent `*_pixel` functions are required due to the incorrect lifetime
-//       inference in 0.6 borrowck algorithm. This problem has been fixed in 0.7 with a new
-//       flow-sensitive borrowck, but for now we keep them.
-pub fn get_pixel(surface: &SurfacePixels, x: uint, y: uint) -> Color {
-    Color::from_mapped(surface.pixels[x + y * surface.pitch], surface.fmt)
-}
+impl<'self> SurfacePixels<'self> {
+    /// Returns a pixel at given position. (C: `getpixel`)
+    pub fn get_pixel(&self, x: uint, y: uint) -> Color {
+        Color::from_mapped(self.pixels[x + y * self.pitch], self.fmt)
+    }
 
-/// Sets a pixel to given position.
-pub fn put_pixel(surface: &mut SurfacePixels, x: uint, y: uint, c: Color) {
-    surface.pixels[x + y * surface.pitch] = c.to_mapped(surface.fmt);
-}
+    /// Sets a pixel to given position. (C: `putpixel`)
+    pub fn put_pixel(&mut self, x: uint, y: uint, c: Color) {
+        self.pixels[x + y * self.pitch] = c.to_mapped(self.fmt);
+    }
 
-/// Sets or blends (if `c` is `RGBA`) a pixel to given position.
-pub fn put_blended_pixel(surface: &mut SurfacePixels, x: uint, y: uint, c: Color) {
-    match c {
-        RGB(*) => put_pixel(surface, x, y, c),
-        RGBA(r,g,b,a) => match get_pixel(surface, x, y) {
-            RGB(r2,g2,b2) | RGBA(r2,g2,b2,_) => {
-                let grad = Gradient { zero: RGB(r,g,b), one: RGB(r2,g2,b2) };
-                put_pixel(surface, x, y, grad.blend(a as int, 255));
+    /// Sets or blends (if `c` is `RGBA`) a pixel to given position. (C: `putblendedpixel`)
+    pub fn put_blended_pixel(&mut self, x: uint, y: uint, c: Color) {
+        match c {
+            RGB(*) => self.put_pixel(x, y, c),
+            RGBA(r,g,b,a) => match self.get_pixel(x, y) {
+                RGB(r2,g2,b2) | RGBA(r2,g2,b2,_) => {
+                    let grad = Gradient { zero: RGB(r,g,b), one: RGB(r2,g2,b2) };
+                    self.put_pixel(x, y, grad.blend(a as int, 255));
+                }
             }
         }
-    }
-}
-
-impl<'self> SurfacePixels<'self> {
-    /// Returns a pixel at given position.
-    pub fn get_pixel(&self, x: uint, y: uint) -> Color { get_pixel(self, x, y) }
-
-    /// Sets a pixel to given position.
-    pub fn put_pixel(&mut self, x: uint, y: uint, c: Color) { put_pixel(self, x, y, c) }
-
-    /// Sets or blends (if `c` is `RGBA`) a pixel to given position.
-    pub fn put_blended_pixel(&mut self, x: uint, y: uint, c: Color) {
-        put_blended_pixel(self, x, y, c)
     }
 }
 

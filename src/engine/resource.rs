@@ -49,6 +49,7 @@ fn resolve_relative_path_result(basedir: &Path, path: &str, exts: &[&str]) -> Re
 
 /// Sound resource associated to `SoundRef`. It contains the actual SDL_mixer chunk that can be
 /// readily played.
+#[deriving(Clone)]
 pub enum SoundResource {
     /// No sound resource is associated, or error occurred while loading.
     NoSound,
@@ -72,12 +73,12 @@ impl SoundResource {
     /// Returns the length of associated sound chunk in seconds. This is used for determining
     /// the actual duration of the song in presence of key and background sounds, so it may
     /// return 0.0 if no sound is present.
-    pub fn duration(&self) -> float {
+    pub fn duration(&self) -> f64 {
         match *self {
             NoSound => 0.0,
             Sound(chunk) => {
                 let chunk = chunk.to_ll_chunk();
-                (unsafe {(*chunk).alen} as float) / (BYTESPERSEC as float)
+                (unsafe {(*chunk).alen} as f64) / (BYTESPERSEC as f64)
             }
         }
     }
@@ -92,6 +93,7 @@ pub fn load_sound(path: &str, basedir: &Path) -> Result<SoundResource,~str> {
 
 /// Image resource associated to `ImageRef`. It can be either a static image or a movie, and
 /// both contains an SDL surface that can be blitted to the screen.
+#[deriving(Clone)]
 pub enum ImageResource {
     /// No image resource is associated, or error occurred while loading.
     NoImage,
@@ -184,7 +186,7 @@ pub fn apply_blitcmd(imgres: &mut [ImageResource], bc: &BlitCmd) {
         NoImage => {
             let surface = match PreparedSurface::new(BGAW, BGAH, false) {
                 Ok(surface) => @surface,
-                Err(err) => fail!(fmt!("PreparedSurface::new failed: %s", err))
+                Err(err) => fail!(format!("PreparedSurface::new failed: {}", err))
             };
             surface.fill(RGB(0, 0, 0));
             surface.set_color_key([video::SrcColorKey, video::RLEAccel], RGB(0, 0, 0));

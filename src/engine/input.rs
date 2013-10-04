@@ -4,7 +4,7 @@
 
 //! Mapping from actual inputs to virtual inputs.
 
-use std::{uint, to_bytes};
+use std::to_bytes;
 
 use sdl::event;
 use format::obj::Lane;
@@ -185,7 +185,7 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
         unsafe {
             let firstkey = 0;
             let lastkey = ::std::cast::transmute(event::LastKey);
-            for uint::range(firstkey, lastkey) |keyidx| {
+            for keyidx in range(firstkey, lastkey) {
                 let key = ::std::cast::transmute(keyidx);
                 let keyname = event::get_key_name(key).to_ascii_lower();
                 if keyname == name { return Some(key); }
@@ -214,24 +214,24 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
         }
     };
 
-    for KEYSETS.iter().advance |&keyset| {
+    for &keyset in KEYSETS.iter() {
         let (envvar, envvar2, default, mapping) = keyset; // XXX
         let spec = getenv(/*keyset.*/envvar).or(getenv(/*keyset.*/envvar2));
-        let spec = spec.get_or_default(/*keyset.*/default.to_owned());
+        let spec = spec.unwrap_or(/*keyset.*/default.to_owned());
 
         let mut i = 0;
-        for spec.split_iter('|').advance |part| {
+        for part in spec.split_iter('|') {
             let (kind, vinputs) = /*keyset.*/mapping[i];
-            for part.split_iter('%').advance |s| {
+            for s in part.split_iter('%') {
                 match parse_input(s) {
                     Some(input) => {
-                        for vinputs.iter().advance |&vinput| {
+                        for &vinput in vinputs.iter() {
                             add_mapping(kind, input, vinput);
                         }
                     }
                     None => {
-                        return Err(fmt!("Unknown key name in the environment variable %s: %s",
-                                        /*keyset.*/envvar, s));
+                        return Err(format!("Unknown key name in the environment variable {}: {}",
+                                           /*keyset.*/envvar, s));
                     }
                 }
             }
@@ -241,17 +241,17 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
         }
     }
 
-    for keyspec.order.iter().advance |&lane| {
+    for &lane in keyspec.order.iter() {
         let key = Key(36 + *lane as int);
-        let kind = keyspec.kinds[*lane].get();
-        let envvar = fmt!("SNRS_%s%c_KEY", key.to_str(), kind.to_char());
-        let envvar2 = fmt!("ANGOLMOIS_%s%c_KEY", key.to_str(), kind.to_char());
+        let kind = keyspec.kinds[*lane].unwrap();
+        let envvar = format!("SNRS_{}{}_KEY", key.to_str(), kind.to_char());
+        let envvar2 = format!("ANGOLMOIS_{}{}_KEY", key.to_str(), kind.to_char());
         let val = getenv(envvar).or(getenv(envvar2)); // XXX #3511
-        for val.iter().advance |&s| {
-            match parse_input(s) {
+        for s in val.iter() {
+            match parse_input(*s) {
                 Some(input) => { add_mapping(Some(kind), input, LaneInput(lane)); }
-                None => { return Err(fmt!("Unknown key name in the environment variable %s: %s",
-                                          envvar, s)); }
+                None => { return Err(format!("Unknown key name in the environment variable {}: {}",
+                                             envvar, *s)); }
             }
         }
     }

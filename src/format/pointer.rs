@@ -4,7 +4,7 @@
 
 //! Pointer interface, which provides a reference to the position or object in the timeline.
 
-use std::{uint, num, managed};
+use std::{num, managed};
 use format::obj::{Obj, ObjAxis, ObjLoc, ObjData, ToObjData};
 use format::timeline::Timeline;
 
@@ -31,7 +31,7 @@ pub struct Pointer<SoundRef,ImageRef> {
      */
     index: uint,
     /// The current location per axis, not necessarily equal to that of any object.
-    loc: ObjLoc<float>,
+    loc: ObjLoc<f64>,
 }
 
 /// Returns true if two pointers share the common timeline.
@@ -85,20 +85,20 @@ impl<S,I> Ord for Pointer<S,I> {
 }
 
 impl<S,I> Clone for Pointer<S,I> {
-    pub fn clone(&self) -> Pointer<S,I> {
+    fn clone(&self) -> Pointer<S,I> {
         Pointer { timeline: self.timeline, index: self.index, loc: self.loc.clone() }
     }
 }
 
-impl<S:Copy,I:Copy> ToObjData<S,I> for Pointer<S,I> {
-    pub fn to_obj_data(&self) -> ObjData<S,I> { copy self.timeline.objs[self.index].data }
+impl<S:Clone,I:Clone> ToObjData<S,I> for Pointer<S,I> {
+    fn to_obj_data(&self) -> ObjData<S,I> { self.timeline.objs[self.index].data.clone() }
 }
 
 /// Given one axis, interpolates remaining axes from the difference of `objs[index-1]` and
 /// `objs[index]` (or similar generalization if one of them is out of bounds). Used by
 /// `Pointer::locate` and `Pointer::seek` methods.
 fn interpolate_loc<S,I>(timeline: &Timeline<S,I>, index: uint,
-                        axis: ObjAxis, pos: float) -> ObjLoc<float> {
+                        axis: ObjAxis, pos: f64) -> ObjLoc<f64> {
     let objs: &[Obj<S,I>] = timeline.objs;
     assert!(index == 0 || index == objs.len() ||
             objs[index-1].loc[axis] < objs[index].loc[axis]);
@@ -128,7 +128,7 @@ fn interpolate_loc<S,I>(timeline: &Timeline<S,I>, index: uint,
              vtime: starts.vtime + diffs.vtime * frac, time: starts.time + diffs.time * frac }
 }
 
-impl<S:Copy,I:Copy> Pointer<S,I> {
+impl<S:Clone,I:Clone> Pointer<S,I> {
     /// Returns true if the pointer invariant holds.
     pub fn invariant(&self) -> bool {
         if self.index > 0 {
@@ -154,7 +154,7 @@ impl<S:Copy,I:Copy> Pointer<S,I> {
     /// Returns a pointer to the first object which position is no less than `pos`.
     /// It takes `O(log n)` time, and should be preferred when there is no more information about
     /// `pos` (i.e. random access).
-    pub fn from_axis(timeline: @Timeline<S,I>, axis: ObjAxis, pos: float) -> Pointer<S,I> {
+    pub fn from_axis(timeline: @Timeline<S,I>, axis: ObjAxis, pos: f64) -> Pointer<S,I> {
         // we seek to the first object no less than given position. with an exception of the very
         // first and last object, an object right before this object should be less than given
         // position therefore.
@@ -183,7 +183,7 @@ impl<S:Copy,I:Copy> Pointer<S,I> {
     /// Locates the first object which position is no less than the current position plus `delta`.
     /// It can move in both forward and backward motion. It takes `O(n)` time, and should be
     /// preferred when `pos` is close enough to the current pointer (i.e. linear access).
-    pub fn seek(&mut self, axis: ObjAxis, delta: float) {
+    pub fn seek(&mut self, axis: ObjAxis, delta: f64) {
         // do nothing, as the following algorithm can't guarantee that it will locate the first
         // object when the pointer already points the object which is not the first object of
         // given position and `delta` is zero.
@@ -207,7 +207,7 @@ impl<S:Copy,I:Copy> Pointer<S,I> {
 
     /// Returns a new pointer that points to the first object which position is no less than
     /// the current position plus `delta`.
-    pub fn find(&self, axis: ObjAxis, delta: float) -> Pointer<S,I> {
+    pub fn find(&self, axis: ObjAxis, delta: f64) -> Pointer<S,I> {
         let mut ptr = self.clone();
         ptr.seek(axis, delta);
         ptr
@@ -227,12 +227,15 @@ impl<S:Copy,I:Copy> Pointer<S,I> {
     pub fn upto(&self, end: &Pointer<S,I>, f: &fn(Pointer<S,I>) -> bool) -> bool {
         assert!(has_same_timeline(self, end));
         let timeline = self.timeline;
-        uint::range(self.index, end.index, |i| f(Pointer::from_index(timeline, i)))
+        for i in range(self.index, end.index) {
+            if !f(Pointer::from_index(timeline, i)) { return false; }
+        }
+        true
     }
 
     /// Iterates objects until the object is no less than `delta` measures/seconds away from
     /// the current position.
-    pub fn until(&self, axis: ObjAxis, delta: float, f: &fn(Pointer<S,I>) -> bool) -> bool {
+    pub fn until(&self, axis: ObjAxis, delta: f64, f: &fn(Pointer<S,I>) -> bool) -> bool {
         let pos = self.loc[axis] + delta;
         let timeline = self.timeline;
         let objs: &[Obj<S,I>] = self.timeline.objs;
@@ -273,7 +276,7 @@ impl<S:Copy,I:Copy> Pointer<S,I> {
     /// the current position, while updating the current pointer. If the caller breaks the loop,
     /// the pointer points to the last returned object. Otherwise the location is set to given
     /// position. In any case the pointer doesn't change during the loop.
-    pub fn mut_until(&mut self, axis: ObjAxis, delta: float, f: &fn(Pointer<S,I>) -> bool) -> bool {
+    pub fn mut_until(&mut self, axis: ObjAxis, delta: f64, f: &fn(Pointer<S,I>) -> bool) -> bool {
         if delta <= 0.0 { return true; }
         let pos = self.loc[axis] + delta;
 
@@ -339,23 +342,23 @@ impl<S:Copy,I:Copy> Pointer<S,I> {
 /// Timeline additions for pointers.
 pub trait TimelinePointerUtil<SoundRef,ImageRef> {
     /// Returns a pointer pointing at given position in the timeline.
-    pub fn pointer(@self, axis: ObjAxis, pos: float) -> Pointer<SoundRef,ImageRef>;
+    fn pointer(@self, axis: ObjAxis, pos: f64) -> Pointer<SoundRef,ImageRef>;
     /// Returns a pointer pointing at given object in the timeline.
-    pub fn pointer_with_index(@self, index: uint) -> Pointer<SoundRef,ImageRef>;
+    fn pointer_with_index(@self, index: uint) -> Pointer<SoundRef,ImageRef>;
     /// Returns a pointer pointing at the end of the timeline.
-    pub fn pointer_with_end(@self) -> Pointer<SoundRef,ImageRef>;
+    fn pointer_with_end(@self) -> Pointer<SoundRef,ImageRef>;
 }
 
-impl<S:Copy,I:Copy> TimelinePointerUtil<S,I> for Timeline<S,I> {
-    pub fn pointer(@self, axis: ObjAxis, pos: float) -> Pointer<S,I> {
+impl<S:Clone,I:Clone> TimelinePointerUtil<S,I> for Timeline<S,I> {
+    fn pointer(@self, axis: ObjAxis, pos: f64) -> Pointer<S,I> {
         Pointer::from_axis(self, axis, pos)
     }
 
-    pub fn pointer_with_index(@self, index: uint) -> Pointer<S,I> {
+    fn pointer_with_index(@self, index: uint) -> Pointer<S,I> {
         Pointer::from_index(self, index)
     }
 
-    pub fn pointer_with_end(@self) -> Pointer<S,I> {
+    fn pointer_with_end(@self) -> Pointer<S,I> {
         Pointer::from_end(self)
     }
 }

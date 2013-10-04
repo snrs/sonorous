@@ -17,7 +17,7 @@
  * # Notes
  *
  * - This code is known to compile with the following combinations of rustc and rust-sdl:
- *     - rustc 0.7 + rust-sdl `48cb490` 2013-07-02 (an unmerged branch from rossmurray/rust-sdl)
+ *     - rustc 0.8 + rust-sdl `5598e68` 2013-10-03
  *
  * - There are several comments with Rust issue numbers like #1234. They are intended to be fixed
  *   after corresponding issues are resolved. The following issues are common enough that we put
@@ -101,46 +101,51 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     use ui::scene::{Scene, run_scene};
     use ui::loading::{LoadingScene, TextualLoadingScene};
 
-    let callback: bms::diag::BmsMessageCallback = |line, msg| {
-        let atline = match line { Some(line) => fmt!(" at line %u", line), None => ~"" };
-        warn!("[%s%s] %s", msg.severity().to_str(), atline, msg.to_str());
-        true
-    };
+    struct Callback;
+    impl bms::diag::BmsMessageListener for Callback {
+        fn on_message(&mut self, line: Option<uint>, msg: bms::diag::BmsMessage) -> bool {
+            let atline = match line { Some(line) => format!(" at line {}", line), None => ~"" };
+            warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
+            true
+        }
+    }
+    let mut callback = Callback;
 
     if opts.debug_dumpbmscommand {
         let f = match std::io::file_reader(&Path(bmspath)) {
             Ok(f) => f,
-            Err(err) => die!("Couldn't load BMS file: %s", err)
+            Err(err) => die!("Couldn't load BMS file: {}", err)
         };
-        let parseropts = bms::parse::BmsParserOptions { callback: Some(callback) };
-        for bms::parse::each_bms_command(f, &parseropts) |cmd| {
+        let parseropts = bms::parse::BmsParserOptions::new();
+        do bms::parse::each_bms_command(f, &parseropts, &mut callback) |cmd| {
             match cmd {
                 bms::parse::BmsUnknown(*) => {}
                 cmd => { println(cmd.to_str()); }
             }
-        }
+            true
+        };
         ui::common::exit(0);
     }
 
     // parses the file and sanitizes it
     let mut r = std::rand::rng();
-    let loaderopts = bms::load::BmsLoaderOptions { callback: Some(callback) };
-    let mut bms = match bms::load::load_bms(bmspath, &mut r, &loaderopts) {
+    let loaderopts = bms::load::BmsLoaderOptions::new();
+    let mut bms = match bms::load::load_bms(bmspath, &mut r, &loaderopts, &mut callback) {
         Ok(bms) => bms,
-        Err(err) => die!("Couldn't load BMS file: %s", err)
+        Err(err) => die!("Couldn't load BMS file: {}", err)
     };
 
     // parses the key specification and further sanitizes `bms` with it
     let keyspec = match engine::keyspec::key_spec(&bms, opts.preset.clone(),
                                                   opts.leftkeys.clone(), opts.rightkeys.clone()) {
         Ok(keyspec) => keyspec,
-        Err(err) => die!("%s", err)
+        Err(err) => die!("{}", err)
     };
     keyspec.filter_timeline(&mut bms.timeline);
     let infos = bms.timeline.analyze();
 
     // applies the modifier if any
-    for opts.modf.iter().advance |&modf| {
+    for &modf in opts.modf.iter() {
         player::apply_modf(&mut bms, modf, &mut r, keyspec, 0, keyspec.split);
         if keyspec.split < keyspec.order.len() {
             player::apply_modf(&mut bms, modf, &mut r, keyspec, keyspec.split, keyspec.order.len());
@@ -152,57 +157,50 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
         ui::common::exit(0);
     }
 
-    let (port, chan) = std::comm::stream();
-    chan.send(~(opts, bms, infos, keyspec));
+    // initialize SDL
+    init_audio();
+    for &joyidx in opts.joystick.iter() { init_joystick(joyidx); }
 
-    do ::sdl::start {
-        let ~(opts, bms, infos, keyspec) = port.recv();
-
-        // initialize SDL
-        init_audio();
-        for opts.joystick.iter().advance |&joyidx| { init_joystick(joyidx); }
-
-        // initialize the screen if required
-        let screen;
-        let keymap;
-        if opts.has_screen() {
-            screen = Some(init_video(opts.is_exclusive(), opts.fullscreen));
-            // this requires a video subsystem.
-            keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
-                Ok(map) => ~map,
-                Err(err) => die!("%s", err)
-            };
-        } else {
-            screen = None;
-            // in this case we explicitly ignore keymaps
-            keymap = ~std::hashmap::HashMap::new();
-        }
-
-        let scene = if opts.is_exclusive() {
-            TextualLoadingScene::new(screen, bms, infos, keyspec, keymap, opts) as ~Scene:
-        } else {
-            LoadingScene::new(screen.unwrap(), bms, infos, keyspec, keymap, opts) as ~Scene:
+    // initialize the screen if required
+    let screen;
+    let keymap;
+    if opts.has_screen() {
+        screen = Some(init_video(opts.is_exclusive(), opts.fullscreen));
+        // this requires a video subsystem.
+        keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
+            Ok(map) => ~map,
+            Err(err) => die!("{}", err)
         };
-        run_scene(scene);
+    } else {
+        screen = None;
+        // in this case we explicitly ignore keymaps
+        keymap = ~std::hashmap::HashMap::new();
     }
+
+    let scene = if opts.is_exclusive() {
+        TextualLoadingScene::new(screen, bms, infos, keyspec, keymap, opts) as ~Scene:
+    } else {
+        LoadingScene::new(screen.unwrap(), bms, infos, keyspec, keymap, opts) as ~Scene:
+    };
+    run_scene(scene);
 }
 
 /// Prints the usage.
 pub fn usage() {
     // Rust: this is actually a good use case of `include_str!`...
-    std::io::stderr().write_str(fmt!("\
-%s
+    std::io::stderr().write_str(format!("\
+{}
 https://github.com/snrs/sonorous/
 
-Usage: %s <options> <path>
+Usage: {} <options> <path>
   Accepts any BMS, BME, BML or PMS file.
   Resources should be in the same directory as the BMS file.
 
 Options:
   -h, --help              This help
   -V, --version           Shows the version
-  -a #.#, --speed #.#     Sets the initial play speed (default: 1.0x)
-  -#                      Same as '-a #.0'
+  -a X.X, --speed X.X     Sets the initial play speed (default: 1.0x)
+  -1, .., -9              Same as '-a 1.0', .., '-a 9.0'
   -v, --autoplay          Enables AUTO PLAY (viewer) mode
   -x, --exclusive         Enables exclusive (BGA and sound only) mode
   -X, --sound-only        Enables sound only mode, equivalent to -xB
@@ -221,7 +219,7 @@ Options:
   --bga                   Loads and shows the BGA (default)
   -B, --no-bga            Do not load and show the BGA
   -M, --no-movie          Do not load and show the BGA movie
-  -j #, --joystick #      Enables the joystick with index # (normally 0)
+  -j N, --joystick N      Enables the joystick with index N (normally 0)
   -Z OPTION               Enables the specified debugging option
 
 Environment Variables:
@@ -231,7 +229,7 @@ Environment Variables:
   SNRS_SPEED_KEYS=<speed down>|<speed up>
   SNRS_XXy_KEY=<keys for channel XX and channel kind y>
     Sets keys used for game play. Use either SDL key names or joystick names
-    like 'button #' or 'axis #' can be used. Separate multiple keys by '%%'.
+    like 'button N' or 'axis N' can be used. Separate multiple keys by '%'.
     See the manual for more information.
 
 Available debugging options:
@@ -251,7 +249,7 @@ pub fn main() {
         ShowVersion => { println(version()); }
         ShowUsage => { usage(); }
         PathAndOptions(bmspath, opts) => { play(bmspath, opts); }
-        Error(err) => { die!("%s", err); }
+        Error(err) => { die!("{}", err); }
     }
 }
 

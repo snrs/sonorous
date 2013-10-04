@@ -4,7 +4,7 @@
 
 //! BMS loader. Uses a BMS parser (`format::bms::parse`) to produce `format::bms::Bms` structure.
 
-use std::uint;
+use std::{vec, iter, io};
 use std::rand::*;
 
 use format::obj::*;
@@ -14,14 +14,22 @@ use format::bms::diag::*;
 use format::bms::{ImageRef, SoundRef, DefaultBPM, SinglePlay, BmsMeta, Bms};
 
 /// Loader options for BMS format.
-pub struct BmsLoaderOptions<'self> {
-    /// Message callback. Callback may return false in order to terminate the loading.
-    callback: Option<BmsMessageCallback<'self>>,
+pub struct BmsLoaderOptions {
+    /// Parser options.
+    parser: parse::BmsParserOptions,
 }
 
-/// Reads the BMS file with given RNG from given reader.
-pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
-                                          opts: &BmsLoaderOptions<'r>) -> Result<Bms,~str> {
+impl BmsLoaderOptions {
+    /// Returns default loader options.
+    pub fn new() -> BmsLoaderOptions {
+        BmsLoaderOptions { parser: parse::BmsParserOptions::new() }
+    }
+}
+
+/// Reads the BMS file with given RNG from given reader. Diagnostic messages are sent via callback.
+pub fn load_bms_from_reader<'r,R:Rng,Listener:BmsMessageListener>(
+                                f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
+                                callback: &mut Listener) -> Result<Bms,~str> {
     use format::timeline::builder::{TimelineBuilder, Mark};
 
     let mut title = None;
@@ -32,8 +40,8 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
     let mut player = SinglePlay;
     let mut playlevel = 0;
     let mut rank = 2;
-    let mut sndpath = [None, ..MAXKEY];
-    let mut imgpath = [None, ..MAXKEY];
+    let mut sndpath = vec::from_elem(MAXKEY as uint, None);
+    let mut imgpath = vec::from_elem(MAXKEY as uint, None);
     let mut blitcmd = ~[];
 
     /// The state of the block, for determining which lines should be processed.
@@ -122,6 +130,12 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
         fn gt(&self, other: &BmsLine) -> bool { !self.le(other) }
     }
 
+    impl Clone for BmsLine {
+        fn clone(&self) -> BmsLine {
+            BmsLine { measure: self.measure, chan: self.chan, data: self.data.clone() }
+        }
+    }
+
     // A builder for objects.
     let mut builder = TimelineBuilder::new();
     builder.set_initbpm(DefaultBPM);
@@ -145,8 +159,7 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
     // command.
     let mut lnobj = None;
 
-    let parseropts = parse::BmsParserOptions { callback: opts.callback };
-    for parse::each_bms_command(f, &parseropts) |cmd| {
+    do parse::each_bms_command(f, &opts.parser, callback) |cmd| {
         assert!(!blk.is_empty());
         match (cmd, blk.last().inactive()) {
             (parse::BmsTitle(s),           false) => { title = Some(s.to_owned()); }
@@ -184,12 +197,11 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
                 // do not generate a random value if the entire block is skipped (but it
                 // still marks the start of block)
                 let inactive = blk.last().inactive();
-                let generated = do val.chain |val| {
-                    // Rust: there should be `Option<T>::chain` if `T` is copyable.
+                let generated = do val.and_then |val| {
                     if setrandom {
                         Some(val)
                     } else if !inactive {
-                        Some(r.gen_int_range(1, val + 1)) // Rust: not an uniform distribution yet!
+                        Some(r.gen_integer_range(1, val + 1))
                     } else {
                         None
                     }
@@ -217,8 +229,8 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
                 last.state = if last.state == Ignore {Process} else {NoFurther};
             }
             (parse::BmsEndIf, _) => {
-                let lastinside = blk.rposition(|&i| i.state != Outside); // XXX #3511
-                for lastinside.iter().advance |&idx| {
+                let lastinside = blk.iter().rposition(|&i| i.state != Outside); // XXX #3511
+                for &idx in lastinside.iter() {
                     if idx > 0 { blk.truncate(idx + 1); }
                 }
 
@@ -228,7 +240,8 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
 
             (_, _) => {}
         }
-    }
+        true
+    };
 
     // Poor BGA defined by #BMP00 wouldn't be played if it is a movie. We can't just let it
     // played at the beginning of the chart as the "beginning" is not always 0.0 (actually,
@@ -249,7 +262,7 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
     // Handles a non-00 alphanumeric key `v` positioned at the particular channel `chan` and
     // particular position `t`. The position `t2` next to `t` is used for some cases that
     // an alphanumeric key designates an area rather than a point.
-    let handle_key = |chan: Key, t: float, t2: float, v: Key| {
+    let handle_key = |chan: Key, t: f64, t2: f64, v: Key| {
         match *chan {
             // channel #01: BGM
             1 => { builder.add(t, BGM(SoundRef(v))); }
@@ -257,8 +270,8 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
             // channel #03: BPM as an hexadecimal key
             3 => {
                 let v = v.to_hex(); // XXX #3511
-                for v.iter().advance |&v| {
-                    builder.add(t, SetBPM(BPM(v as float)))
+                for &v in v.iter() {
+                    builder.add(t, SetBPM(BPM(v as f64)))
                 }
             }
 
@@ -289,7 +302,7 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
                 if lnobj.is_some() && lnobj == Some(v) {
                     // change the last inserted visible object to the start of LN if any.
                     let lastvispos = lastvis[*lane];
-                    for lastvispos.iter().advance |&mark| {
+                    for &mark in lastvispos.iter() {
                         do builder.mutate(mark) |pos, data| {
                             assert!(data.is_visible());
                             (pos, data.to_lnstart())
@@ -359,11 +372,11 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
             468/*0xD*36*/..539/*0xF*36-1*/ => {
                 let lane = chan.to_lane();
                 let damage = match *v {
-                    1..200 => Some(GaugeDamage(*v as float / 200.0)),
+                    1..200 => Some(GaugeDamage(*v as f64 / 200.0)),
                     1295 => Some(InstantDeath), // XXX 1295=MAXKEY-1
                     _ => None
                 };
-                for damage.iter().advance |&damage| {
+                for &damage in damage.iter() {
                     builder.add(t, Bomb(lane, Some(SoundRef(Key(0))), damage));
                 }
             }
@@ -377,17 +390,17 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
 
     // loop over the sorted bmslines
     ::extra::sort::tim_sort(bmsline);
-    for bmsline.iter().advance |line| {
-        let measure = line.measure as float;
+    for line in bmsline.iter() {
+        let measure = line.measure as f64;
         let data: ~[char] = line.data.iter().collect();
         let max = data.len() / 2 * 2;
-        let count = max as float;
-        for uint::range_step(0, max, 2) |i| {
+        let count = max as f64;
+        for i in iter::range_step(0, max, 2) {
             let v = Key::from_chars(data.slice(i, i+2));
-            for v.iter().advance |&v| {
+            for &v in v.iter() {
                 if v != Key(0) { // ignores 00
-                    let t = measure + i as float / count;
-                    let t2 = measure + (i + 2) as float / count;
+                    let t = measure + i as f64 / count;
+                    let t2 = measure + (i + 2) as f64 / count;
                     handle_key(line.chan, t, t2, v);
                 }
             }
@@ -401,8 +414,8 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
 
     // fix the unterminated longnote
     let nmeasures = bmsline.last_opt().map_default(0, |l| l.measure) + 1;
-    let endt = nmeasures as float;
-    for uint::range(0, NLANES) |i| {
+    let endt = nmeasures as f64;
+    for i in range(0, NLANES) {
         if lastvis[i].is_some() || (!consecutiveln && lastln[i].is_some()) {
             builder.add(endt, LNDone(Lane(i), None));
         }
@@ -411,10 +424,10 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
     // convert shortens to objects and insert measure bars
     shortens.grow_set(nmeasures, &1.0, 1.0); // so we always have a normal measure at the end
     let mut prevfactor = 1.0;
-    for shortens.iter().enumerate().advance |(measure, &factor)| {
-        builder.add(measure as float, MeasureBar);
+    for (measure, &factor) in shortens.iter().enumerate() {
+        builder.add(measure as f64, MeasureBar);
         if prevfactor != factor {
-            builder.add(measure as float, SetMeasureFactor(factor));
+            builder.add(measure as f64, SetMeasureFactor(factor));
             prevfactor = factor;
         }
     }
@@ -431,10 +444,11 @@ pub fn load_bms_from_reader<'r,R:RngUtil>(f: @::std::io::Reader, r: &mut R,
 }
 
 /// Reads the BMS file with given RNG.
-pub fn load_bms<'r,R:RngUtil>(bmspath: &str, r: &mut R,
-                              opts: &BmsLoaderOptions<'r>) -> Result<Bms,~str> {
-    do ::std::io::file_reader(&Path(bmspath)).chain |f| {
-        do load_bms_from_reader(f, r, opts).map |&bms| {
+pub fn load_bms<'r,R:Rng,Listener:BmsMessageListener>(
+                                bmspath: &str, r: &mut R, opts: &BmsLoaderOptions,
+                                callback: &mut Listener) -> Result<Bms,~str> {
+    do io::file_reader(&Path(bmspath)).and_then |f| {
+        do load_bms_from_reader(f, r, opts, callback).map_move |bms| {
             let mut bms = bms;
             bms.bmspath = bmspath.to_owned();
             bms

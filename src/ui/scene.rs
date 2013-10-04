@@ -49,26 +49,26 @@ pub enum SceneCommand {
 pub trait Scene {
     /// Called when the scene is to be activated, prior to the first `tick` call. May return
     /// a non-`Continue` command to immediately deactivate the scene.
-    pub fn activate(&mut self) -> SceneCommand;
+    fn activate(&mut self) -> SceneCommand;
 
     /// Returns the options for this scene. It is called *after* the `activate` call.
-    pub fn scene_options(&self) -> SceneOptions;
+    fn scene_options(&self) -> SceneOptions;
 
     /// Does the event handling and internal logics, and returns a command to instruct the caller.
-    pub fn tick(&mut self) -> SceneCommand;
+    fn tick(&mut self) -> SceneCommand;
 
     /// Does the rendering jobs. It may get called once after the `tick` call (but not mandatory,
     /// for example, due to the frame drop).
-    pub fn render(&self);
+    fn render(&self);
 
     /// Called when the scene is to be deactivated by the latest `tick` call. It is not called
     /// when `activate` returns a non-`Continue` command and the scene becomes deactivated.
-    pub fn deactivate(&mut self);
+    fn deactivate(&mut self);
 
     /// Called when the scene is to be replaced by a new `Scene` due to the `ReplaceScene` command.
     /// When called due to the `tick` call, this is called after `deactivate` call.
     /// And yes, this has to be `~Scene:` without no `Send` kind.
-    pub fn consume(~self) -> ~Scene:;
+    fn consume(~self) -> ~Scene:;
 }
 
 /// Runs given scene and other additionally spawned scenes.

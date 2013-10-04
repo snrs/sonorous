@@ -46,7 +46,7 @@ pub mod str {
             ret.as_bytes().to_owned()
         };
         let bytes = fix_utf8(v, newhandler);
-        unsafe { raw::from_bytes(bytes) }
+        unsafe { raw::from_utf8(bytes) }
     }
 
     /// Extensions to `str`.
@@ -71,16 +71,16 @@ pub mod str {
         /// Returns a length of the longest prefix of given string, which `uint::from_str`
         /// accepts without a failure, if any.
         //
-        // Rust: actually, it is better to have `{uint,int,float}::from_str` returning a tuple.
+        // Rust: actually, it is better to have `{uint,int,f64}::from_str` returning a tuple.
         fn scan_uint(&self) -> Option<uint>;
 
         /// Returns a length of the longest prefix of given string, which `int::from_str`
         /// accepts without a failure, if any.
         fn scan_int(&self) -> Option<uint>;
 
-        /// Returns a length of the longest prefix of given string, which `float::from_str`
+        /// Returns a length of the longest prefix of given string, which `f64::from_str`
         /// accepts without a failure, if any.
-        fn scan_float(&self) -> Option<uint>;
+        fn scan_f64(&self) -> Option<uint>;
 
         /// Converts all ASCII letters (A-Z/a-z, no accent) to uppercase.
         fn to_ascii_upper(&self) -> ~str;
@@ -133,8 +133,8 @@ pub mod str {
             }
         }
 
-        fn scan_float(&self) -> Option<uint> {
-            do self.scan_int().chain |pos| {
+        fn scan_f64(&self) -> Option<uint> {
+            do self.scan_int().and_then |pos| {
                 if self.len() > pos && self.char_at(pos) == '.' {
                     let pos2 = self.slice_from(pos + 1u).scan_uint();
                     pos2.map(|&pos2| pos + pos2 + 1u)
@@ -155,7 +155,7 @@ pub mod str {
         fn as_utf16_c_str<T>(&self, f: &fn(*u16) -> T) -> T {
             let mut s16 = self.to_utf16();
             s16.push(0u16);
-            do ::std::vec::as_imm_buf(s16) |buf, _| { f(buf) }
+            do s16.as_imm_buf |buf, _| { f(buf) }
         }
     }
 
@@ -202,9 +202,9 @@ pub mod option {
     /// Filters the value inside the option using the function. Returns `None` if the original
     /// option didn't contain a value.
     #[inline(always)]
-    pub fn filter<T:Copy>(opt: Option<T>, f: &fn(t: T) -> bool) -> Option<T> {
+    pub fn filter<T:Clone>(opt: Option<T>, f: &fn(t: T) -> bool) -> Option<T> {
         match opt {
-            Some(t) => if f(copy t) {Some(t)} else {None},
+            Some(t) => if f(t.clone()) {Some(t)} else {None},
             None => None
         }
     }
@@ -212,16 +212,16 @@ pub mod option {
     /// Merges two options. When one of options is `None` returns the other option. When both
     /// options contain a value the function is called to get the merged value.
     #[inline(always)]
-    pub fn merge<T:Copy>(lhs: Option<T>, rhs: Option<T>, f: &fn(T, T) -> T) -> Option<T> {
+    pub fn merge<T:Clone>(lhs: Option<T>, rhs: Option<T>, f: &fn(T, T) -> T) -> Option<T> {
         match (lhs, rhs) {
             (None, None) => None,
             (lhs,  None) => lhs,
             (None, rhs ) => rhs,
-            (Some(ref lhs), Some(ref rhs)) => Some(f(copy *lhs, copy *rhs))
+            (Some(ref lhs), Some(ref rhs)) => Some(f(lhs.clone(), rhs.clone()))
         }
     }
 
-    pub trait CopyableOptionUtil<T:Copy> {
+    pub trait CopyableOptionUtil<T:Clone> {
         /// Filters the value inside the option using the function. Returns `None` if
         /// the original option didn't contain a value.
         fn filter(self, f: &fn(x: T) -> bool) -> Option<T>;
@@ -231,7 +231,7 @@ pub mod option {
         fn merge(self, other: Option<T>, f: &fn(T, T) -> T) -> Option<T>;
     }
 
-    impl<T:Copy> CopyableOptionUtil<T> for Option<T> {
+    impl<T:Clone> CopyableOptionUtil<T> for Option<T> {
         #[inline(always)]
         fn filter(self, f: &fn(x: T) -> bool) -> Option<T> {
             filter(self, f)
@@ -281,48 +281,5 @@ pub mod io {
         }
     }
 
-}
-
-/**
- * Comparison routines for Rust. Parallels to `std::cmp`.
- *
- * NOTE: Some of these additions will be eventually sent to `libstd/cmp.rs` and are not subject
- * to the above copyright notice.
- */
-pub mod cmp {
-
-    /// Returns `v`, unless it is not between `low` and `high` in which cases returns whichever
-    /// is the closest to `v`.
-    #[inline(always)]
-    pub fn clamp<T:Ord>(low: T, v: T, high: T) -> T {
-        if v < low {low} else if v > high {high} else {v}
-    }
-
-}
-
-/**
- * Hash table routines for Rust. Parallels to `std::hashmap`.
- *
- * NOTE: Some of these additions will be eventually sent to `libstd/hashmap.rs` and are not
- * subject to the above copyright notice.
- */
-pub mod hashmap {
-    use std::hashmap::*;
-
-    /// Constructs a new map from a vector of key-value pairs.
-    pub fn map_from_vec<K:Eq+Hash+IterBytes,V>(items: &[(K,V)]) -> HashMap<K,V> {
-        let mut map = HashMap::new();
-        map.reserve_at_least(items.len());
-        for items.iter().advance |&(k,v)| { map.insert(k, v); }
-        map
-    }
-
-    /// Constructs a new set from a vector of key-value pairs.
-    pub fn set_from_vec<V:Eq+Hash+IterBytes>(items: &[V]) -> HashSet<V> {
-        let mut set = HashSet::new();
-        set.reserve_at_least(items.len());
-        for items.iter().advance |&v| { set.insert(v); }
-        set
-    }
 }
 

@@ -4,7 +4,7 @@
 
 //! Bitmap font.
 
-use std::{int, uint};
+use std::iter;
 use sdl::video::Color;
 use util::gfx::*;
 use util::gl::{ShadedDrawing, ShadedDrawingTraits};
@@ -116,7 +116,7 @@ impl Font {
         /// Decompresses a font data from `dwords` and `indices`.
         fn decompress(dwords: &[u16], indices: &str) -> ~[u16] {
             let mut words = ~[0];
-            for dwords.iter().advance |&delta| {
+            for &delta in dwords.iter() {
                 let last = *words.last();
                 words.push(last + delta);
             }
@@ -134,7 +134,7 @@ impl Font {
                         let distance = indices[i] as uint - 32;
                         i += 1;
                         let start = glyphs.len() - distance;
-                        for uint::range(start, start + length) |i| {
+                        for i in range(start, start + length) {
                             glyphs.push(glyphs[i]);
                         }
                     }
@@ -167,13 +167,13 @@ impl Font {
                 // the algorithm operates a per-row basis, and extracts runs of valid `FontPolygon`s
                 // from given row data. (polygons may overlap, this is fine for our purpose.)
                 let mut cur: Option<FontPolygon> = None;
-                for int::range_step(0, (width + 1) * 2 as int, 2) |x| { // with a sentinel
+                for x in iter::range_step(0, (width as int + 1) * 2, 2) { // with a sentinel
                     let mut v = data & 15;
                     data >>= 4;
 
                     if v & (1|8) == (1|8) || v & (2|4) == (2|4) { // completely filled
                         if cur.is_some() {
-                            let mut polygon = cur.swap_unwrap();
+                            let mut polygon = cur.take_unwrap();
                             polygon.x12 += 2;
                             polygon.xm2 += 2;
                             polygon.x22 += 2;
@@ -189,7 +189,7 @@ impl Font {
                             let dxm2 = 1;
                             let dx22 = if v & 2 != 0 {2} else {0};
                             if cur.is_some() {
-                                let mut polygon = cur.swap_unwrap();
+                                let mut polygon = cur.take_unwrap();
                                 polygon.x12 += dx12;
                                 polygon.xm2 += dxm2;
                                 polygon.x22 += dx22;
@@ -206,7 +206,7 @@ impl Font {
 
                         // now we have cleared the left side, any remaining polygon should be flushed.
                         if cur.is_some() {
-                            polygons.push(cur.swap_unwrap());
+                            polygons.push(cur.take_unwrap());
                         }
 
                         if v & (1|4) != 0 { // has right-side edge, add a new polygon
@@ -228,7 +228,7 @@ impl Font {
         assert!(glyphs.len() == 3072);
 
         let mut polygons = ~[];
-        for uint::range_step(0, glyphs.len(), NROWS * 2 as int) |base| {
+        for base in iter::range_step(0, glyphs.len(), NROWS * 2) {
             polygons.push(calculate_polygons(glyphs.slice(base, base + NROWS * 2), NCOLUMNS));
         }
 
@@ -247,28 +247,28 @@ pub trait FontDrawingUtils {
     /// Draws a glyph with given position and color (possibly gradient). This method is
     /// distinct from `glyph` since the glyph #95 is used for the tick marker
     /// (character code -1 in C).
-    pub fn glyph<ColorT:Blend+Copy>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
-                                    glyph: uint, color: ColorT); // XXX #3984
+    fn glyph<ColorT:Blend>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
+                           glyph: uint, color: ColorT);
 
     /// Draws a character with given position and color.
-    pub fn char<ColorT:Blend+Copy>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
-                                   c: char, color: ColorT); // XXX #3984
+    fn char<ColorT:Blend>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
+                          c: char, color: ColorT);
 
     /// Draws a string with given position, alignment and color.
-    pub fn string<ColorT:Blend+Copy>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
-                                     align: Alignment, s: &str, color: ColorT); // XXX #3984
+    fn string<ColorT:Blend>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
+                            align: Alignment, s: &str, color: ColorT);
 
     /// Creates a proxy drawing with a given font.
-    pub fn with_font(&mut self, font: &Font, f: &fn(&mut ShadedFontDrawing));
+    fn with_font(&mut self, font: &Font, f: &fn(&mut ShadedFontDrawing));
 }
 
 impl FontDrawingUtils for ShadedDrawing {
-    fn glyph<ColorT:Blend+Copy>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
-                                glyph: uint, color: ColorT) {
+    fn glyph<ColorT:Blend>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
+                           glyph: uint, color: ColorT) {
         assert!(zoom > 0.0);
         assert!(self.prim == gl::TRIANGLES);
         let zoom = zoom * 0.5;
-        for font.polygons[glyph].iter().advance |&polygon| {
+        for &polygon in font.polygons[glyph].iter() {
             let flat1 = (polygon.x11 == polygon.xm1 && polygon.xm1 == polygon.x21);
             let flat2 = (polygon.x12 == polygon.xm2 && polygon.xm2 == polygon.x22);
             let x11 = x + polygon.x11 as f32 * zoom;
@@ -277,8 +277,8 @@ impl FontDrawingUtils for ShadedDrawing {
             let x22 = x + polygon.x22 as f32 * zoom;
             let y1 = y + polygon.y1 as f32 * zoom;
             let y2 = y + polygon.y2 as f32 * zoom;
-            let cy1 = to_rgba(color.blend(polygon.y1, NROWS * 2 as int));
-            let cy2 = to_rgba(color.blend(polygon.y2, NROWS * 2 as int));
+            let cy1 = to_rgba(color.blend(polygon.y1, (NROWS * 2) as int));
+            let cy2 = to_rgba(color.blend(polygon.y2, (NROWS * 2) as int));
             if flat1 && flat2 {
                 self.point_rgba(x11, y1, cy1);
                 self.point_rgba(x12, y1, cy1);
@@ -289,7 +289,7 @@ impl FontDrawingUtils for ShadedDrawing {
             } else {
                 let ym_ = (polygon.y1 + polygon.y2) / 2;
                 let ym = y + ym_ as f32 * zoom;
-                let cym = to_rgba(color.blend(ym_, NROWS * 2 as int));
+                let cym = to_rgba(color.blend(ym_, (NROWS * 2) as int));
                 if flat1 {
                     assert!(!flat2);
                     let xm2 = x + polygon.xm2 as f32 * zoom - 0.125;
@@ -333,8 +333,8 @@ impl FontDrawingUtils for ShadedDrawing {
         }
     }
 
-    fn char<ColorT:Blend+Copy>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
-                               c: char, color: ColorT) {
+    fn char<ColorT:Blend>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
+                          c: char, color: ColorT) {
         if !c.is_whitespace() {
             let c = c as uint;
             let glyph = if 32 <= c && c < 126 {c-32} else {0};
@@ -342,15 +342,15 @@ impl FontDrawingUtils for ShadedDrawing {
         }
     }
 
-    fn string<ColorT:Blend+Copy>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
-                                 align: Alignment, s: &str, color: ColorT) {
+    fn string<ColorT:Blend>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
+                            align: Alignment, s: &str, color: ColorT) {
         let mut x = match align {
             LeftAligned  => x,
             Centered     => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom) / 2.0,
             RightAligned => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom),
         };
-        for s.iter().advance |c| {
-            self.char(font, x, y, zoom, c, copy color);
+        for c in s.iter() {
+            self.char(font, x, y, zoom, c, color.clone());
             x += NCOLUMNS as f32 * zoom;
         }
     }
@@ -365,20 +365,18 @@ impl<'self> ShadedFontDrawing<'self> {
     /// Draws a glyph with given position and color (possibly gradient). This method is
     /// distinct from `glyph` since the glyph #95 is used for the tick marker
     /// (character code -1 in C).
-    pub fn glyph<ColorT:Blend+Copy>(&mut self, x: f32, y: f32, zoom: f32,
-                                    glyph: uint, color: ColorT) { // XXX #3984
+    pub fn glyph<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32, glyph: uint, color: ColorT) {
         self.drawing.glyph(self.font, x, y, zoom, glyph, color)
     }
 
     /// Draws a character with given position and color.
-    pub fn char<ColorT:Blend+Copy>(&mut self, x: f32, y: f32, zoom: f32,
-                                   c: char, color: ColorT) { // XXX #3984
+    pub fn char<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32, c: char, color: ColorT) {
         self.drawing.char(self.font, x, y, zoom, c, color)
     }
 
     /// Draws a string with given position, alignment and color.
-    pub fn string<ColorT:Blend+Copy>(&mut self, x: f32, y: f32, zoom: f32,
-                                     align: Alignment, s: &str, color: ColorT) { // XXX #3984
+    pub fn string<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32,
+                                align: Alignment, s: &str, color: ColorT) {
         self.drawing.string(self.font, x, y, zoom, align, s, color)
     }
 }

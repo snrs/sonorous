@@ -11,6 +11,7 @@ use sdl::event;
 
 /// Immediately terminates the program with given exit code.
 pub fn exit(exitcode: int) -> ! {
+    #[fixed_stack_segment]; #[inline(never)];
     // Rust: `os::set_exit_status` doesn't immediately terminate the program.
     unsafe { ::std::libc::exit(exitcode as ::std::libc::c_int); }
 }
@@ -18,6 +19,7 @@ pub fn exit(exitcode: int) -> ! {
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(target_os = "win32")]
 pub fn die(s: ~str) -> ! {
+    #[fixed_stack_segment]; #[inline(never)];
     use util::std::str::StrUtil;
     do ::exename().as_utf16_c_str() |caption| {
         do s.as_utf16_c_str() |text| {
@@ -30,25 +32,25 @@ pub fn die(s: ~str) -> ! {
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(not(target_os = "win32"))]
 pub fn die(s: ~str) -> ! {
-    stderr().write_line(fmt!("%s: %s", ::exename(), s));
+    stderr().write_line(format!("{}: {}", ::exename(), s));
     exit(1)
 }
 
 /// Prints an warning message. Internally used in the `warn!` macro below.
 pub fn warn(s: ~str) {
-    stderr().write_line(fmt!("*** Warning: %s", s));
+    stderr().write_line(format!("*** Warning: {}", s));
 }
 
 // Exits with a formatted error message.
 //
 // Rust: this comment cannot be a doc comment (yet).
 macro_rules! die(
-    ($($e:expr),+) => (::ui::common::die(fmt!($($e),+)))
+    ($($e:expr),+) => (::ui::common::die(format!($($e),+)))
 )
 
 // Prints a formatted warning message.
 macro_rules! warn(
-    ($($e:expr),+) => (::ui::common::warn(fmt!($($e),+)))
+    ($($e:expr),+) => (::ui::common::warn(format!($($e),+)))
 )
 
 /// Checks if the user pressed the escape key or the quit button. `atexit` is called before
@@ -69,13 +71,14 @@ pub fn check_exit(atexit: &fn()) {
 /// Writes a line to the console without advancing to the next line. `s` should be short enough
 /// to be replaced (currently up to 72 bytes).
 pub fn update_line(s: &str) {
-    stderr().write_str(fmt!("\r%s\r%s", " ".repeat(72), s));
+    stderr().write_str(format!("\r{:72}\r{}", "", s));
 }
 
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
 /// refused to do so or the platform is unsupported.
 #[cfg(target_os = "win32")]
 pub fn get_path_from_dialog() -> Option<~str> {
+    #[fixed_stack_segment]; #[inline(never)];
     use std::ptr::{null, mut_null};
     use util::std::str::StrUtil;
     use ext::win32;
@@ -90,7 +93,7 @@ pub fn get_path_from_dialog() -> Option<~str> {
     do filter.as_utf16_c_str() |filter| {
         do "Choose a file to play".as_utf16_c_str() |title| {
             let mut buf = [0u16, ..512];
-            let ret = do ::std::vec::as_mut_buf(buf) |buf, bufsize| {
+            let ret = do buf.as_mut_buf |buf, bufsize| {
                 let ofnsz = ::std::sys::size_of::<win32::ll::OPENFILENAMEW>();
                 let ofn = win32::ll::OPENFILENAMEW {
                     lStructSize: ofnsz as ::std::libc::DWORD,

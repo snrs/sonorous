@@ -18,7 +18,7 @@ pub static SCREENH: uint = 600;
 /// `fullscreen` is ignored when `exclusive` is set.
 pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
     if !init([InitVideo]) {
-        die!("SDL Initialization Failure: %s", get_error());
+        die!("SDL Initialization Failure: {}", get_error());
     }
     img::init([img::InitJPG, img::InitPNG]);
 
@@ -29,7 +29,7 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
     };
     let screen = match Screen::new(width, height, fullscreen) {
         Ok(screen) => screen,
-        Err(err) => die!("Failed to initialize screen: %s", err)
+        Err(err) => die!("Failed to initialize screen: {}", err)
     };
     if !exclusive {
         mouse::set_cursor_visible(false);
@@ -42,10 +42,10 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
 /// Initializes SDL audio subsystem and SDL_mixer.
 pub fn init_audio() {
     if !init([InitAudio]) {
-        die!("SDL Initialization Failure: %s", get_error());
+        die!("SDL Initialization Failure: {}", get_error());
     }
     //mixer::init([mixer::InitOGG, mixer::InitMP3]); // TODO
-    if mixer::open(SAMPLERATE, audio::S16AudioFormat, audio::Stereo, 2048).is_err() {
+    if mixer::open(SAMPLERATE, audio::S16_AUDIO_FORMAT, audio::Stereo, 2048).is_err() {
         die!("SDL Mixer Initialization Failure");
     }
 }
@@ -53,14 +53,14 @@ pub fn init_audio() {
 /// Initializes a joystick with given index.
 pub fn init_joystick(joyidx: uint) -> ~joy::Joystick {
     if !init([InitJoystick]) {
-        die!("SDL Initialization Failure: %s", get_error());
+        die!("SDL Initialization Failure: {}", get_error());
     }
     unsafe {
         joy::ll::SDL_JoystickEventState(1); // TODO rust-sdl patch
     }
     match joy::Joystick::open(joyidx as int) {
         Ok(joy) => joy,
-        Err(err) => die!("SDL Joystick Initialization Failure: %s", err)
+        Err(err) => die!("SDL Joystick Initialization Failure: {}", err)
     }
 }
 

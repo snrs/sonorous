@@ -9,7 +9,7 @@ use format::obj::Lane;
 
 /// Two-letter alphanumeric identifier used for virtually everything, including resource
 /// management, variable BPM and chart specification.
-#[deriving(Eq)]
+#[deriving(Eq,Clone)]
 pub struct Key(int);
 
 /// The number of all possible alphanumeric keys.
@@ -29,7 +29,7 @@ impl Key {
     /// Converts the first two letters of `s` to a `Key`.
     pub fn from_chars(s: &[char]) -> Option<Key> {
         if s.len() < 2 { return None; }
-        do getdigit(s[0]).chain |a| {
+        do getdigit(s[0]).and_then |a| {
             do getdigit(s[1]).map |&b| { Key(a * 36 + b) }
         }
     }
@@ -38,7 +38,7 @@ impl Key {
     pub fn from_str(s: &str) -> Option<Key> {
         if s.len() < 2 { return None; }
         let str::CharRange {ch:c1, next:p1} = s.char_range_at(0);
-        do getdigit(c1).chain |a| {
+        do getdigit(c1).and_then |a| {
             let str::CharRange {ch:c2, next:p2} = s.char_range_at(p1);
             do getdigit(c2).map |&b| {
                 assert!(p2 == 2); // both characters should be in ASCII
@@ -85,7 +85,7 @@ impl ToStr for Key {
     fn to_str(&self) -> ~str {
         assert!(self.is_valid());
         let map = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        fmt!("%c%c", map[**self / 36] as char, map[**self % 36] as char)
+        format!("{}{}", map[**self / 36] as char, map[**self % 36] as char)
     }
 }
 

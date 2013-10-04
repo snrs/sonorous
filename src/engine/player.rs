@@ -4,7 +4,7 @@
 
 //! Core game play logics. Handles the input (if any) and sound but not the user interface.
 
-use std::{uint, vec, cmp, num};
+use std::{vec, cmp, num};
 
 use sdl::{get_ticks, event};
 use ext::sdl::mixer;
@@ -23,12 +23,12 @@ use ui::options::*;
 /// Applies given modifier to the game data. The target lanes of the modifier is determined
 /// from given key specification. This function should be called twice for the Couple Play,
 /// since 1P and 2P should be treated separately.
-pub fn apply_modf<R: ::std::rand::RngUtil>(bms: &mut Bms, modf: Modf, r: &mut R,
-                                           keyspec: &KeySpec, begin: uint, end: uint) {
+pub fn apply_modf<R: ::std::rand::Rng>(bms: &mut Bms, modf: Modf, r: &mut R,
+                                       keyspec: &KeySpec, begin: uint, end: uint) {
     use timeline_modf = format::timeline::modf;
 
     let mut lanes = ~[];
-    for uint::range(begin, end) |i| {
+    for i in range(begin, end) {
         let lane = keyspec.order[i];
         let kind = keyspec.kinds[*lane];
         if modf == ShuffleExModf || modf == RandomExModf ||
@@ -92,13 +92,13 @@ pub enum Grade {
 }
 
 /// Required time difference in seconds to get at least COOL grade.
-static COOL_CUTOFF: float = 0.0144;
+static COOL_CUTOFF: f64 = 0.0144;
 /// Required time difference in seconds to get at least GREAT grade.
-static GREAT_CUTOFF: float = 0.048;
+static GREAT_CUTOFF: f64 = 0.048;
 /// Required time difference in seconds to get at least GOOD grade.
-static GOOD_CUTOFF: float = 0.084;
+static GOOD_CUTOFF: f64 = 0.084;
 /// Required time difference in seconds to get at least BAD grade.
-static BAD_CUTOFF: float = 0.144;
+static BAD_CUTOFF: f64 = 0.144;
 
 /// The number of available grades.
 pub static NGRADES: uint = 5;
@@ -107,7 +107,7 @@ pub static NGRADES: uint = 5;
 pub static MAXGAUGE: int = 512;
 /// A base score per exact input. Actual score can increase by the combo (up to 2x) or decrease
 /// by the larger time difference.
-pub static SCOREPERNOTE: float = 300.0;
+pub static SCOREPERNOTE: f64 = 300.0;
 
 /// A damage due to the MISS grading. Only applied when the grading is not due to the bomb.
 static MISS_DAMAGE: Damage = GaugeDamage(0.059);
@@ -125,7 +125,7 @@ pub struct Player {
     /// The derived timeline information.
     infos: TimelineInfo,
     /// The length of BMS file in seconds as calculated by `bms_duration`.
-    duration: float,
+    duration: f64,
     /// The key specification.
     keyspec: ~KeySpec,
     /// The input mapping.
@@ -149,10 +149,10 @@ pub struct Player {
     /// The chart expansion rate, or "play speed". One measure has the length of 400 pixels
     /// times the play speed, so higher play speed means that objects will fall much more
     /// quickly (hence the name).
-    playspeed: float,
+    playspeed: f64,
     /// The play speed targeted for speed change if any. It is also the value displayed while
     /// the play speed is changing.
-    targetspeed: Option<float>,
+    targetspeed: Option<f64>,
     /// The current BPM. Can be negative, in that case the chart will scroll backwards.
     bpm: BPM,
     /// The timestamp at the last tick. It is a return value from `sdl::get_ticks` and measured
@@ -178,7 +178,7 @@ pub struct Player {
 
     /// The scale factor for grading area. The factor less than 1 causes the grading area
     /// shrink.
-    gradefactor: float,
+    gradefactor: f64,
     /// The last grade and time when the grade is issued.
     lastgrade: Option<(Grade,uint)>,
     /// The numbers of each grades.
@@ -208,13 +208,13 @@ pub struct Player {
 
 /// A list of play speed marks. `SpeedUpInput` and `SpeedDownInput` changes the play speed to
 /// the next/previous nearest mark.
-static SPEED_MARKS: &'static [float] = &[0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0,
+static SPEED_MARKS: &'static [f64] = &[0.1, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0,
     3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0, 10.0, 15.0, 25.0, 40.0, 60.0, 99.0];
 
 /// Finds the next nearest play speed mark if any.
-fn next_speed_mark(current: float) -> Option<float> {
+fn next_speed_mark(current: f64) -> Option<f64> {
     let mut prev = None;
-    for SPEED_MARKS.iter().advance |&speed| {
+    for &speed in SPEED_MARKS.iter() {
         if speed < current - 0.001 {
             prev = Some(speed);
         } else {
@@ -225,9 +225,9 @@ fn next_speed_mark(current: float) -> Option<float> {
 }
 
 /// Finds the previous nearest play speed mark if any.
-fn previous_speed_mark(current: float) -> Option<float> {
+fn previous_speed_mark(current: f64) -> Option<f64> {
     let mut next = None;
-    for SPEED_MARKS.rev_iter().advance |&speed| {
+    for &speed in SPEED_MARKS.rev_iter() {
         if speed > current + 0.001 {
             next = Some(speed);
         } else {
@@ -248,7 +248,7 @@ fn create_beep() -> ~mixer::Chunk {
 impl Player {
     /// Creates a new player object. The player object owns other related structures, including
     /// the options, BMS file, key specification, input mapping and sound resources.
-    pub fn new(opts: ~Options, bms: Bms, infos: TimelineInfo, duration: float, keyspec: ~KeySpec,
+    pub fn new(opts: ~Options, bms: Bms, infos: TimelineInfo, duration: f64, keyspec: ~KeySpec,
                keymap: ~KeyMap, sndres: ~[SoundResource]) -> Player {
         // we no longer need the full `Bms` structure.
         let Bms { bmspath: _, meta: meta, timeline: timeline } = bms;
@@ -257,7 +257,7 @@ impl Player {
         let now = get_ticks();
         let initplayspeed = opts.playspeed;
         let originoffset = infos.originoffset;
-        let gradefactor = 1.5 - cmp::min(meta.rank, 5) as float * 0.25;
+        let gradefactor = 1.5 - cmp::min(meta.rank, 5) as f64 * 0.25;
         let initialgauge = MAXGAUGE * 500 / 1000;
         let survival = MAXGAUGE * 293 / 1000;
         let initbpm = timeline.initbpm;
@@ -297,21 +297,21 @@ impl Player {
 
     /// Returns the play speed displayed. Can differ from the actual play speed
     /// (`self.playspeed`) when the play speed is changing.
-    pub fn nominal_playspeed(&self) -> float {
-        self.targetspeed.get_or_default(self.playspeed)
+    pub fn nominal_playspeed(&self) -> f64 {
+        self.targetspeed.unwrap_or(self.playspeed)
     }
 
     /// Updates the score and associated statistics according to grading. `scoredelta` is
     /// an weight normalized to [0,1] that is calculated from the distance between the object
     /// and the input time, and `damage` is an optionally associated `Damage` value for bombs.
     /// May return true when `Damage` resulted in the instant death.
-    pub fn update_grade(&mut self, grade: Grade, scoredelta: float,
+    pub fn update_grade(&mut self, grade: Grade, scoredelta: f64,
                         damage: Option<Damage>) -> bool {
         self.gradecounts[grade as uint] += 1;
         self.lastgrade = Some((grade, self.now));
         self.score += (scoredelta * SCOREPERNOTE *
-                       (1.0 + (self.lastcombo as float) /
-                              (self.infos.nnotes as float))) as uint;
+                       (1.0 + (self.lastcombo as f64) /
+                              (self.infos.nnotes as f64))) as uint;
 
         match grade {
             MISS | BAD => { self.lastcombo = 0; }
@@ -328,7 +328,7 @@ impl Player {
 
         match damage {
             Some(GaugeDamage(ratio)) => {
-                self.gauge -= (MAXGAUGE as float * ratio) as int; true
+                self.gauge -= (MAXGAUGE as f64 * ratio) as int; true
             }
             Some(InstantDeath) => {
                 self.gauge = cmp::min(self.gauge, 0); false
@@ -340,7 +340,7 @@ impl Player {
     /// Same as `update_grade`, but the grade is calculated from the normalized difference
     /// between the object and input time in seconds. The normalized distance equals to
     /// the actual time difference when `gradefactor` is 1.0.
-    pub fn update_grade_from_distance(&mut self, dist: float) {
+    pub fn update_grade_from_distance(&mut self, dist: f64) {
         let dist = num::abs(dist);
         let (grade, damage) = if      dist <  COOL_CUTOFF {(COOL,None)}
                               else if dist < GREAT_CUTOFF {(GREAT,None)}
@@ -399,7 +399,7 @@ impl Player {
         mixer::group_channel(Some(ch), Some(group));
 
         let ch = ch as uint;
-        for self.lastchsnd[ch].iter().advance |&idx| { self.sndlastch[idx] = None; }
+        for &idx in self.lastchsnd[ch].iter() { self.sndlastch[idx] = None; }
         self.sndlastch[sref] = Some(ch);
         self.lastchsnd[ch] = Some(sref as uint);
     }
@@ -420,7 +420,7 @@ impl Player {
     pub fn tick(&mut self) -> bool {
         // smoothly change the play speed
         if self.targetspeed.is_some() {
-            let target = self.targetspeed.get();
+            let target = self.targetspeed.unwrap();
             let delta = target - self.playspeed;
             if num::abs(delta) < 0.001 {
                 self.playspeed = target;
@@ -436,7 +436,7 @@ impl Player {
         let mut thru = self.thru;
         let prev = self.cur.clone();
 
-        let curtime = (self.now - self.origintime) as float / 1000.0 + self.origin.loc.time;
+        let curtime = (self.now - self.origintime) as f64 / 1000.0 + self.origin.loc.time;
         match self.reverse {
             Some(reverse) => {
                 assert!(*self.bpm < 0.0 && curtime >= reverse.loc.time);
@@ -445,7 +445,9 @@ impl Player {
             }
             None => {
                 // apply object-like effects while advancing `self.cur`
-                for cur.mut_until(ActualTime, curtime - cur.loc.time) |p| {
+                // TODO make `Pointer::*` a proper iterator?
+                let nodeath = do cur.mut_until(ActualTime, curtime - cur.loc.time) |p| {
+                    let mut ret = true;
                     match p.data() {
                         BGM(sref) => {
                             self.play_sound_if_nonzero(sref, true);
@@ -456,14 +458,14 @@ impl Player {
                         SetBPM(newbpm) => {
                             self.bpm = newbpm;
                             if *newbpm == 0.0 {
-                                return false; // finish immediately
+                                ret = false; // finish immediately
                             } else if *newbpm < 0.0 {
                                 self.reverse = Some(p.clone()); // activate reverse motion
                             }
                         }
                         Visible(_,sref) | LNStart(_,sref) => {
                             if self.opts.is_autoplay() {
-                                for sref.iter().advance |&sref| {
+                                for &sref in sref.iter() {
                                     self.play_sound_if_nonzero(sref, false);
                                 }
                                 self.update_grade_from_distance(0.0);
@@ -471,31 +473,37 @@ impl Player {
                         }
                         _ => {}
                     }
-                }
+                    ret
+                };
+                if !nodeath { return false; }
             }
         }
 
         // grade objects that have escaped the grading area
         if !self.opts.is_autoplay() {
-            for checked.mut_upto(&cur) |p| {
+            do checked.mut_upto(&cur) |p| {
                 let dist = (cur.loc.vtime - p.loc.vtime) * self.gradefactor;
-                if dist < BAD_CUTOFF { break; }
-                if !self.nograding[p.index] {
-                    let lane = p.object_lane(); // XXX #3511
-                    for lane.iter().advance |&Lane(lane)| {
-                        let missable =
-                            match p.data() {
-                                Visible(*) | LNStart(*) => true,
-                                LNDone(*) => thru[lane].is_some(),
-                                _ => false,
-                            };
-                        if missable {
-                            self.update_grade_to_miss();
-                            thru[lane] = None;
+                if dist < BAD_CUTOFF {
+                    false
+                } else {
+                    if !self.nograding[p.index] {
+                        let lane = p.object_lane(); // XXX #3511
+                        for &Lane(lane) in lane.iter() {
+                            let missable =
+                                match p.data() {
+                                    Visible(*) | LNStart(*) => true,
+                                    LNDone(*) => thru[lane].is_some(),
+                                    _ => false,
+                                };
+                            if missable {
+                                self.update_grade_to_miss();
+                                thru[lane] = None;
+                            }
                         }
                     }
+                    true
                 }
-            }
+            };
         }
 
         // process inputs
@@ -559,11 +567,11 @@ impl Player {
             let process_unpress = |lane: Lane| {
                 // if LN grading is in progress and it is not within the threshold then
                 // MISS grade is issued
-                for thru[*lane].iter().advance |&thru| {
+                for &thru in thru[*lane].iter() {
                     let nextlndone = do thru.find_next_of_type |&obj| {
                         obj.object_lane() == Some(lane) && obj.is_lndone()
                     };
-                    for nextlndone.iter().advance |&p| {
+                    for &p in nextlndone.iter() {
                         let delta = (p.loc.vtime - cur.loc.vtime) * self.gradefactor;
                         if num::abs(delta) < BAD_CUTOFF {
                             self.nograding[p.index] = true;
@@ -581,9 +589,9 @@ impl Player {
                     do cur.find_closest_of_type(VirtualTime) |&obj| {
                         obj.object_lane() == Some(lane) && obj.is_soundable()
                     };
-                for soundable.iter().advance |&p| {
+                for &p in soundable.iter() {
                     let sounds = p.sounds(); // XXX #3511
-                    for sounds.iter().advance |&sref| {
+                    for &sref in sounds.iter() {
                         self.play_sound(sref, false);
                     }
                 }
@@ -593,7 +601,7 @@ impl Player {
                     do cur.find_closest_of_type(VirtualTime) |&obj| {
                         obj.object_lane() == Some(lane) && obj.is_gradable()
                     };
-                for gradable.iter().advance |&p| {
+                for &p in gradable.iter() {
                     if p.index >= checked.index && !self.nograding[p.index] && !p.is_lndone() {
                         let dist = (p.loc.vtime - cur.loc.vtime) * self.gradefactor;
                         if num::abs(dist) < BAD_CUTOFF {
@@ -608,17 +616,17 @@ impl Player {
 
             match (vkey, state) {
                 (SpeedDownInput, Positive) | (SpeedDownInput, Negative) => {
-                    let current = self.targetspeed.get_or_default(self.playspeed);
+                    let current = self.targetspeed.unwrap_or(self.playspeed);
                     let newspeed = next_speed_mark(current); // XXX #3511
-                    for newspeed.iter().advance |&newspeed| {
+                    for &newspeed in newspeed.iter() {
                         self.targetspeed = Some(newspeed);
                         self.play_beep();
                     }
                 }
                 (SpeedUpInput, Positive) | (SpeedUpInput, Negative) => {
-                    let current = self.targetspeed.get_or_default(self.playspeed);
+                    let current = self.targetspeed.unwrap_or(self.playspeed);
                     let newspeed = previous_speed_mark(current); // XXX #3511
-                    for newspeed.iter().advance |&newspeed| {
+                    for &newspeed in newspeed.iter() {
                         self.targetspeed = Some(newspeed);
                         self.play_beep();
                     }
@@ -640,23 +648,27 @@ impl Player {
 
         // process bombs
         if !self.opts.is_autoplay() {
-            for prev.upto(&cur) |p| {
+            // TODO make `Pointer::*` a proper iterator?
+            let nodeath = do prev.upto(&cur) |p| {
                 match p.data() {
                     Bomb(lane,sref,damage) if self.key_pressed(lane) => {
                         // ongoing long note is not graded twice
                         thru[*lane] = None;
-                        for sref.iter().advance |&sref| {
+                        for &sref in sref.iter() {
                             self.play_sound(sref, false);
                         }
                         if !self.update_grade_from_damage(damage) {
                             // instant death
                             self.cur = cur.find_end();
-                            return false;
+                            false
+                        } else {
+                            true
                         }
-                    }
-                    _ => {}
+                    },
+                    _ => true
                 }
-            }
+            };
+            if !nodeath { return false; }
         }
 
         self.cur = cur;
@@ -680,7 +692,7 @@ impl Player {
 
 #[unsafe_destructor]
 impl Drop for Player {
-    fn drop(&self) {
+    fn drop(&mut self) {
         // remove all channels before sound resources are deallocated.
         // halting alone is not sufficient due to rust-sdl's bug.
         mixer::allocate_channels(0);

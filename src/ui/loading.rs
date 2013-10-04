@@ -5,7 +5,8 @@
 //! Loading screen. Displays the STAGEFILE image and metadata while loading resources.
 
 use std::vec;
-use extra::deque::Deque;
+use extra::container::Deque;
+use extra::dlist::DList;
 
 use sdl::*;
 use format::timeline::TimelineInfo;
@@ -49,7 +50,7 @@ pub struct LoadingContext {
     /// The latest message from the resource loader.
     message: Option<~str>,
     /// A list of jobs to be executed.
-    jobs: Deque<LoadingJob>,
+    jobs: DList<LoadingJob>,
     /// A number of total jobs queued.
     ntotaljobs: uint,
 
@@ -74,14 +75,15 @@ pub struct LoadingContext {
 
 /// Returns the interface string common to the graphical and textual loading screen.
 fn displayed_info(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec) -> (~str, ~str, ~str, ~str) {
-    let brief = fmt!("Level %d | BPM %.2f%s | %d note%s [%uKEY%s]",
-                     bms.meta.playlevel, *bms.timeline.initbpm,
-                     if infos.hasbpmchange {~"?"} else {~""}, infos.nnotes,
-                     if infos.nnotes == 1 {~""} else {~"s"}, keyspec.nkeys(),
-                     if infos.haslongnote {~"-LN"} else {~""});
-    let title = bms.meta.title.clone().get_or_default(~"");
-    let genre = bms.meta.genre.clone().get_or_default(~"");
-    let artist = bms.meta.artist.clone().get_or_default(~"");
+    let brief = format!("Level {level} | BPM {bpm:.2}{hasbpmchange} | \
+                         {nnotes, plural, =1{# note} other{# notes}} [{nkeys}KEY{haslongnote}]",
+                        level = bms.meta.playlevel, bpm = *bms.timeline.initbpm,
+                        hasbpmchange = if infos.hasbpmchange {"?"} else {""},
+                        nnotes = infos.nnotes, nkeys = keyspec.nkeys(),
+                        haslongnote = if infos.haslongnote {"-LN"} else {""});
+    let title = bms.meta.title.clone().unwrap_or(~"");
+    let genre = bms.meta.genre.clone().unwrap_or(~"");
+    let artist = bms.meta.artist.clone().unwrap_or(~"");
     (brief, title, genre, artist)
 }
 
@@ -94,16 +96,16 @@ impl LoadingContext {
         let imgres = vec::from_elem(bms.meta.imgpath.len(), NoImage);
         let (brief, title, genre, artist) = displayed_info(&bms, &infos, keyspec);
 
-        let mut jobs = Deque::new();
+        let mut jobs = DList::new();
         if opts.has_bga() { // should go first
-            jobs.add_back(LoadStageFile);
+            jobs.push_back(LoadStageFile);
         }
-        for bms.meta.sndpath.iter().enumerate().advance |(i, path)| {
-            if path.is_some() { jobs.add_back(LoadSound(i)); }
+        for (i, path) in bms.meta.sndpath.iter().enumerate() {
+            if path.is_some() { jobs.push_back(LoadSound(i)); }
         }
         if opts.has_bga() {
-            for bms.meta.imgpath.iter().enumerate().advance |(i, path)| {
-                if path.is_some() { jobs.add_back(LoadImage(i)); }
+            for (i, path) in bms.meta.imgpath.iter().enumerate() {
+                if path.is_some() { jobs.push_back(LoadImage(i)); }
             }
         }
         let njobs = jobs.len();
@@ -123,13 +125,13 @@ impl LoadingContext {
             None => { return; }
         };
 
-        let tex_or_err = do load_image(*path, &self.basedir, false).chain |res| {
+        let tex_or_err = do load_image(*path, &self.basedir, false).and_then |res| {
             match res {
                 Image(surface) => {
                     // in principle we don't need this, but some STAGEFILEs mistakenly uses alpha
                     // channel or SDL_image fails to read them so we need to force STAGEFILEs to
                     // ignore alpha channels. (cf. http://bugzilla.libsdl.org/show_bug.cgi?id=1943)
-                    do surface.display_format().chain |surface| {
+                    do surface.display_format().and_then |surface| {
                         Texture::from_owned_surface(surface, false, false)
                     }
                 },
@@ -138,7 +140,7 @@ impl LoadingContext {
         };
         match tex_or_err {
             Ok(tex) => { self.stagefile = Some(tex); }
-            Err(_err) => { warn!("failed to load image #STAGEFILE (%s)", path.to_str()); }
+            Err(_err) => { warn!("failed to load image \\#STAGEFILE ({})", path.to_str()); }
         }
     }
 
@@ -149,7 +151,7 @@ impl LoadingContext {
 
         match load_sound(path, &self.basedir) {
             Ok(res) => { self.sndres[i] = res; }
-            Err(_) => { warn!("failed to load sound #WAV%s (%s)", Key(i as int).to_str(), path); }
+            Err(_) => { warn!("failed to load sound \\#WAV{} ({})", Key(i as int).to_str(), path); }
         }
     }
 
@@ -160,28 +162,23 @@ impl LoadingContext {
 
         match load_image(path, &self.basedir, self.opts.has_movie()) {
             Ok(res) => { self.imgres[i] = res; }
-            Err(_) => { warn!("failed to load image #BMP%s (%s)", Key(i as int).to_str(), path); }
+            Err(_) => { warn!("failed to load image \\#BMP{} ({})", Key(i as int).to_str(), path); }
         }
     }
 
     /// Processes pending jobs. Returns true if there are any processed jobs.
     pub fn process_jobs(&mut self) -> bool {
-        if self.jobs.is_empty() {
-            self.message = None;
-            false
-        } else {
-            match self.jobs.pop_front() {
-                LoadStageFile => { self.load_stagefile(); }
-                LoadSound(i)  => { self.load_sound(i); }
-                LoadImage(i)  => { self.load_image(i); }
-            }
-            true
+        match self.jobs.pop_front() {
+            Some(LoadStageFile) => { self.load_stagefile(); true  }
+            Some(LoadSound(i))  => { self.load_sound(i);    true  }
+            Some(LoadImage(i))  => { self.load_image(i);    true  }
+            None                => { self.message = None;   false }
         }
     }
 
     /// Returns a ratio of processed jobs over all jobs.
-    pub fn processed_jobs_ratio(&self) -> float {
-        1.0 - (self.jobs.len() as float) / (self.ntotaljobs as float)
+    pub fn processed_jobs_ratio(&self) -> f64 {
+        1.0 - (self.jobs.len() as f64) / (self.ntotaljobs as f64)
     }
 
     /// Returns completely loaded `Player` and `ImageResource`s.
@@ -195,7 +192,7 @@ impl LoadingContext {
         assert!(jobs.is_empty());
 
         let mut imgres = imgres;
-        for bms.meta.blitcmd.iter().advance |bc| {
+        for bc in bms.meta.blitcmd.iter() {
             apply_blitcmd(imgres, bc);
         }
 
@@ -253,7 +250,8 @@ impl Scene for LoadingScene {
     fn render(&self) {
         let msg = match self.context.message {
             None => ~"loading...",
-            Some(ref msg) => fmt!("%s (%.0f%%)", *msg, 100.0 * self.context.processed_jobs_ratio()),
+            Some(ref msg) =>
+                format!("{} ({:.0}%)", *msg, 100.0 * self.context.processed_jobs_ratio()),
         };
 
         self.screen.clear();
@@ -299,7 +297,7 @@ impl Scene for LoadingScene {
         let (player, imgres) = context.to_player();
         match PlayingScene::new(player, screen, imgres) {
             Ok(scene) => scene as ~Scene:,
-            Err(err) => die!("%s", err),
+            Err(err) => die!("{}", err),
         }
     }
 }
@@ -324,14 +322,15 @@ impl TextualLoadingScene {
 impl Scene for TextualLoadingScene {
     fn activate(&mut self) -> SceneCommand {
         if self.context.opts.showinfo {
-            ::std::io::stderr().write_line(fmt!("\
+            ::std::io::stderr().write_line(format!("\
 ----------------------------------------------------------------------------------------------
-Title:    %s
-Genre:    %s
-Artist:   %s
-%s
+Title:    {title}
+Genre:    {genre}
+Artist:   {artist}
+{brief}
 ----------------------------------------------------------------------------------------------",
-                self.context.title, self.context.genre, self.context.artist, self.context.brief));
+                title = self.context.title, genre = self.context.genre,
+                artist = self.context.artist, brief = self.context.brief));
         }
         Continue
     }
@@ -349,8 +348,8 @@ Artist:   %s
                     use util::std::str::StrUtil;
                     let msg: &str = *msg;
                     let msg = if msg.len() < 63 {msg} else {msg.slice_upto(0, 63)};
-                    update_line(fmt!("Loading: %s (%.0f%%)", msg,
-                                     100.0 * self.context.processed_jobs_ratio()));
+                    update_line(format!("Loading: {} ({:.0}%)", msg,
+                                        100.0 * self.context.processed_jobs_ratio()));
                 }
                 None => { update_line("Loading done."); }
             };

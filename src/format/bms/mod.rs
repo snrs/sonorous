@@ -45,11 +45,11 @@ pub mod parse;
 pub mod load;
 
 /// Sound reference.
-#[deriving(Eq)]
+#[deriving(Eq,Clone)]
 pub struct SoundRef(Key);
 
 /// Image reference.
-#[deriving(Eq)]
+#[deriving(Eq,Clone)]
 pub struct ImageRef(Key);
 
 impl ToStr for SoundRef {
@@ -112,9 +112,9 @@ pub struct BmsMeta {
     rank: int,
 
     /// Paths to sound file relative to `basepath` or BMS file.
-    sndpath: [Option<~str>, ..MAXKEY],
+    sndpath: ~[Option<~str>],
     /// Paths to image/movie file relative to `basepath` or BMS file.
-    imgpath: [Option<~str>, ..MAXKEY],
+    imgpath: ~[Option<~str>],
     /// List of blit commands to be executed after `imgpath` is loaded.
     blitcmd: ~[BlitCmd],
 }

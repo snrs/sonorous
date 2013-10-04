@@ -140,7 +140,17 @@ impl ToStr for BmsMessage {
     }
 }
 
-/// A standard callback for BMS messages. The line is optional for global messages.
-pub type BmsMessageCallback<'self> =
-    &'self fn:Copy(line: Option<uint>, message: BmsMessage) -> bool;
+/// A standard trait providing a callback for BMS messages.
+pub trait BmsMessageListener {
+    /// A callback function. The line is optional for global messages. The callback may return
+    /// `false` to stop the processing.
+    fn on_message(&mut self, line: Option<uint>, message: BmsMessage) -> bool;
+}
+
+/// A built-in listener used for ignoring incoming messages.
+pub struct IgnoringMessageListener;
+
+impl BmsMessageListener for IgnoringMessageListener {
+    fn on_message(&mut self, _line: Option<uint>, _message: BmsMessage) -> bool { true }
+}
 
