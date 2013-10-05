@@ -31,8 +31,10 @@ pub static NLAYERS: uint = 4;
 
 /// Beats per minute. Used as a conversion factor between the time position and actual time
 /// in BMS.
+//
+// Rust: 0.8 somehow miscompiles `Option<BPM>::Some` in x86-64. (#9730)
 #[deriving(Eq,ToStr,Clone)]
-pub struct BPM(f64);
+pub enum BPM { BPM(f64) }
 
 impl BPM {
     /// Converts a measure to a second.
