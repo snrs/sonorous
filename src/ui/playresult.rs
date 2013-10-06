@@ -8,7 +8,7 @@ use engine::player::Player;
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene};
 
 /// Play result scene. For now it is a placeholder.
-struct PlayResultScene {
+pub struct PlayResultScene {
     player: Player
 }
 

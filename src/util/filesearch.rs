@@ -27,7 +27,9 @@ impl SearchContext {
             _ => {
                 let mut entries = os::list_dir(dir);
                 entries.retain(|e| !(".".equiv(e) || "..".equiv(e)));
-                entries.partition(|e| os::path_is_dir(&dir.push(*e)))
+                let ret = entries.partition(|e| os::path_is_dir(&dir.push(*e)));
+                self.last_get_entries = Some((dir.clone(), ret.clone()));
+                ret
             }
         }
     }

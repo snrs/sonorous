@@ -47,6 +47,10 @@ use self::util::std::option::*;
 use self::util::std::io::*;
 
 #[macro_escape] pub mod util {
+    /*!
+     * General utilities. These modules are usable outside Sonorous, and may split into
+     * individual projects in the future.
+     */
     pub mod std;
     pub mod macros;
     pub mod lex;
@@ -56,22 +60,26 @@ use self::util::std::io::*;
     pub mod filesearch;
 }
 pub mod ext {
+    //! Bindings to external libraries or APIs.
     pub mod sdl;
     pub mod win32;
 }
 pub mod format {
+    //! Data structures and operations for formats used by music video games.
     pub mod obj;
     pub mod timeline;
     pub mod pointer;
     #[path="bms/mod.rs"] pub mod bms;
 }
 pub mod engine {
+    //! Shared game engine modules.
     pub mod keyspec;
     pub mod input;
     pub mod resource;
     pub mod player;
 }
 #[macro_escape] pub mod ui {
+    //! User interface. Most user interaction is implemented via the `Scene` interface.
     pub mod common;
     pub mod options;
     pub mod screen;
