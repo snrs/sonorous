@@ -67,7 +67,7 @@ pub trait Scene {
 
     /// Called when the scene is to be replaced by a new `Scene` due to the `ReplaceScene` command.
     /// When called due to the `tick` call, this is called after `deactivate` call.
-    /// And yes, this has to be `~Scene:` without no `Send` kind.
+    /// And yes, this has to be `~Scene:` with no `Send` kind.
     fn consume(~self) -> ~Scene:;
 }
 

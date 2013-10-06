@@ -14,6 +14,7 @@ use format::bms::{Bms, Key};
 use util::gl::{Texture, ShadedDrawingTraits, TexturedDrawingTraits};
 use util::gfx::*;
 use util::bmfont::{LeftAligned, Centered, RightAligned};
+use util::filesearch::SearchContext;
 use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
 use engine::resource::{SoundResource, NoSound, ImageResource, NoImage, Image};
@@ -49,6 +50,8 @@ pub struct LoadingContext {
 
     /// The latest message from the resource loader.
     message: Option<~str>,
+    /// Context for searching files.
+    search: SearchContext,
     /// A list of jobs to be executed.
     jobs: DList<LoadingJob>,
     /// A number of total jobs queued.
@@ -112,7 +115,7 @@ impl LoadingContext {
 
         LoadingContext {
             opts: opts, bms: bms, infos: infos, keyspec: keyspec, keymap: keymap,
-            message: None, jobs: jobs, ntotaljobs: njobs,
+            message: None, search: SearchContext::new(), jobs: jobs, ntotaljobs: njobs,
             basedir: basedir, stagefile: None, sndres: sndres, imgres: imgres,
             brief: brief, title: title, genre: genre, artist: artist,
         }
@@ -125,7 +128,8 @@ impl LoadingContext {
             None => { return; }
         };
 
-        let tex_or_err = do load_image(*path, &self.basedir, false).and_then |res| {
+        let res = load_image(&mut self.search, *path, &self.basedir, false);
+        let tex_or_err = do res.and_then |res| {
             match res {
                 Image(surface) => {
                     // in principle we don't need this, but some STAGEFILEs mistakenly uses alpha
@@ -149,7 +153,7 @@ impl LoadingContext {
         let path = self.bms.meta.sndpath[i].get_ref().clone();
         self.message = Some(path.clone());
 
-        match load_sound(path, &self.basedir) {
+        match load_sound(&mut self.search, path, &self.basedir) {
             Ok(res) => { self.sndres[i] = res; }
             Err(_) => { warn!("failed to load sound \\#WAV{} ({})", Key(i as int).to_str(), path); }
         }
@@ -160,7 +164,7 @@ impl LoadingContext {
         let path = self.bms.meta.imgpath[i].get_ref().clone();
         self.message = Some(path.clone());
 
-        match load_image(path, &self.basedir, self.opts.has_movie()) {
+        match load_image(&mut self.search, path, &self.basedir, self.opts.has_movie()) {
             Ok(res) => { self.imgres[i] = res; }
             Err(_) => { warn!("failed to load image \\#BMP{} ({})", Key(i as int).to_str(), path); }
         }
@@ -185,7 +189,7 @@ impl LoadingContext {
     pub fn to_player(self) -> (Player,~[ImageResource]) {
         let LoadingContext {
             opts: opts, bms: bms, infos: infos, keyspec: keyspec, keymap: keymap,
-            message: _, jobs: jobs, ntotaljobs: _,
+            message: _, search: _, jobs: jobs, ntotaljobs: _,
             basedir: _, stagefile: _, sndres: sndres, imgres: imgres,
             brief: _, title: _, genre: _, artist: _
         } = self;

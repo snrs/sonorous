@@ -11,7 +11,7 @@ use ext::sdl::mpeg;
 use format::bms::{Bms, BlitCmd};
 use util::gfx::SurfaceAreaUtil;
 use util::gl::PreparedSurface;
-use util::filesearch::resolve_relative_path;
+use util::filesearch::SearchContext;
 
 /// The width of BGA, or the width of screen for the exclusive mode.
 pub static BGAW: uint = 256;
@@ -39,9 +39,10 @@ pub fn get_basedir(bms: &Bms) -> Path {
     }
 }
 
-/// A wrapper for `util::filesearch::resolve_relative_path` which returns `Result`.
-fn resolve_relative_path_result(basedir: &Path, path: &str, exts: &[&str]) -> Result<Path,~str> {
-    match resolve_relative_path(basedir, path, exts) {
+/// A wrapper for `SearchContext::resolve_relative_path` which returns `Result`.
+fn resolve_relative_path_result(search: &mut SearchContext, basedir: &Path, path: &str,
+                                exts: &[&str]) -> Result<Path,~str> {
+    match search.resolve_relative_path(basedir, path, exts) {
         Some(path) => Ok(path),
         None => Err(~"file not found"),
     }
@@ -85,8 +86,9 @@ impl SoundResource {
 }
 
 /// Loads a sound resource.
-pub fn load_sound(path: &str, basedir: &Path) -> Result<SoundResource,~str> {
-    let fullpath = earlyexit!(resolve_relative_path_result(basedir, path, SOUND_EXTS));
+pub fn load_sound(search: &mut SearchContext, path: &str,
+                  basedir: &Path) -> Result<SoundResource,~str> {
+    let fullpath = earlyexit!(resolve_relative_path_result(search, basedir, path, SOUND_EXTS));
     let res = earlyexit!(mixer::Chunk::from_wav(&fullpath));
     Ok(Sound(@res))
 }
@@ -134,7 +136,8 @@ impl ImageResource {
 }
 
 /// Loads an image resource.
-pub fn load_image(path: &str, basedir: &Path, load_movie: bool) -> Result<ImageResource,~str> {
+pub fn load_image(search: &mut SearchContext, path: &str, basedir: &Path,
+                  load_movie: bool) -> Result<ImageResource,~str> {
     use util::std::str::StrUtil;
 
     /// Converts a surface to the native display format, while preserving a transparency or
@@ -157,7 +160,7 @@ pub fn load_image(path: &str, basedir: &Path, load_movie: bool) -> Result<ImageR
 
     if path.to_ascii_lower().ends_with(".mpg") {
         if load_movie {
-            let fullpath = earlyexit!(resolve_relative_path_result(basedir, path, []));
+            let fullpath = earlyexit!(resolve_relative_path_result(search, basedir, path, []));
             let movie = earlyexit!(mpeg::MPEG::from_path(&fullpath));
             let surface = earlyexit!(PreparedSurface::new(BGAW, BGAH, false));
             movie.enable_video(true);
@@ -168,7 +171,7 @@ pub fn load_image(path: &str, basedir: &Path, load_movie: bool) -> Result<ImageR
             Ok(NoImage)
         }
     } else {
-        let fullpath = earlyexit!(resolve_relative_path_result(basedir, path, IMAGE_EXTS));
+        let fullpath = earlyexit!(resolve_relative_path_result(search, basedir, path, IMAGE_EXTS));
         let surface = earlyexit!(img::load(&fullpath));
         let prepared = earlyexit!(to_display_format(surface));
         Ok(Image(@prepared))
