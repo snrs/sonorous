@@ -202,7 +202,7 @@ static PRESETS: &'static [(&'static str, &'static str, &'static str)] = &[
  * - `pms`: Selects one of two presets `9` and `9-bme`.
  */
 pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str)> {
-    use util::std::str::StrUtil;
+    use std::ascii::StrAsciiExt;
 
     let mut present = [false, ..NLANES];
     for &obj in bms.timeline.objs.iter() {
@@ -240,16 +240,13 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
 /// Parses a key specification from the options.
 pub fn key_spec(bms: &Bms, preset: Option<~str>,
                 leftkeys: Option<~str>, rightkeys: Option<~str>) -> Result<~KeySpec,~str> {
-    use util::std::str::StrUtil;
+    use std::ascii::StrAsciiExt;
 
     let (leftkeys, rightkeys) =
         if leftkeys.is_none() && rightkeys.is_none() {
+            let filetype = bms.bmspath.and_then_ref(|p| p.filetype().map(|e| e.to_ascii_lower()));
             let preset =
-                if preset.is_none() && bms.bmspath.to_ascii_lower().ends_with(".pms") {
-                    Some(~"pms")
-                } else {
-                    preset
-                };
+                if preset.is_none() && filetype == Some(~".pms") {Some(~"pms")} else {preset};
             match preset_to_key_spec(bms, preset.clone()) {
                 Some(leftright) => leftright,
                 None => {

@@ -106,14 +106,14 @@ pub enum ParsingResult {
     /// The caller is expected to show the usage.
     ShowUsage,
     /// The caller is given a path to BMS file and options.
-    PathAndOptions(~str,~Options),
+    FileAndOptions(Path,~Options),
     /// The caller should stop the program with given error message.
     Error(~str),
 }
 
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
-pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResult {
+pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResult {
     let longargs = (~[
         (~"--help", 'h'), (~"--version", 'V'), (~"--speed", 'a'),
         (~"--autoplay", 'v'), (~"--exclusive", 'x'), (~"--sound-only", 'X'),
@@ -146,12 +146,12 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
     while i < nargs {
         if !args[i].starts_with("-") {
             if bmspath.is_none() {
-                bmspath = Some(args[i].clone());
+                bmspath = Some(Path(args[i]));
             }
         } else if args[i] == ~"--" {
             i += 1;
             if bmspath.is_none() && i < nargs {
-                bmspath = Some(args[i].clone());
+                bmspath = Some(Path(args[i]));
             }
             break;
         } else {
@@ -245,7 +245,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<~str>) -> ParsingResu
 
     match bmspath {
         None => ShowUsage,
-        Some(bmspath) => PathAndOptions(bmspath, ~Options {
+        Some(bmspath) => FileAndOptions(bmspath, ~Options {
             mode: mode,
             modf: modf,
             bga: bga,

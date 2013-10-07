@@ -166,7 +166,6 @@ pub fn load_bms_from_reader<'r,R:Rng,Listener:BmsMessageListener>(
             (parse::BmsGenre(s),           false) => { genre = Some(s.to_owned()); }
             (parse::BmsArtist(s),          false) => { artist = Some(s.to_owned()); }
             (parse::BmsStageFile(s),       false) => { stagefile = Some(s.to_owned()); }
-            (parse::BmsPathWAV(s),         false) => { basepath = Some(s.to_owned()); }
             (parse::BmsBPM(bpm),           false) => { builder.set_initbpm(bpm); }
             (parse::BmsExBPM(Key(i), bpm), false) => { bpmtab[i] = bpm; }
             (parse::BmsPlayer(v),          false) => { player = v; }
@@ -179,6 +178,13 @@ pub fn load_bms_from_reader<'r,R:Rng,Listener:BmsMessageListener>(
             (parse::BmsBGA(bc),            false) => { blitcmd.push(bc); }
             (parse::BmsStop(Key(i), dur),  false) => { stoptab[i] = dur; }
             (parse::BmsStp(pos, dur),      false) => { builder.add(pos, Stop(dur)); }
+
+            (parse::BmsPathWAV(s), false) => {
+                // TODO this logic assumes that #PATH_WAV is always interpreted as a native path,
+                // which the C version doesn't assume. this difference barely makes the practical
+                // issue though (#PATH_WAV is not expected to be used in the wild).
+                basepath = Some(Path(s));
+            }
 
             (parse::BmsShorten(measure, factor), false) => {
                 if factor > 0.0 {
@@ -436,7 +442,7 @@ pub fn load_bms_from_reader<'r,R:Rng,Listener:BmsMessageListener>(
     builder.set_end(endt + 1.0);
 
     let timeline = builder.build();
-    Ok(Bms { bmspath: ~"",
+    Ok(Bms { bmspath: None,
              meta: BmsMeta { title: title, genre: genre, artist: artist, stagefile: stagefile,
                              basepath: basepath, player: player, playlevel: playlevel, rank: rank,
                              sndpath: sndpath, imgpath: imgpath, blitcmd: blitcmd },
@@ -445,12 +451,18 @@ pub fn load_bms_from_reader<'r,R:Rng,Listener:BmsMessageListener>(
 
 /// Reads the BMS file with given RNG.
 pub fn load_bms<'r,R:Rng,Listener:BmsMessageListener>(
-                                bmspath: &str, r: &mut R, opts: &BmsLoaderOptions,
+                                bmspath: &Path, r: &mut R, opts: &BmsLoaderOptions,
                                 callback: &mut Listener) -> Result<Bms,~str> {
-    do io::file_reader(&Path(bmspath)).and_then |f| {
+    do io::file_reader(bmspath).and_then |f| {
         do load_bms_from_reader(f, r, opts, callback).map_move |bms| {
             let mut bms = bms;
-            bms.bmspath = bmspath.to_owned();
+            bms.bmspath = Some(bmspath.clone());
+            if bms.meta.basepath.is_none() {
+                let basepath = bmspath.dir_path();
+                // Rust: `Path("")` is not same as `Path(".")` but `Path::dir_path` may produce it!
+                let basepath = if basepath == Path("") {Path(".")} else {basepath};
+                bms.meta.basepath = Some(basepath);
+            }
             bms
         }
     }

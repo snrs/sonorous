@@ -102,7 +102,7 @@ pub fn exename() -> ~str {
 
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop.
-pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
+pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
     use format::bms;
     use engine::player;
     use ui::init::{init_audio, init_video, init_joystick};
@@ -120,7 +120,7 @@ pub fn play(bmspath: ~str, opts: ~ui::options::Options) {
     let mut callback = Callback;
 
     if opts.debug_dumpbmscommand {
-        let f = match std::io::file_reader(&Path(bmspath)) {
+        let f = match std::io::file_reader(bmspath) {
             Ok(f) => f,
             Err(err) => die!("Couldn't load BMS file: {}", err)
         };
@@ -256,7 +256,7 @@ pub fn main() {
     match parse_opts(args, ui::common::get_path_from_dialog) {
         ShowVersion => { println(version()); }
         ShowUsage => { usage(); }
-        PathAndOptions(bmspath, opts) => { play(bmspath, opts); }
+        FileAndOptions(bmspath, opts) => { play(&bmspath, opts); }
         Error(err) => { die!("{}", err); }
     }
 }

@@ -193,7 +193,8 @@ impl BmsParserOptions {
 pub fn each_bms_command<Listener:BmsMessageListener>(
                                 f: @io::Reader, opts: &BmsParserOptions,
                                 callback: &mut Listener, blk: &fn(BmsCommand) -> bool) -> bool {
-    use util::std::str::{StrUtil, from_fixed_utf8_bytes};
+    use util::std::str::from_fixed_utf8_bytes;
+    use std::ascii::StrAsciiExt;
 
     let file = f.read_whole_stream();
     let mut lineno = 0;

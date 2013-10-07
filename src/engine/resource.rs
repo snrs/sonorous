@@ -8,7 +8,7 @@ use std::cmp;
 use sdl::{img, video, mixer};
 use sdl::video::{Surface, RGB};
 use ext::sdl::mpeg;
-use format::bms::{Bms, BlitCmd};
+use format::bms::BlitCmd;
 use util::gfx::SurfaceAreaUtil;
 use util::gl::PreparedSurface;
 use util::filesearch::SearchContext;
@@ -28,16 +28,6 @@ pub static BYTESPERSEC: i32 = SAMPLERATE * 2 * 2; // stereo, 16 bits/sample
 static SOUND_EXTS: &'static [&'static str] = &[".WAV", ".OGG", ".MP3"];
 /// Alternative file extensions for image resources.
 static IMAGE_EXTS: &'static [&'static str] = &[".BMP", ".PNG", ".JPG", ".JPEG", ".GIF"];
-
-/// Returns a specified or implied resource directory from the BMS file.
-pub fn get_basedir(bms: &Bms) -> Path {
-    // TODO this logic assumes that #PATH_WAV is always interpreted as a native path, which
-    // the C version doesn't assume. this difference barely makes the practical issue though.
-    match bms.meta.basepath {
-        Some(ref basepath) => { let basepath: &str = *basepath; Path(basepath) }
-        None => Path(bms.bmspath).dir_path()
-    }
-}
 
 /// A wrapper for `SearchContext::resolve_relative_path` which returns `Result`.
 fn resolve_relative_path_result(search: &mut SearchContext, basedir: &Path, path: &str,
@@ -138,7 +128,7 @@ impl ImageResource {
 /// Loads an image resource.
 pub fn load_image(search: &mut SearchContext, path: &str, basedir: &Path,
                   load_movie: bool) -> Result<ImageResource,~str> {
-    use util::std::str::StrUtil;
+    use std::ascii::StrAsciiExt;
 
     /// Converts a surface to the native display format, while preserving a transparency or
     /// setting a color key if required.

@@ -50,7 +50,7 @@ impl SearchContext {
      */
     pub fn resolve_relative_path(&mut self, basedir: &Path, path: &str,
                                  exts: &[&str]) -> Option<Path> {
-        use util::std::str::StrUtil;
+        use std::ascii::StrAsciiExt;
 
         let mut parts = ~[];
         for part in path.split_iter(|c: char| c == '/' || c == '\\') {

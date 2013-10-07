@@ -18,7 +18,7 @@ use util::filesearch::SearchContext;
 use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
 use engine::resource::{SoundResource, NoSound, ImageResource, NoImage, Image};
-use engine::resource::{get_basedir, load_sound, load_image, apply_blitcmd};
+use engine::resource::{load_sound, load_image, apply_blitcmd};
 use engine::player::Player;
 use ui::common::{update_line};
 use ui::screen::Screen;
@@ -94,7 +94,7 @@ impl LoadingContext {
     /// Creates a loading context.
     pub fn new(bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec, keymap: ~KeyMap,
                opts: ~Options) -> LoadingContext {
-        let basedir = get_basedir(&bms);
+        let basedir = bms.meta.basepath.clone().unwrap_or(Path("."));
         let sndres = vec::from_elem(bms.meta.sndpath.len(), NoSound);
         let imgres = vec::from_elem(bms.meta.imgpath.len(), NoImage);
         let (brief, title, genre, artist) = displayed_info(&bms, &infos, keyspec);

@@ -82,12 +82,6 @@ pub mod str {
         /// accepts without a failure, if any.
         fn scan_f64(&self) -> Option<uint>;
 
-        /// Converts all ASCII letters (A-Z/a-z, no accent) to uppercase.
-        fn to_ascii_upper(&self) -> ~str;
-
-        /// Converts all ASCII letters (A-Z/a-z, no accent) to lowercase.
-        fn to_ascii_lower(&self) -> ~str;
-
         /// Work with a null-terminated UTF-16 buffer of the string. Useful for calling
         /// Win32 API.
         fn as_utf16_c_str<T>(&self, f: &fn(*u16) -> T) -> T;
@@ -142,14 +136,6 @@ pub mod str {
                     Some(pos)
                 }
             }
-        }
-
-        fn to_ascii_upper(&self) -> ~str {
-            unsafe { self.to_ascii_nocheck() }.to_upper().to_str_ascii()
-        }
-
-        fn to_ascii_lower(&self) -> ~str {
-            unsafe { self.to_ascii_nocheck() }.to_lower().to_str_ascii()
         }
 
         fn as_utf16_c_str<T>(&self, f: &fn(*u16) -> T) -> T {

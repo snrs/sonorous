@@ -101,7 +101,7 @@ pub struct BmsMeta {
     /// Path to an image for loading screen. Maps to BMS #STAGEFILE command.
     stagefile: Option<~str>,
     /// A base path used for loading all other resources. Maps to BMS #PATH_WAV command.
-    basepath: Option<~str>,
+    basepath: Option<Path>,
 
     /// Game mode. One of `SinglePlay`(1), `CouplePlay`(2) or `DoublePlay`(3). Maps to BMS
     /// #PLAYER command.
@@ -129,8 +129,9 @@ pub type BmsPointer = Pointer<SoundRef,ImageRef>;
 /// data, and cannot be used for actual game play (since `Pointer` requires `Timeline` to be
 /// a managed pointer).
 pub struct Bms {
-    /// A path to the BMS file. Also used for finding the resource when `meta.basepath` is not set.
-    bmspath: ~str,
+    /// A path to the BMS file if any. Also used for finding the resource when `meta.basepath`
+    /// is not set.
+    bmspath: Option<Path>,
     /// Metadata and resources.
     meta: BmsMeta,
     /// Timeline.

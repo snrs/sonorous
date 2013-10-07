@@ -77,7 +77,7 @@ pub fn update_line(s: &str) {
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
 /// refused to do so or the platform is unsupported.
 #[cfg(target_os = "win32")]
-pub fn get_path_from_dialog() -> Option<~str> {
+pub fn get_path_from_dialog() -> Option<Path> {
     #[fixed_stack_segment]; #[inline(never)];
     use std::ptr::{null, mut_null};
     use util::std::str::StrUtil;
@@ -120,7 +120,7 @@ pub fn get_path_from_dialog() -> Option<~str> {
                     // Rust: why can't we cast `&[u16, ..512]` to `&[u16]`?!
                     None => buf.slice(0, buf.len())
                 };
-                Some(::std::str::from_utf16(path))
+                Some(Path(::std::str::from_utf16(path)))
             } else {
                 None
             }
@@ -131,7 +131,7 @@ pub fn get_path_from_dialog() -> Option<~str> {
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
 /// refused to do so or the platform is unsupported.
 #[cfg(not(target_os = "win32"))]
-pub fn get_path_from_dialog() -> Option<~str> {
+pub fn get_path_from_dialog() -> Option<Path> {
     None
 }
 
