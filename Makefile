@@ -19,7 +19,7 @@ RUSTFLAGS ?= -O
 
 all: $(BIN)
 
-$(BIN): $(SRC) $(RUSTSDL)/libsdl.dummy $(RUSTOPENGLES)/libopengles.dummy $(RUSTENCODING)/libencoding.dummy
+$(BIN): $(SRC) $(RUSTSDL)/libsdl.dummy $(RUSTOPENGLES)/librustopengles.dummy $(RUSTENCODING)/libencoding.dummy
 	$(RUSTC) $(RUSTFLAGS) -L $(RUSTSDL) -L $(RUSTOPENGLES) -L $(RUSTENCODING) $(CRATE) -o $(BIN)
 
 $(RUSTSDL)/libsdl.dummy:
