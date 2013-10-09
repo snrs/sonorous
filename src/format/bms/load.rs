@@ -323,7 +323,7 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
 }
 
 /// Reads the BMS file with given RNG.
-pub fn load_bms<'r,R:Rng,Listener:BmsMessageListener>(
+pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
                                 bmspath: &Path, r: &mut R, opts: &BmsLoaderOptions,
                                 callback: &mut Listener) -> Result<Bms,~str> {
     do io::file_reader(bmspath).and_then |f| {

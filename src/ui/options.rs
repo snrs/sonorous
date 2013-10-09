@@ -107,8 +107,8 @@ pub enum ParsingResult {
     ShowVersion,
     /// The caller is expected to show the usage.
     ShowUsage,
-    /// The caller is given a path to BMS file and options.
-    FileAndOptions(Path,~Options),
+    /// The caller is given a path and options.
+    PathAndOptions(Path,~Options),
     /// The caller should stop the program with given error message.
     Error(~str),
 }
@@ -249,7 +249,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
 
     match bmspath {
         None => ShowUsage,
-        Some(bmspath) => FileAndOptions(bmspath, ~Options {
+        Some(bmspath) => PathAndOptions(bmspath, ~Options {
             mode: mode,
             modf: modf,
             bga: bga,

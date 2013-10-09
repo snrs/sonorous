@@ -5,6 +5,7 @@
 //! Core game play logics. Handles the input (if any) and sound but not the user interface.
 
 use std::{vec, cmp, num};
+use std::rand::Rng;
 
 use sdl::{get_ticks, event};
 use ext::sdl::mixer;
@@ -20,11 +21,10 @@ use engine::input::{KeyMap};
 use engine::resource::SoundResource;
 use ui::options::*;
 
-/// Applies given modifier to the game data. The target lanes of the modifier is determined
-/// from given key specification. This function should be called twice for the Couple Play,
-/// since 1P and 2P should be treated separately.
-pub fn apply_modf<R: ::std::rand::Rng>(bms: &mut Bms, modf: Modf, r: &mut R,
-                                       keyspec: &KeySpec, begin: uint, end: uint) {
+/// Applies given modifier to given group of lanes in the game data. `begin` and `end` should be
+/// a valid range from 0 to `keyspec.order.len()`, where `end` is exclusive.
+pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modf, r: &mut R,
+                                  keyspec: &KeySpec, begin: uint, end: uint) {
     use timeline_modf = format::timeline::modf;
 
     let mut lanes = ~[];
@@ -38,10 +38,19 @@ pub fn apply_modf<R: ::std::rand::Rng>(bms: &mut Bms, modf: Modf, r: &mut R,
     }
 
     match modf {
-        MirrorModf => timeline_modf::mirror(&mut bms.timeline, lanes),
-        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(&mut bms.timeline, r, lanes),
-        RandomModf | RandomExModf => timeline_modf::randomize(&mut bms.timeline, r, lanes)
+        MirrorModf => timeline_modf::mirror(timeline, lanes),
+        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(timeline, r, lanes),
+        RandomModf | RandomExModf => timeline_modf::randomize(timeline, r, lanes)
     };
+}
+
+/// Applies given modifier to the game data.
+pub fn apply_modf<R:Rng>(bms: &mut Bms, modf: Modf, r: &mut R, keyspec: &KeySpec) {
+    apply_modf_to_lanes(&mut bms.timeline, modf, r, keyspec, 0, keyspec.split);
+    if keyspec.split < keyspec.order.len() {
+        apply_modf_to_lanes(&mut bms.timeline, modf, r, keyspec,
+                            keyspec.split, keyspec.order.len());
+    }
 }
 
 /// A list of image references displayed in BGA layers (henceforth the BGA state). Not all image

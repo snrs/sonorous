@@ -86,6 +86,7 @@ pub mod engine {
     pub mod screen;
     pub mod init;
     pub mod scene;
+    pub mod selecting;
     pub mod loading;
     pub mod viewing;
     pub mod playing;
@@ -101,97 +102,99 @@ pub fn exename() -> ~str {
     if args.is_empty() {~"sonorous"} else {args[0].clone()}
 }
 
+/// Dumps the recognized BMS commands. This is used by `-Z dump-bmscommand[-full]` debug options.
+pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
+                                bmspath: &Path, full: bool, callback: &mut Listener) {
+    use std::{io, rand};
+    use format::bms::parse::{BmsParserOptions, BmsCommand, BmsUnknown};
+    use format::bms::parse::{each_bms_command_with_flow, each_bms_command};
+
+    let f = match io::file_reader(bmspath) {
+        Ok(f) => f,
+        Err(err) => die!("Couldn't load BMS file: {}", err)
+    };
+    let parseropts = BmsParserOptions::new();
+    let blk = |_lineno: uint, cmd: BmsCommand| {
+        match cmd {
+            BmsUnknown(*) => {}
+            cmd => { println(cmd.to_str()); }
+        }
+        true
+    };
+    if full {
+        each_bms_command_with_flow(f, &parseropts, callback, blk);
+    } else {
+        let mut r = rand::rng();
+        each_bms_command(f, &mut r, &parseropts, callback, blk);
+    }
+}
+
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop.
 pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
+    use std::{rand, os};
     use format::bms;
-    use engine::player;
     use ui::init::{init_audio, init_video, init_joystick};
     use ui::scene::{Scene, run_scene};
+    use ui::selecting::{preprocess_bms, PreprocessedBms, SelectingScene};
     use ui::loading::{LoadingScene, TextualLoadingScene};
 
-    let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
-        let atline = match line { Some(line) => format!(" at line {}", line), None => ~"" };
-        warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
-    };
+    let scene;
+    if os::path_is_dir(bmspath) {
+        let screen = init_video(opts.is_exclusive(), opts.fullscreen);
+        scene = SelectingScene::new(screen, bmspath, opts) as ~Scene:
+    } else {
+        let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
+            let atline = match line { Some(line) => format!(" at line {}", line), None => ~"" };
+            warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
+        };
 
-    if opts.debug_dumpbmscommand || opts.debug_dumpbmscommandfull {
-        let f = match std::io::file_reader(bmspath) {
-            Ok(f) => f,
-            Err(err) => die!("Couldn't load BMS file: {}", err)
-        };
-        let parseropts = bms::parse::BmsParserOptions::new();
-        let blk = |_lineno: uint, cmd: bms::parse::BmsCommand| {
-            match cmd {
-                bms::parse::BmsUnknown(*) => {}
-                cmd => { println(cmd.to_str()); }
-            }
-            true
-        };
-        if opts.debug_dumpbmscommandfull {
-            bms::parse::each_bms_command_with_flow(f, &parseropts, &mut callback, blk);
+        if opts.debug_dumpbmscommand || opts.debug_dumpbmscommandfull {
+            dump_bmscommand(bmspath, opts.debug_dumpbmscommandfull, &mut callback);
+            ui::common::exit(0);
+        }
+
+        // parses the file and sanitizes it
+        let mut r = rand::rng();
+        let loaderopts = bms::load::BmsLoaderOptions::new();
+        let PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec } =
+            match preprocess_bms(bmspath, opts, &mut r, &loaderopts, &mut callback) {
+                Ok(preproc) => preproc,
+                Err(err) => die!("Couldn't load BMS file: {}", err)
+            };
+
+        if opts.debug_dumptimeline {
+            bms.timeline.dump(std::io::stdout());
+            ui::common::exit(0);
+        }
+
+        // initialize SDL
+        init_audio();
+        for &joyidx in opts.joystick.iter() { init_joystick(joyidx); }
+
+        // initialize the screen if required
+        let screen;
+        let keymap;
+        if opts.has_screen() {
+            screen = Some(init_video(opts.is_exclusive(), opts.fullscreen));
+            // this requires a video subsystem.
+            keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
+                Ok(map) => ~map,
+                Err(err) => die!("{}", err)
+            };
         } else {
-            let mut r = std::rand::rng();
-            bms::parse::each_bms_command(f, &mut r, &parseropts, &mut callback, blk);
+            screen = None;
+            // in this case we explicitly ignore keymaps
+            keymap = ~std::hashmap::HashMap::new();
         }
-        ui::common::exit(0);
-    }
 
-    // parses the file and sanitizes it
-    let mut r = std::rand::rng();
-    let loaderopts = bms::load::BmsLoaderOptions::new();
-    let mut bms = match bms::load::load_bms(bmspath, &mut r, &loaderopts, &mut callback) {
-        Ok(bms) => bms,
-        Err(err) => die!("Couldn't load BMS file: {}", err)
-    };
-
-    // parses the key specification and further sanitizes `bms` with it
-    let keyspec = match engine::keyspec::key_spec(&bms, opts.preset.clone(),
-                                                  opts.leftkeys.clone(), opts.rightkeys.clone()) {
-        Ok(keyspec) => keyspec,
-        Err(err) => die!("{}", err)
-    };
-    keyspec.filter_timeline(&mut bms.timeline);
-    let infos = bms.timeline.analyze();
-
-    // applies the modifier if any
-    for &modf in opts.modf.iter() {
-        player::apply_modf(&mut bms, modf, &mut r, keyspec, 0, keyspec.split);
-        if keyspec.split < keyspec.order.len() {
-            player::apply_modf(&mut bms, modf, &mut r, keyspec, keyspec.split, keyspec.order.len());
-        }
-    }
-
-    if opts.debug_dumptimeline {
-        bms.timeline.dump(std::io::stdout());
-        ui::common::exit(0);
-    }
-
-    // initialize SDL
-    init_audio();
-    for &joyidx in opts.joystick.iter() { init_joystick(joyidx); }
-
-    // initialize the screen if required
-    let screen;
-    let keymap;
-    if opts.has_screen() {
-        screen = Some(init_video(opts.is_exclusive(), opts.fullscreen));
-        // this requires a video subsystem.
-        keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
-            Ok(map) => ~map,
-            Err(err) => die!("{}", err)
+        scene = if opts.is_exclusive() {
+            TextualLoadingScene::new(screen, bms, infos, keyspec, keymap, opts) as ~Scene:
+        } else {
+            LoadingScene::new(screen.unwrap(), bms, infos, keyspec, keymap, opts) as ~Scene:
         };
-    } else {
-        screen = None;
-        // in this case we explicitly ignore keymaps
-        keymap = ~std::hashmap::HashMap::new();
     }
 
-    let scene = if opts.is_exclusive() {
-        TextualLoadingScene::new(screen, bms, infos, keyspec, keymap, opts) as ~Scene:
-    } else {
-        LoadingScene::new(screen.unwrap(), bms, infos, keyspec, keymap, opts) as ~Scene:
-    };
     run_scene(scene);
 }
 
@@ -259,7 +262,7 @@ pub fn main() {
     match parse_opts(args, ui::common::get_path_from_dialog) {
         ShowVersion => { println(version()); }
         ShowUsage => { usage(); }
-        FileAndOptions(bmspath, opts) => { play(&bmspath, opts); }
+        PathAndOptions(bmspath, opts) => { play(&bmspath, opts); }
         Error(err) => { die!("{}", err); }
     }
 }

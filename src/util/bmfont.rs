@@ -341,7 +341,7 @@ impl FontDrawingUtils for ShadedDrawing {
                           c: char, color: ColorT) {
         if !c.is_whitespace() {
             let c = c as uint;
-            let glyph = if 32 <= c && c < 126 {c-32} else {0};
+            let glyph = if 32 <= c && c <= 126 {c-32} else {0};
             self.glyph(font, x, y, zoom, glyph, color);
         }
     }
