@@ -4,35 +4,34 @@
 
 //! Utilities for searching files.
 
-use std::{at_vec, os};
+use std::{at_vec, os, hashmap};
 
 /// Context for searching files.
 pub struct SearchContext {
-    /// Last return value of `get_entries` if any.
-    last_get_entries: Option<(Path, (@[~str], @[~str]))>,
+    /// Cached return values of `get_entries`.
+    get_entries_cache: hashmap::HashMap<~str,(@[~str],@[~str])>,
 }
 
 impl SearchContext {
     /// Creates a fresh search context.
     pub fn new() -> SearchContext {
-        SearchContext { last_get_entries: None }
+        SearchContext { get_entries_cache: hashmap::HashMap::new() }
     }
 
     /// Returns a list of immediate subdirectories (i.e. without `.` and `..`) and files
     /// in given directory. Returns a pair of empty lists if `dir` is not a directory.
     /// The results may be cached by the context.
     pub fn get_entries(&mut self, dir: &Path) -> (@[~str], @[~str]) {
-        match self.last_get_entries {
-            Some((ref prevdir, prevret)) if prevdir == dir => prevret,
-            _ => {
-                let mut entries = os::list_dir(dir);
-                entries.retain(|e| !(".".equiv(e) || "..".equiv(e)));
-                let (dirs, files) = entries.partition(|e| os::path_is_dir(&dir.push(*e)));
-                let ret = (at_vec::to_managed_move(dirs), at_vec::to_managed_move(files));
-                self.last_get_entries = Some((dir.clone(), ret));
-                ret
-            }
-        }
+        // the original plan is to implement an LRU cache for `get_entries`, but for now we don't
+        // invalidate any cache items since it turned out that `os::list_dir` is very, very slow.
+        // for example, it is not rare for `list_dir` to take more than 100ms in Windows.
+        let ret = do self.get_entries_cache.find_or_insert_with(dir.to_str()) |_| {
+            let mut entries = os::list_dir(dir);
+            entries.retain(|e| !(".".equiv(e) || "..".equiv(e)));
+            let (dirs, files) = entries.partition(|e| os::path_is_dir(&dir.push(*e)));
+            (at_vec::to_managed_move(dirs), at_vec::to_managed_move(files))
+        };
+        *ret
     }
 
     /**
