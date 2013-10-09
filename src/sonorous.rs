@@ -58,6 +58,7 @@ use self::util::std::io::*;
     pub mod gl;
     pub mod bmfont;
     pub mod filesearch;
+    pub mod opt_owned;
 }
 pub mod ext {
     //! Bindings to external libraries or APIs.
@@ -109,29 +110,30 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
     use ui::scene::{Scene, run_scene};
     use ui::loading::{LoadingScene, TextualLoadingScene};
 
-    struct Callback;
-    impl bms::diag::BmsMessageListener for Callback {
-        fn on_message(&mut self, line: Option<uint>, msg: bms::diag::BmsMessage) -> bool {
-            let atline = match line { Some(line) => format!(" at line {}", line), None => ~"" };
-            warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
-            true
-        }
-    }
-    let mut callback = Callback;
+    let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
+        let atline = match line { Some(line) => format!(" at line {}", line), None => ~"" };
+        warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
+    };
 
-    if opts.debug_dumpbmscommand {
+    if opts.debug_dumpbmscommand || opts.debug_dumpbmscommandfull {
         let f = match std::io::file_reader(bmspath) {
             Ok(f) => f,
             Err(err) => die!("Couldn't load BMS file: {}", err)
         };
         let parseropts = bms::parse::BmsParserOptions::new();
-        do bms::parse::each_bms_command(f, &parseropts, &mut callback) |cmd| {
+        let blk = |_lineno: uint, cmd: bms::parse::BmsCommand| {
             match cmd {
                 bms::parse::BmsUnknown(*) => {}
                 cmd => { println(cmd.to_str()); }
             }
             true
         };
+        if opts.debug_dumpbmscommandfull {
+            bms::parse::each_bms_command_with_flow(f, &parseropts, &mut callback, blk);
+        } else {
+            let mut r = std::rand::rng();
+            bms::parse::each_bms_command(f, &mut r, &parseropts, &mut callback, blk);
+        }
         ui::common::exit(0);
     }
 

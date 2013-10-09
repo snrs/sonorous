@@ -5,7 +5,7 @@
 //! BMS loader. Uses a BMS parser (`format::bms::parse`) to produce `format::bms::Bms` structure.
 
 use std::{vec, iter, io};
-use std::rand::*;
+use std::rand::Rng;
 
 use format::obj::*;
 use format::bms::parse;
@@ -26,8 +26,22 @@ impl BmsLoaderOptions {
     }
 }
 
+/// An unprocessed data line of BMS file.
+#[deriving(Clone)]
+struct BmsLine {
+    measure: uint,
+    chan: Key,
+    data: ~str
+}
+
+impl Ord for BmsLine {
+    fn lt(&self, other: &BmsLine) -> bool {
+        (self.measure, self.chan) < (other.measure, other.chan)
+    }
+}
+
 /// Reads the BMS file with given RNG from given reader. Diagnostic messages are sent via callback.
-pub fn load_bms_from_reader<'r,R:Rng,Listener:BmsMessageListener>(
+pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
                                 f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
                                 callback: &mut Listener) -> Result<Bms,~str> {
     use format::timeline::builder::{TimelineBuilder, Mark};
@@ -43,98 +57,6 @@ pub fn load_bms_from_reader<'r,R:Rng,Listener:BmsMessageListener>(
     let mut sndpath = vec::from_elem(MAXKEY as uint, None);
     let mut imgpath = vec::from_elem(MAXKEY as uint, None);
     let mut blitcmd = ~[];
-
-    /// The state of the block, for determining which lines should be processed.
-    enum BlockState {
-        /// Not contained in the #IF block.
-        Outside,
-        /// Active.
-        Process,
-        /// Inactive, but (for the purpose of #IF/#ELSEIF/#ELSE/#ENDIF structure) can move to
-        /// `Process` state when matching clause appears.
-        Ignore,
-        /// Inactive and won't be processed until the end of block.
-        NoFurther
-    }
-
-    impl BlockState {
-        /// Returns true if lines should be ignored in the current block given that the parent
-        /// block was active.
-        fn inactive(self) -> bool {
-            match self { Outside | Process => false, Ignore | NoFurther => true }
-        }
-    }
-
-    /**
-     * Block information. The parser keeps a list of nested blocks and determines if
-     * a particular line should be processed or not.
-     *
-     * Sonorous actually recognizes only one kind of blocks, starting with #RANDOM or
-     * #SETRANDOM and ending with #ENDRANDOM or #END(IF) outside an #IF block. An #IF block is
-     * a state within #RANDOM, so it follows that #RANDOM/#SETRANDOM blocks can nest but #IF
-     * can't nest unless its direct parent is #RANDOM/#SETRANDOM.
-     */
-    struct Block {
-        /// A generated value if any. It can be `None` if this block is the topmost one (which
-        /// is actually not a block but rather a sentinel) or the last `#RANDOM` or `#SETRANDOM`
-        /// command was invalid, and #IF in that case will always evaluates to false.
-        val: Option<int>,
-        /// The state of the block.
-        state: BlockState,
-        /// True if the parent block is already ignored so that this block should be ignored
-        /// no matter what `state` is.
-        skip: bool
-    }
-
-    impl Block {
-        /// Returns true if lines should be ignored in the current block.
-        fn inactive(&self) -> bool { self.skip || self.state.inactive() }
-    }
-
-    // Rust: #[deriving(Eq)] does not work inside the function. (#4913)
-    impl Eq for BlockState {
-        fn eq(&self, other: &BlockState) -> bool {
-            match (*self, *other) {
-                (Outside, Outside) | (Process, Process) |
-                (Ignore, Ignore) | (NoFurther, NoFurther) => true,
-                (_, _) => false
-            }
-        }
-        fn ne(&self, other: &BlockState) -> bool { !self.eq(other) }
-    }
-    impl Eq for Block {
-        fn eq(&self, other: &Block) -> bool {
-            // Rust: this is for using `ImmutableEqVector<T>::rposition`, which should have been
-            //       in `ImmutableVector<T>`.
-            self.val == other.val && self.state == other.state && self.skip == other.skip
-        }
-        fn ne(&self, other: &Block) -> bool { !self.eq(other) }
-    }
-
-    // A list of nested blocks.
-    let mut blk = ~[Block { val: None, state: Outside, skip: false }];
-
-    /// An unprocessed data line of BMS file.
-    struct BmsLine { measure: uint, chan: Key, data: ~str }
-
-    impl Ord for BmsLine {
-        fn lt(&self, other: &BmsLine) -> bool {
-            self.measure < other.measure ||
-            (self.measure == other.measure && self.chan < other.chan)
-        }
-        fn le(&self, other: &BmsLine) -> bool {
-            self.measure < other.measure ||
-            (self.measure == other.measure && self.chan <= other.chan)
-        }
-        fn ge(&self, other: &BmsLine) -> bool { !self.lt(other) }
-        fn gt(&self, other: &BmsLine) -> bool { !self.le(other) }
-    }
-
-    impl Clone for BmsLine {
-        fn clone(&self) -> BmsLine {
-            BmsLine { measure: self.measure, chan: self.chan, data: self.data.clone() }
-        }
-    }
 
     // A builder for objects.
     let mut builder = TimelineBuilder::new();
@@ -159,92 +81,43 @@ pub fn load_bms_from_reader<'r,R:Rng,Listener:BmsMessageListener>(
     // command.
     let mut lnobj = None;
 
-    do parse::each_bms_command(f, &opts.parser, callback) |cmd| {
-        assert!(!blk.is_empty());
-        match (cmd, blk.last().inactive()) {
-            (parse::BmsTitle(s),           false) => { title = Some(s.to_owned()); }
-            (parse::BmsGenre(s),           false) => { genre = Some(s.to_owned()); }
-            (parse::BmsArtist(s),          false) => { artist = Some(s.to_owned()); }
-            (parse::BmsStageFile(s),       false) => { stagefile = Some(s.to_owned()); }
-            (parse::BmsBPM(bpm),           false) => { builder.set_initbpm(bpm); }
-            (parse::BmsExBPM(Key(i), bpm), false) => { bpmtab[i] = bpm; }
-            (parse::BmsPlayer(v),          false) => { player = v; }
-            (parse::BmsPlayLevel(v),       false) => { playlevel = v; }
-            (parse::BmsRank(v),            false) => { rank = v; }
-            (parse::BmsLNType(lntype),     false) => { consecutiveln = (lntype == 2); }
-            (parse::BmsLNObj(key),         false) => { lnobj = Some(key); }
-            (parse::BmsWAV(Key(i), s),     false) => { sndpath[i] = Some(s.to_owned()); }
-            (parse::BmsBMP(Key(i), s),     false) => { imgpath[i] = Some(s.to_owned()); }
-            (parse::BmsBGA(bc),            false) => { blitcmd.push(bc); }
-            (parse::BmsStop(Key(i), dur),  false) => { stoptab[i] = dur; }
-            (parse::BmsStp(pos, dur),      false) => { builder.add(pos, Stop(dur)); }
+    do parse::each_bms_command(f, r, &opts.parser, callback) |_, cmd| {
+        match cmd {
+            parse::BmsTitle(s)            => { title = Some(s.into_owned()); }
+            parse::BmsGenre(s)            => { genre = Some(s.into_owned()); }
+            parse::BmsArtist(s)           => { artist = Some(s.into_owned()); }
+            parse::BmsStageFile(s)        => { stagefile = Some(s.into_owned()); }
+            parse::BmsBPM(bpm)            => { builder.set_initbpm(bpm); }
+            parse::BmsExBPM(Key(i), bpm)  => { bpmtab[i] = bpm; }
+            parse::BmsPlayer(v)           => { player = v; }
+            parse::BmsPlayLevel(v)        => { playlevel = v; }
+            parse::BmsRank(v)             => { rank = v; }
+            parse::BmsLNType(lntype)      => { consecutiveln = (lntype == 2); }
+            parse::BmsLNObj(key)          => { lnobj = Some(key); }
+            parse::BmsWAV(Key(i), s)      => { sndpath[i] = Some(s.into_owned()); }
+            parse::BmsBMP(Key(i), s)      => { imgpath[i] = Some(s.into_owned()); }
+            parse::BmsBGA(bc)             => { blitcmd.push(bc); }
+            parse::BmsStop(Key(i), dur)   => { stoptab[i] = dur; }
+            parse::BmsStp(pos, dur)       => { builder.add(pos, Stop(dur)); }
 
-            (parse::BmsPathWAV(s), false) => {
+            parse::BmsPathWAV(s) => {
                 // TODO this logic assumes that #PATH_WAV is always interpreted as a native path,
                 // which the C version doesn't assume. this difference barely makes the practical
                 // issue though (#PATH_WAV is not expected to be used in the wild).
-                basepath = Some(Path(s));
+                basepath = Some(Path(s.as_slice()));
             }
 
-            (parse::BmsShorten(measure, factor), false) => {
+            parse::BmsShorten(measure, factor) => {
                 if factor > 0.0 {
                     shortens.grow_set(measure, &1.0, factor);
                 }
             }
-            (parse::BmsData(measure, chan, data), false) => {
-                bmsline.push(BmsLine { measure: measure, chan: chan, data: data.to_owned() })
+            parse::BmsData(measure, chan, data) => {
+                bmsline.push(BmsLine { measure: measure, chan: chan, data: data.into_owned() })
             }
 
-            // flow commands
-            (parse::BmsRandom(val), _) | (parse::BmsSetRandom(val), _) => {
-                let val = if val <= 0 {None} else {Some(val)};
-                let setrandom = match cmd { parse::BmsSetRandom(_) => true, _ => false };
-
-                // do not generate a random value if the entire block is skipped (but it
-                // still marks the start of block)
-                let inactive = blk.last().inactive();
-                let generated = do val.and_then |val| {
-                    if setrandom {
-                        Some(val)
-                    } else if !inactive {
-                        Some(r.gen_integer_range(1, val + 1))
-                    } else {
-                        None
-                    }
-                };
-                blk.push(Block { val: generated, state: Outside, skip: inactive });
-            }
-            (parse::BmsEndRandom, _) => {
-                if blk.len() > 1 { blk.pop(); }
-            }
-            (parse::BmsIf(val), _) | (parse::BmsElseIf(val), _) => {
-                let val = if val <= 0 {None} else {Some(val)};
-                let haspriorelse = match cmd { parse::BmsElseIf(_) => true, _ => false };
-
-                // Rust: `blk.last_ref()` may be useful?
-                let last = &mut blk[blk.len() - 1];
-                last.state =
-                    if (!haspriorelse && !last.state.inactive()) || last.state == Ignore {
-                        if val.is_none() || val != last.val {Ignore} else {Process}
-                    } else {
-                        NoFurther
-                    };
-            }
-            (parse::BmsElse, _) => {
-                let last = &mut blk[blk.len() - 1];
-                last.state = if last.state == Ignore {Process} else {NoFurther};
-            }
-            (parse::BmsEndIf, _) => {
-                let lastinside = blk.iter().rposition(|&i| i.state != Outside); // XXX #3511
-                for &idx in lastinside.iter() {
-                    if idx > 0 { blk.truncate(idx + 1); }
-                }
-
-                let last = &mut blk[blk.len() - 1];
-                last.state = Outside;
-            }
-
-            (_, _) => {}
+            parse::BmsFlow(_) => { fail!("unexpected"); }
+            _ => {}
         }
         true
     };

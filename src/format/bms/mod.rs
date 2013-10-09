@@ -73,6 +73,7 @@ pub static DefaultBPM: BPM = BPM(130.0);
  * the upper-left corner has non-negative coordinates and the size of the region doesn't exceed
  * 256 by 256 pixels.
  */
+#[deriving(Clone)]
 pub struct BlitCmd {
     dst: ImageRef, src: ImageRef,
     x1: int, y1: int, x2: int, y2: int, dx: int, dy: int

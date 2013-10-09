@@ -35,6 +35,7 @@ pub enum BmsMessage {
     BmsHasInvalidLNTYPE,
     BmsHasZeroLNOBJ,
     BmsHasMultipleLNOBJs,
+    BmsHasUnimplementedFlow,
 
     BmsHasFullWidthSharp,
     BmsHasNoARTIST,
@@ -85,6 +86,9 @@ impl BmsMessage {
             BmsHasMultipleLNOBJs =>
                 (Warning, "There are multiple #LNOBJ commands. Only the last such line will \
                            be used."),
+            BmsHasUnimplementedFlow =>
+                (Warning, "#SWITCH and related flow commands are not yet implemented. \
+                           BMS files with those commands may be parsed incorrectly."),
 
             BmsHasFullWidthSharp =>
                 (Note, "# should be a half-width letter for the compatibility."),
@@ -145,6 +149,18 @@ pub trait BmsMessageListener {
     /// A callback function. The line is optional for global messages. The callback may return
     /// `false` to stop the processing.
     fn on_message(&mut self, line: Option<uint>, message: BmsMessage) -> bool;
+}
+
+impl<'self> BmsMessageListener for &'self fn(Option<uint>,BmsMessage) -> bool {
+    fn on_message(&mut self, line: Option<uint>, msg: BmsMessage) -> bool {
+        (*self)(line, msg)
+    }
+}
+
+impl<'self> BmsMessageListener for &'self fn(Option<uint>,BmsMessage) {
+    fn on_message(&mut self, line: Option<uint>, msg: BmsMessage) -> bool {
+        (*self)(line, msg); true
+    }
 }
 
 /// A built-in listener used for ignoring incoming messages.

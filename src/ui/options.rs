@@ -75,6 +75,8 @@ pub struct Options {
     playspeed: f64,
 
     /// If set, prints the recognized BMS commands after parsing and exits.
+    debug_dumpbmscommandfull: bool,
+    /// If set, prints the recognized BMS commands after parsing and preprocessing and exits.
     debug_dumpbmscommand: bool,
     /// If set, prints the fully calculated timeline and exits.
     debug_dumptimeline: bool,
@@ -139,6 +141,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
     let mut leftkeys = None;
     let mut rightkeys = None;
     let mut playspeed = 1.0;
+    let mut debug_dumpbmscommandfull = false;
     let mut debug_dumpbmscommand = false;
     let mut debug_dumptimeline = false;
 
@@ -224,6 +227,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
                         }
                     }
                     'Z' => match fetch_arg!('Z') {
+                        &"dump-bmscommand-full" => { debug_dumpbmscommandfull = true; }
                         &"dump-bmscommand" => { debug_dumpbmscommand = true; }
                         &"dump-timeline" => { debug_dumptimeline = true; }
                         arg => { return Error(format!("Unknown debugging option: -Z {}", arg)); }
@@ -255,6 +259,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
             preset: preset,
             leftkeys: leftkeys, rightkeys: rightkeys,
             playspeed: playspeed,
+            debug_dumpbmscommandfull: debug_dumpbmscommandfull,
             debug_dumpbmscommand: debug_dumpbmscommand,
             debug_dumptimeline: debug_dumptimeline,
         })
