@@ -244,6 +244,7 @@ Environment Variables:
 
 Available debugging options:
   -Z dump-bmscommand      Dumps recognized BMS commands and exit
+  -Z dump-bmscommand-full Same as above but also dumps skipped flow commands
   -Z dump-timeline        Dumps precalculated timeline and exit
 
 ", version(), exename()));
