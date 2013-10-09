@@ -17,8 +17,9 @@ use util::bmfont::{LeftAligned, Centered, RightAligned};
 use util::filesearch::SearchContext;
 use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
-use engine::resource::{SoundResource, NoSound, ImageResource, NoImage, Image};
-use engine::resource::{load_sound, load_image, apply_blitcmd};
+use engine::resource::{SoundResource, LoadedSoundResource, NoSound};
+use engine::resource::{ImageResource, LoadedImageResource, NoImage, LoadedImage};
+use engine::resource::{SearchContextAdditions, apply_blitcmd};
 use engine::player::Player;
 use ui::common::{update_line};
 use ui::screen::Screen;
@@ -95,8 +96,8 @@ impl LoadingContext {
     pub fn new(bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec, keymap: ~KeyMap,
                opts: ~Options) -> LoadingContext {
         let basedir = bms.meta.basepath.clone().unwrap_or(Path("."));
-        let sndres = vec::from_elem(bms.meta.sndpath.len(), NoSound);
-        let imgres = vec::from_elem(bms.meta.imgpath.len(), NoImage);
+        let sndres = vec::from_fn(bms.meta.sndpath.len(), |_| NoSound);
+        let imgres = vec::from_fn(bms.meta.imgpath.len(), |_| NoImage);
         let (brief, title, genre, artist) = displayed_info(&bms, &infos, keyspec);
 
         let mut jobs = DList::new();
@@ -127,11 +128,12 @@ impl LoadingContext {
             Some(ref path) => path,
             None => { return; }
         };
+        let fullpath = self.search.resolve_relative_path_for_image(*path, &self.basedir);
 
-        let res = load_image(&mut self.search, *path, &self.basedir, false);
+        let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
         let tex_or_err = do res.and_then |res| {
             match res {
-                Image(surface) => {
+                LoadedImage(surface) => {
                     // in principle we don't need this, but some STAGEFILEs mistakenly uses alpha
                     // channel or SDL_image fails to read them so we need to force STAGEFILEs to
                     // ignore alpha channels. (cf. http://bugzilla.libsdl.org/show_bug.cgi?id=1943)
@@ -152,9 +154,10 @@ impl LoadingContext {
     pub fn load_sound(&mut self, i: uint) {
         let path = self.bms.meta.sndpath[i].get_ref().clone();
         self.message = Some(path.clone());
+        let fullpath = self.search.resolve_relative_path_for_sound(path, &self.basedir);
 
-        match load_sound(&mut self.search, path, &self.basedir) {
-            Ok(res) => { self.sndres[i] = res; }
+        match fullpath.and_then(|path| LoadedSoundResource::new(&path)) {
+            Ok(res) => { self.sndres[i] = res.wrap(); }
             Err(_) => { warn!("failed to load sound \\#WAV{} ({})", Key(i as int).to_str(), path); }
         }
     }
@@ -163,9 +166,10 @@ impl LoadingContext {
     pub fn load_image(&mut self, i: uint) {
         let path = self.bms.meta.imgpath[i].get_ref().clone();
         self.message = Some(path.clone());
+        let fullpath = self.search.resolve_relative_path_for_image(path, &self.basedir);
 
-        match load_image(&mut self.search, path, &self.basedir, self.opts.has_movie()) {
-            Ok(res) => { self.imgres[i] = res; }
+        match fullpath.and_then(|path| LoadedImageResource::new(&path, self.opts.has_movie())) {
+            Ok(res) => { self.imgres[i] = res.wrap(); }
             Err(_) => { warn!("failed to load image \\#BMP{} ({})", Key(i as int).to_str(), path); }
         }
     }

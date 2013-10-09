@@ -38,9 +38,30 @@ fn resolve_relative_path_result(search: &mut SearchContext, basedir: &Path, path
     }
 }
 
+pub trait SearchContextAdditions {
+    fn resolve_relative_path_for_sound(&mut self, path: &str, basedir: &Path) -> Result<Path,~str>;
+    fn resolve_relative_path_for_image(&mut self, path: &str, basedir: &Path) -> Result<Path,~str>;
+}
+
+impl SearchContextAdditions for SearchContext {
+    /// Resolves the relative path for the use by `LoadedSoundResource::new`.
+    fn resolve_relative_path_for_sound(&mut self, path: &str, basedir: &Path) -> Result<Path,~str> {
+        resolve_relative_path_result(self, basedir, path, SOUND_EXTS)
+    }
+
+    /// Resolves the relative path for the use by `LoadedImageResource::new`.
+    fn resolve_relative_path_for_image(&mut self, path: &str, basedir: &Path) -> Result<Path,~str> {
+        use std::ascii::StrAsciiExt;
+        if path.to_ascii_lower().ends_with(".mpg") { // preserve extensions for the movie files
+            resolve_relative_path_result(self, basedir, path, [])
+        } else {
+            resolve_relative_path_result(self, basedir, path, IMAGE_EXTS)
+        }
+    }
+}
+
 /// Sound resource associated to `SoundRef`. It contains the actual SDL_mixer chunk that can be
 /// readily played.
-#[deriving(Clone)]
 pub enum SoundResource {
     /// No sound resource is associated, or error occurred while loading.
     NoSound,
@@ -75,22 +96,39 @@ impl SoundResource {
     }
 }
 
-/// Loads a sound resource.
-pub fn load_sound(search: &mut SearchContext, path: &str,
-                  basedir: &Path) -> Result<SoundResource,~str> {
-    let fullpath = earlyexit!(resolve_relative_path_result(search, basedir, path, SOUND_EXTS));
-    let res = earlyexit!(mixer::Chunk::from_wav(&fullpath));
-    Ok(Sound(@res))
+/// Same as `SoundResource` but no managed pointer. This version of sound resource can be
+/// transferred across tasks and thus used for the worker model.
+//
+// Rust: the very existence of this enum and `LoadedImageResource` is due to the problem in
+//       cross-task owned pointer containing a managed pointer. (#8983)
+pub enum LoadedSoundResource {
+    NoLoadedSound,
+    LoadedSound(~mixer::Chunk)
+}
+
+impl LoadedSoundResource {
+    /// Loads a sound resource.
+    pub fn new(path: &Path) -> Result<LoadedSoundResource,~str> {
+        let res = earlyexit!(mixer::Chunk::from_wav(path));
+        Ok(LoadedSound(res))
+    }
+
+    /// Creates a `SoundResource` instance. There is no turning back.
+    pub fn wrap(self) -> SoundResource {
+        match self {
+            NoLoadedSound => NoSound,
+            LoadedSound(chunk) => Sound(@chunk)
+        }
+    }
 }
 
 /// Image resource associated to `ImageRef`. It can be either a static image or a movie, and
 /// both contains an SDL surface that can be blitted to the screen.
-#[deriving(Clone)]
 pub enum ImageResource {
     /// No image resource is associated, or error occurred while loading.
     NoImage,
     /// A static image is associated. The surface may have a transparency which is already
-    /// handled by `load_image`.
+    /// handled by `LoadedImageResource::new`.
     Image(@PreparedSurface), // XXX borrowck
     /// A movie is associated. A playback starts when `start_movie` method is called, and stops
     /// when `stop_movie` is called. An associated surface is updated from the separate thread
@@ -125,46 +163,62 @@ impl ImageResource {
     }
 }
 
-/// Loads an image resource.
-pub fn load_image(search: &mut SearchContext, path: &str, basedir: &Path,
-                  load_movie: bool) -> Result<ImageResource,~str> {
-    use std::ascii::StrAsciiExt;
+/// Same as `ImageResource` but no managed pointer. This version of image resource can be
+/// transferred across tasks and thus used for the worker model.
+pub enum LoadedImageResource {
+    NoLoadedImage,
+    LoadedImage(PreparedSurface),
+    LoadedMovie(PreparedSurface, ~mpeg::MPEG)
+}
 
-    /// Converts a surface to the native display format, while preserving a transparency or
-    /// setting a color key if required.
-    fn to_display_format(surface: ~Surface) -> Result<PreparedSurface,~str> {
-        let surface = if unsafe {(*(*surface.raw).format).Amask} != 0 {
-            let surface = earlyexit!(surface.display_format_alpha());
-            surface.set_alpha([video::SrcAlpha, video::RLEAccel], 255);
-            surface
+impl LoadedImageResource {
+    /// Loads an image resource.
+    pub fn new(path: &Path, load_movie: bool) -> Result<LoadedImageResource,~str> {
+        use std::ascii::StrAsciiExt;
+
+        /// Converts a surface to the native display format, while preserving a transparency or
+        /// setting a color key if required.
+        fn to_display_format(surface: ~Surface) -> Result<PreparedSurface,~str> {
+            let surface = if unsafe {(*(*surface.raw).format).Amask} != 0 {
+                let surface = earlyexit!(surface.display_format_alpha());
+                surface.set_alpha([video::SrcAlpha, video::RLEAccel], 255);
+                surface
+            } else {
+                let surface = earlyexit!(surface.display_format());
+                surface.set_color_key([video::SrcColorKey, video::RLEAccel], RGB(0,0,0));
+                surface
+            };
+            match PreparedSurface::from_owned_surface(surface) {
+                Ok(prepared) => Ok(prepared),
+                Err((_surface,err)) => Err(err)
+            }
+        }
+
+        if path.filetype().unwrap_or_default().eq_ignore_ascii_case(".mpg") {
+            if load_movie {
+                let movie = earlyexit!(mpeg::MPEG::from_path(path));
+                let surface = earlyexit!(PreparedSurface::new(BGAW, BGAH, false));
+                movie.enable_video(true);
+                movie.set_loop(true);
+                movie.set_display(*surface);
+                Ok(LoadedMovie(surface, movie))
+            } else {
+                Ok(NoLoadedImage)
+            }
         } else {
-            let surface = earlyexit!(surface.display_format());
-            surface.set_color_key([video::SrcColorKey, video::RLEAccel], RGB(0,0,0));
-            surface
-        };
-        match PreparedSurface::from_owned_surface(surface) {
-            Ok(prepared) => Ok(prepared),
-            Err((_surface,err)) => Err(err)
+            let surface = earlyexit!(img::load(path));
+            let prepared = earlyexit!(to_display_format(surface));
+            Ok(LoadedImage(prepared))
         }
     }
 
-    if path.to_ascii_lower().ends_with(".mpg") {
-        if load_movie {
-            let fullpath = earlyexit!(resolve_relative_path_result(search, basedir, path, []));
-            let movie = earlyexit!(mpeg::MPEG::from_path(&fullpath));
-            let surface = earlyexit!(PreparedSurface::new(BGAW, BGAH, false));
-            movie.enable_video(true);
-            movie.set_loop(true);
-            movie.set_display(*surface);
-            Ok(Movie(@surface, @movie))
-        } else {
-            Ok(NoImage)
+    /// Creates an `ImageResource` instance. Again, there is no turning back.
+    pub fn wrap(self) -> ImageResource {
+        match self {
+            NoLoadedImage => NoImage,
+            LoadedImage(surface) => Image(@surface),
+            LoadedMovie(surface, mpeg) => Movie(@surface, @mpeg)
         }
-    } else {
-        let fullpath = earlyexit!(resolve_relative_path_result(search, basedir, path, IMAGE_EXTS));
-        let surface = earlyexit!(img::load(&fullpath));
-        let prepared = earlyexit!(to_display_format(surface));
-        Ok(Image(@prepared))
     }
 }
 
