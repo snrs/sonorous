@@ -4,12 +4,12 @@
 
 //! Utilities for searching files.
 
-use std::os;
+use std::{at_vec, os};
 
 /// Context for searching files.
 pub struct SearchContext {
     /// Last return value of `get_entries` if any.
-    last_get_entries: Option<(Path, (~[~str], ~[~str]))>,
+    last_get_entries: Option<(Path, (@[~str], @[~str]))>,
 }
 
 impl SearchContext {
@@ -21,14 +21,15 @@ impl SearchContext {
     /// Returns a list of immediate subdirectories (i.e. without `.` and `..`) and files
     /// in given directory. Returns a pair of empty lists if `dir` is not a directory.
     /// The results may be cached by the context.
-    pub fn get_entries(&mut self, dir: &Path) -> (~[~str], ~[~str]) {
+    pub fn get_entries(&mut self, dir: &Path) -> (@[~str], @[~str]) {
         match self.last_get_entries {
-            Some((ref prevdir, ref prevret)) if prevdir == dir => prevret.clone(),
+            Some((ref prevdir, prevret)) if prevdir == dir => prevret,
             _ => {
                 let mut entries = os::list_dir(dir);
                 entries.retain(|e| !(".".equiv(e) || "..".equiv(e)));
-                let ret = entries.partition(|e| os::path_is_dir(&dir.push(*e)));
-                self.last_get_entries = Some((dir.clone(), ret.clone()));
+                let (dirs, files) = entries.partition(|e| os::path_is_dir(&dir.push(*e)));
+                let ret = (at_vec::to_managed_move(dirs), at_vec::to_managed_move(files));
+                self.last_get_entries = Some((dir.clone(), ret));
                 ret
             }
         }
