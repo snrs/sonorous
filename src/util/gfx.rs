@@ -1,14 +1,15 @@
 // This is a part of Sonorous.
 // Copyright (c) 2005, 2007, 2009, 2012, 2013, Kang Seonghoon.
-// See README.md and LICENSE.txt for details.
+// See README.md for details.
+//
+// Licensed under the Apache License, Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0> or
+// the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 //! Graphic utilities.
 
 use sdl::Rect;
 pub use sdl::video::*;
-
-//----------------------------------------------------------------------------------------------
-// `Rect` additions
 
 /// A trait that can be translated to point coordinates (`x` and `y` fields in `sdl::Rect`,
 /// hence the name). Also contains `()`.
@@ -209,9 +210,6 @@ impl SurfaceAreaUtil for Surface {
     }
 }
 
-//----------------------------------------------------------------------------------------------
-// color
-
 /// Extracts red, green, blue components from given color.
 pub fn to_rgb(c: Color) -> (u8, u8, u8) {
     match c { RGB(r, g, b) | RGBA(r, g, b, _) => (r, g, b) }
@@ -266,9 +264,6 @@ impl Blend for Gradient {
         RGB(mix(r1, r0, num, denom), mix(g1, g0, num, denom), mix(b1, b0, num, denom))
     }
 }
-
-//----------------------------------------------------------------------------------------------
-// surface utilities
 
 /// Creates a new RAM-backed surface. By design, Sonorous does not use a VRAM-backed surface
 /// except for the screen.
@@ -331,6 +326,4 @@ impl<'self> SurfacePixels<'self> {
         }
     }
 }
-
-//----------------------------------------------------------------------------------------------
 

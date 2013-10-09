@@ -1,15 +1,14 @@
 // This is a part of Sonorous.
 // Copyright (c) 2005, 2007, 2009, 2012, 2013, Kang Seonghoon.
-// See README.md and LICENSE.txt for details.
+// See README.md for details.
+//
+// Licensed under the Apache License, Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0> or
+// the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-//! Additions to the standard library. These are not subject to the above copyright notice.
+//! Additions to the standard library.
 
-/**
- * String utilities for Rust. Parallels to `std::str`.
- *
- * NOTE: Some of these additions will be eventually sent to `libstd/str.rs` and are not subject
- * to the above copyright notice.
- */
+/// String utilities for Rust. Parallels to `std::str`.
 pub mod str {
     use std::str::*;
 
@@ -177,12 +176,7 @@ pub mod str {
 
 }
 
-/**
- * Option utilities for Rust. Parallels to `std::option`.
- *
- * NOTE: Some of these additions will be eventually sent to `libstd/option.rs` and are not
- * subject to the above copyright notice.
- */
+/// Option utilities for Rust. Parallels to `std::option`.
 pub mod option {
 
     /// Filters the value inside the option using the function. Returns `None` if the original
@@ -230,12 +224,7 @@ pub mod option {
     }
 }
 
-/**
- * I/O utilities for Rust. Parallels to `std::io`.
- *
- * NOTE: Some of these additions will be eventually sent to `libstd/io.rs` and are not subject
- * to the above copyright notice.
- */
+/// I/O utilities for Rust. Parallels to `std::io`.
 pub mod io {
 
     /// Extensions to `ReaderUtil`.

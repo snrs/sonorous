@@ -1,13 +1,14 @@
 // This is a part of Sonorous.
 // Copyright (c) 2005, 2007, 2009, 2012, 2013, Kang Seonghoon.
-// See README.md and LICENSE.txt for details.
+// See README.md for details.
+//
+// Licensed under the Apache License, Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0> or
+// the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 /*!
  * Extensions to rust-sdl. This comprises of additional bindings for SDL_mixer and a minimal
  * but functional binding for SMPEG.
- *
- * NOTE: Some of these additions will be eventually sent to rust-sdl and are not subject to
- * the above copyright notice.
  */
 
 #[cfg(target_os = "win32")]
