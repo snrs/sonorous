@@ -4,20 +4,30 @@
 
 //! Scene management.
 
+use std::rt::io::timer::sleep;
 use sdl::get_ticks;
 use ui::common::Ticker;
 
 /// Options used by the scene to customize the scene loop.
 #[deriving(Clone)]
 pub struct SceneOptions {
+    /// If specified, limits the number of `Scene::tick` calls per second to this value.
+    /// `run_scene` ensures this limitation by sleeping after each tick as needed.
+    tpslimit: Option<uint>,
     /// If specified, limits the number of `Scene::render` calls per second to this value.
+    /// Due to the implementation strategy `tpslimit` takes precedence over this if specified.
     fpslimit: Option<uint>,
 }
 
 impl SceneOptions {
     /// Creates default options for the scene.
     pub fn new() -> SceneOptions {
-        SceneOptions { fpslimit: None }
+        SceneOptions { tpslimit: None, fpslimit: None }
+    }
+
+    /// Replaces `tpslimit` field with given value.
+    pub fn tpslimit(self, tps: uint) -> SceneOptions {
+        SceneOptions { tpslimit: Some(tps), ..self }
     }
 
     /// Replaces `fpslimit` field with given value.
@@ -80,14 +90,18 @@ pub fn run_scene(scene: ~Scene:) {
         match result {
             Continue => {
                 let opts = current.scene_options();
+                let mintickdelay = opts.tpslimit.map_default(0, |&tps| 1000 / tps);
                 let interval = opts.fpslimit.map_default(0, |&fps| 1000 / fps);
                 let mut ticker = Ticker::with_interval(interval);
                 loop {
+                    let ticklimit = get_ticks() + mintickdelay;
                     result = current.tick();
                     match result {
                         Continue => { do ticker.on_tick(get_ticks()) { current.render(); } }
                         _ => { break; }
                     }
+                    let now = get_ticks();
+                    if now < ticklimit { sleep((ticklimit - now) as u64); }
                 }
                 current.deactivate();
             }

@@ -159,7 +159,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         let loaderopts = bms::load::BmsLoaderOptions::new();
         let PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec } =
             match preprocess_bms(bmspath, opts, &mut r, &loaderopts, &mut callback) {
-                Ok(preproc) => preproc,
+                Ok(preproc) => *preproc,
                 Err(err) => die!("Couldn't load BMS file: {}", err)
             };
 
