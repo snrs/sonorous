@@ -150,7 +150,7 @@ pub struct ViewingScene {
     /// the on-screen display).
     parent: ~TextualViewingScene,
     /// Display screen.
-    screen: Screen,
+    screen: @Screen,
     /// Image resources.
     imgres: ~[ImageResource],
     /// Currently known state of BGAs.
@@ -160,7 +160,7 @@ pub struct ViewingScene {
 impl ViewingScene {
     /// Creates a new BGA-only scene context from the pre-created screen (usually by `init_video`)
     /// and pre-loaded image resources.
-    pub fn new(screen: Screen, imgres: ~[ImageResource], player: Player) -> ~ViewingScene {
+    pub fn new(screen: @Screen, imgres: ~[ImageResource], player: Player) -> ~ViewingScene {
         let bgastate = BGARenderState::new(imgres);
         ~ViewingScene { parent: TextualViewingScene::new(player),
                         screen: screen, imgres: imgres, lastbga: bgastate }
@@ -182,7 +182,7 @@ impl Scene for ViewingScene {
         self.screen.clear();
 
         let layers = &[Layer1, Layer2, Layer3];
-        self.lastbga.render(&self.screen, layers, 0.0, 0.0, BGAW as f32, BGAH as f32);
+        self.lastbga.render(&*self.screen, layers, 0.0, 0.0, BGAW as f32, BGAH as f32);
         self.screen.swap_buffers();
 
         self.parent.render();

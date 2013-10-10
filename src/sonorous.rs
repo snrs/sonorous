@@ -131,7 +131,7 @@ pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
 
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop.
-pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
+pub fn play(bmspath: &Path, opts: @ui::options::Options) {
     use std::{rand, os};
     use format::bms;
     use ui::init::{init_audio, init_video, init_joystick};
@@ -262,7 +262,7 @@ pub fn main() {
     match parse_opts(args, ui::common::get_path_from_dialog) {
         ShowVersion => { println(version()); }
         ShowUsage => { usage(); }
-        PathAndOptions(bmspath, opts) => { play(&bmspath, opts); }
+        PathAndOptions(bmspath, opts) => { play(&bmspath, @*opts); }
         Error(err) => { die!("{}", err); }
     }
 }

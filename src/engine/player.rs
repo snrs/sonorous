@@ -126,7 +126,7 @@ static BAD_DAMAGE: Damage = GaugeDamage(0.030);
 /// Game play states independent to the display.
 pub struct Player {
     /// The game play options.
-    opts: ~Options,
+    opts: @Options,
     /// The current BMS metadata.
     meta: BmsMeta,
     /// The current timeline. This is a managed pointer so that `Pointer` can be created for it.
@@ -257,7 +257,7 @@ fn create_beep() -> ~mixer::Chunk {
 impl Player {
     /// Creates a new player object. The player object owns other related structures, including
     /// the options, BMS file, key specification, input mapping and sound resources.
-    pub fn new(opts: ~Options, bms: Bms, infos: TimelineInfo, duration: f64, keyspec: ~KeySpec,
+    pub fn new(opts: @Options, bms: Bms, infos: TimelineInfo, duration: f64, keyspec: ~KeySpec,
                keymap: ~KeyMap, sndres: ~[SoundResource]) -> Player {
         // we no longer need the full `Bms` structure.
         let Bms { bmspath: _, meta: meta, timeline: timeline } = bms;

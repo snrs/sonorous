@@ -35,7 +35,7 @@ pub struct PreprocessedBms {
 
 /// Loads and preprocesses the BMS file from given options. Frontend routines should use this.
 pub fn preprocess_bms<R:Rng,Listener:bms::diag::BmsMessageListener>(
-                                bmspath: &Path, opts: &Options, r: &mut R,
+                                bmspath: &Path, opts: @Options, r: &mut R,
                                 loaderopts: &bms::load::BmsLoaderOptions,
                                 callback: &mut Listener) -> Result<~PreprocessedBms,~str> {
     let mut bms = earlyexit!(bms::load::load_bms(bmspath, r, loaderopts, callback));
@@ -63,8 +63,8 @@ enum PreloadingState {
 }
 
 pub struct SelectingScene {
-    screen: Screen,
-    opts: ~Options,
+    screen: @Screen,
+    opts: @Options,
     root: Path,
     files: ~[Path],
     filesdone: bool,
@@ -100,7 +100,7 @@ static NUMENTRIES: uint = 15;
 static PRELOAD_DELAY: uint = 300;
 
 impl SelectingScene {
-    pub fn new(screen: Screen, root: &Path, opts: ~Options) -> ~SelectingScene {
+    pub fn new(screen: @Screen, root: &Path, opts: @Options) -> ~SelectingScene {
         let root = os::make_absolute(root);
         let (port, chan) = comm::stream();
         let chan = comm::SharedChan::new(chan);
@@ -155,16 +155,16 @@ impl SelectingScene {
 
     pub fn spawn_preloading_task(&self, path: &Path) -> comm::Port<task::TaskResult> {
         let path = path.clone();
-        let opts = self.opts.clone();
+        let opts = (*self.opts).clone();
         let chan = self.chan.clone();
         let mut future = None;
         let mut builder = worker_task(~"preloader");
         do builder.future_result |f| { future = Some(f); }
-        do builder.spawn {
+        do builder.spawn_with(opts) |opts| {
             let mut r = rng();
             let loaderopts = bms::load::BmsLoaderOptions::new();
             let mut callback = bms::diag::IgnoringMessageListener;
-            let result = preprocess_bms(&path, opts, &mut r, &loaderopts, &mut callback);
+            let result = preprocess_bms(&path, @opts, &mut r, &loaderopts, &mut callback);
             chan.send(BmsLoaded(path.clone(), result));
         }
         future.unwrap()

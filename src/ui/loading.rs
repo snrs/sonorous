@@ -39,7 +39,7 @@ pub enum LoadingJob {
 /// Scene-independent loading context.
 pub struct LoadingContext {
     /// Game play options.
-    opts: ~Options,
+    opts: @Options,
     /// Yet-to-be-loaded BMS data.
     bms: Bms,
     /// The derived timeline information.
@@ -94,7 +94,7 @@ fn displayed_info(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec) -> (~str, 
 impl LoadingContext {
     /// Creates a loading context.
     pub fn new(bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec, keymap: ~KeyMap,
-               opts: ~Options) -> LoadingContext {
+               opts: @Options) -> LoadingContext {
         let basedir = bms.meta.basepath.clone().unwrap_or(Path("."));
         let sndres = vec::from_fn(bms.meta.sndpath.len(), |_| NoSound);
         let imgres = vec::from_fn(bms.meta.imgpath.len(), |_| NoImage);
@@ -216,7 +216,7 @@ pub struct LoadingScene {
     /// Loading context.
     context: LoadingContext,
     /// Display screen.
-    screen: Screen,
+    screen: @Screen,
     /// The minimum number of ticks (as per `sdl::get_ticks()`) until the scene proceeds.
     /// It is currently 3 seconds after the beginning of the scene.
     waituntil: uint,
@@ -224,8 +224,8 @@ pub struct LoadingScene {
 
 impl LoadingScene {
     /// Creates a scene context required for rendering the graphical loading screen.
-    pub fn new(screen: Screen, bms: Bms, infos: TimelineInfo,
-               keyspec: ~KeySpec, keymap: ~KeyMap, opts: ~Options) -> ~LoadingScene {
+    pub fn new(screen: @Screen, bms: Bms, infos: TimelineInfo,
+               keyspec: ~KeySpec, keymap: ~KeyMap, opts: @Options) -> ~LoadingScene {
         ~LoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
                         screen: screen, waituntil: 0 }
     }
@@ -315,13 +315,13 @@ pub struct TextualLoadingScene {
     /// Loading context.
     context: LoadingContext,
     /// Display screen. This is not used by this scene but sent to the viewing scene.
-    screen: Option<Screen>,
+    screen: Option<@Screen>,
 }
 
 impl TextualLoadingScene {
     /// Creates a scene context required for rendering the textual loading screen.
-    pub fn new(screen: Option<Screen>, bms: Bms, infos: TimelineInfo,
-               keyspec: ~KeySpec, keymap: ~KeyMap, opts: ~Options) -> ~TextualLoadingScene {
+    pub fn new(screen: Option<@Screen>, bms: Bms, infos: TimelineInfo,
+               keyspec: ~KeySpec, keymap: ~KeyMap, opts: @Options) -> ~TextualLoadingScene {
         ~TextualLoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
                                screen: screen }
     }
