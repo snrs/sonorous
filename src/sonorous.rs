@@ -208,12 +208,13 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
 pub fn usage() {
     // Rust: this is actually a good use case of `include_str!`...
     std::io::stderr().write_str(format!("\
-{}
+{version}
 https://github.com/snrs/sonorous/
 
-Usage: {} <options> <path>
-  Accepts any BMS, BME, BML or PMS file.
-  Resources should be in the same directory as the BMS file.
+Usage: {prog} <options> <path>
+  Accepts any BMS, BME, BML or PMS file or the directory path.
+  The directory path enables the song/pattern selection mode,
+  where game play options are used as the initial settings.
 
 Options:
   -h, --help              This help
@@ -256,7 +257,7 @@ Available debugging options:
   -Z dump-bmscommand-full Same as above but also dumps skipped flow commands
   -Z dump-timeline        Dumps precalculated timeline and exit
 
-", version(), exename()));
+", version = version(), prog = exename()));
     ui::common::exit(1);
 }
 

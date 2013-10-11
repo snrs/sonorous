@@ -51,33 +51,56 @@ pub fn preprocess_bms<R:Rng,Listener:bms::diag::BmsMessageListener>(
     Ok(~PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec })
 }
 
+/// Internal message from the worker task to the main task.
 enum Message {
+    /// The worker has scanned more files.
     PushFiles(~[Path]),
+    /// The worker has finished scanning files.
     NoMoreFiles,
+    /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
+    /// the main task should ignore the message with non-current paths.
     BmsLoaded(Path,Result<~PreprocessedBms,~str>),
 }
 
+/// The state of preloaded game data.
 enum PreloadingState {
-    NeverPreloaded,
+    /// The selected entry cannot be used for preloading or the entry does not exist.
+    NothingToPreload,
+    /// The selected entry should be preloaded after given timestamp (as per `sdl::get_ticks()`).
     PreloadAfter(uint),
+    /// Preloading is in progress, the result of the worker task will be delivered with this port.
     Preloading(comm::Port<task::TaskResult>),
+    /// Preloading finished.
     Preloaded(Result<~PreprocessedBms,~str>),
 }
 
+/// Song/pattern selection scene context. Used when the directory path is specified.
 pub struct SelectingScene {
+    /// Display screen.
     screen: @Screen,
+    /// Game play options.
     opts: @Options,
+    /// The root path of the scanner.
     root: Path,
+    /// A list of paths to loaded files.
     files: ~[Path],
+    /// Set to true when the scanner finished scanning.
     filesdone: bool,
+    /// The index of the topmost entry visible on the screen.
     scrolloffset: uint,
+    /// The index of the selected entry.
     offset: uint,
+    /// Preloaded game data or preloading state if any.
     preloaded: PreloadingState,
+    /// A port for receiving worker messages.
     port: comm::Port<Message>,
+    /// A shared channel to which workers send messages.
     chan: comm::SharedChan<Message>,
+    /// A shared cell, set to false when the scene is deactivated.
     keepgoing: RWArc<bool>,
 }
 
+/// Returns true if the path should be parsed as a BMS file.
 fn is_bms_file(path: &Path) -> bool {
     use std::ascii::StrAsciiExt;
     match path.filetype() {
@@ -89,30 +112,36 @@ fn is_bms_file(path: &Path) -> bool {
     }
 }
 
+/// Returns a task builder for worker tasks. It seems that the SDL event loop does not go well with
+/// libuv loop, so we need to run workers in separate threads for now.
 fn worker_task(name: ~str) -> task::TaskBuilder {
     let mut builder = task::task();
     builder.name(name);
-    // XXX why does SDL ignores events when using the default scheduler?!
-    builder.sched_mode(task::SingleThreaded);
+    builder.sched_mode(task::SingleThreaded); // XXX
     builder.supervised();
     builder
 }
 
+/// The maximum number of entries displayed in one screen.
 static NUMENTRIES: uint = 15;
+/// The number of milliseconds after `update_offset` before the actual preloading starts,
+/// in order to avoid the worker congestion.
 static PRELOAD_DELAY: uint = 300;
 
 impl SelectingScene {
+    /// Creates a new selection scene from the screen, the root path and initial options.
     pub fn new(screen: @Screen, root: &Path, opts: @Options) -> ~SelectingScene {
         let root = os::make_absolute(root);
         let (port, chan) = comm::stream();
         let chan = comm::SharedChan::new(chan);
         ~SelectingScene {
             screen: screen, opts: opts, root: root,
-            files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NeverPreloaded,
+            files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
             port: port, chan: chan, keepgoing: RWArc::new(true),
         }
     }
 
+    /// Spawns a new scanning task.
     pub fn spawn_scanning_task(&self) {
         let root = self.root.clone();
         let chan = self.chan.clone();
@@ -138,6 +167,7 @@ impl SelectingScene {
         }
     }
 
+    /// Clears the current scanned files and restarts the scanning task.
     pub fn refresh(&mut self) {
         // terminates prior tasks
         assert!(self.keepgoing.read(|&v| v));
@@ -151,10 +181,11 @@ impl SelectingScene {
         self.filesdone = false;
         self.scrolloffset = 0;
         self.offset = 0;
-        self.preloaded = NeverPreloaded;
+        self.preloaded = NothingToPreload;
         self.spawn_scanning_task();
     }
 
+    /// Spawns a new preloading task and returns the port for its result.
     pub fn spawn_preloading_task(&self, path: &Path) -> comm::Port<task::TaskResult> {
         let path = path.clone();
         let opts = (*self.opts).clone();
@@ -172,12 +203,13 @@ impl SelectingScene {
         future.unwrap()
     }
 
+    /// Updates the selected entry. `offset` may be out of the range.
     pub fn update_offset(&mut self, offset: uint) {
         self.offset = offset;
         if offset < self.files.len() {
             self.preloaded = PreloadAfter(get_ticks() + PRELOAD_DELAY);
         } else {
-            self.preloaded = NeverPreloaded;
+            self.preloaded = NothingToPreload;
         }
 
         if self.scrolloffset > offset {
@@ -341,7 +373,7 @@ impl Scene for SelectingScene {
             d.rect(0.0, META_TOP + 1.0, SCREENW as f32, META_TOP + 2.0, RGB(0xff,0xff,0xff));
 
             match self.preloaded {
-                NeverPreloaded | PreloadAfter(*) => {}
+                NothingToPreload | PreloadAfter(*) => {}
                 Preloading(*) => {
                     d.string(2.0, META_TOP + 4.0, 1.0, LeftAligned,
                              "loading...", RGB(0xc0,0xc0,0xc0));
