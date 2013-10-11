@@ -286,7 +286,7 @@ impl PlayingScene {
 }
 
 /// The list of grade names and corresponding color scheme.
-static GRADES: &'static [(&'static str,Gradient)] = &[
+pub static GRADES: &'static [(&'static str,Gradient)] = &[
     // Rust: can we just use `Gradient()`???
     ("MISS",  Gradient { zero: RGB(0xff,0xc0,0xc0), one: RGB(0xff,0x40,0x40) }),
     ("BAD",   Gradient { zero: RGB(0xff,0xc0,0xff), one: RGB(0xff,0x40,0xff) }),
@@ -512,7 +512,7 @@ impl Scene for PlayingScene {
     fn deactivate(&mut self) {}
 
     fn consume(~self) -> ~Scene: {
-        PlayResultScene::new(self.player) as ~Scene:
+        PlayResultScene::new(self.screen, self.player) as ~Scene:
     }
 }
 
