@@ -141,7 +141,13 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
 
     let scene;
     if os::path_is_dir(bmspath) {
-        let screen = init_video(opts.is_exclusive(), opts.fullscreen);
+        if opts.is_exclusive() {
+            die!("Exclusive mode is not usable with the directory path.");
+        }
+
+        init_audio();
+        for &joyidx in opts.joystick.iter() { init_joystick(joyidx); }
+        let screen = init_video(false, opts.fullscreen);
         scene = SelectingScene::new(screen, bmspath, opts) as ~Scene:
     } else {
         let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {

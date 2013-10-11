@@ -4,7 +4,7 @@
 
 //! Song and pattern selection screen.
 
-use std::{cmp, os, comm, task};
+use std::{cmp, os, comm, task, util};
 use std::rand::{rng, Rng};
 use extra::arc::RWArc;
 
@@ -16,12 +16,14 @@ use util::gfx::*;
 use util::gl::ShadedDrawingTraits;
 use util::bmfont::{LeftAligned, RightAligned};
 use util::filesearch::SearchContext;
+use engine::input::read_keymap;
 use engine::keyspec::{KeySpec, key_spec};
 use engine::player::apply_modf;
 use ui::screen::Screen;
 use ui::init::{SCREENW, SCREENH};
-use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, Exit};
+use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PushScene, PopScene, Exit};
 use ui::options::Options;
+use ui::loading::LoadingScene;
 
 /// The BMS data that has been preprocessed for modifiers and analyzed but yet to be loaded.
 pub struct PreprocessedBms {
@@ -199,7 +201,7 @@ impl Scene for SelectingScene {
     fn tick(&mut self) -> SceneCommand {
         loop {
             match event::poll_event() {
-                event::KeyEvent(event::EscapeKey,_,_,_) => { return PopScene; }
+                event::KeyEvent(event::EscapeKey,true,_,_) => { return PopScene; }
                 event::QuitEvent => { return Exit; }
                 event::NoEvent => { break; },
 
@@ -244,6 +246,25 @@ impl Scene for SelectingScene {
                 // refresh
                 event::KeyEvent(event::F5Key,true,_,_) => {
                     self.refresh();
+                }
+
+                // (auto)play
+                event::KeyEvent(event::ReturnKey,true,_,_) => {
+                    let canplay = match self.preloaded { Preloaded(Ok(*)) => true, _ => false };
+                    if canplay {
+                        let preloaded = util::replace(&mut self.preloaded, PreloadAfter(0));
+                        let PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec } =
+                            match preloaded {
+                                Preloaded(Ok(preproc)) => *preproc,
+                                _ => { fail!("unreachable"); }
+                            };
+                        let keymap = match read_keymap(keyspec, os::getenv) {
+                            Ok(map) => ~map,
+                            Err(err) => die!("{}", err)
+                        };
+                        return PushScene(LoadingScene::new(self.screen, bms, infos, keyspec,
+                                                           keymap, self.opts) as ~Scene:);
+                    }
                 }
 
                 _ => {}
