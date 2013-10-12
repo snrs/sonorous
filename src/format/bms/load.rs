@@ -12,7 +12,7 @@ use format::bms::parse;
 use format::bms::types::{Key, MAXKEY};
 use format::bms::diag::*;
 use format::bms::{ImageRef, SoundRef, DefaultBPM, BmsMeta, Bms};
-use format::bms::{SinglePlay, CouplePlay, DoublePlay, BattlePlay};
+use format::bms::{SinglePlay, CouplePlay, DoublePlay, BattlePlay, Difficulty};
 
 /// Loader options for BMS format.
 pub struct BmsLoaderOptions {
@@ -169,7 +169,7 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
             }
             parse::BmsDifficulty(v) => {
                 if v < 1 || v > 5 { diag!(BmsHasDIFFICULTYOutOfRange at lineno); }
-                difficulty = Some(v);
+                difficulty = Some(Difficulty(v));
             }
             parse::BmsRank(v) => {
                 rank = v;

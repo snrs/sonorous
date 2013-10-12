@@ -102,6 +102,27 @@ pub enum PlayMode {
     BattlePlay = 4,
 }
 
+/// Difficulty level specified by the author. This maps to BMS #DIFFICULTY command. Does not affect
+/// the actual game play but affects the selection screen by grouping related BMSes.
+#[deriving(Eq,Ord,Clone)]
+pub struct Difficulty(int);
+
+impl Difficulty {
+    /// Returns a string for representing the difficulty if any. This is used only for convenience.
+    pub fn name(&self) -> Option<&'static str> {
+        // this set of strings is designed to be unique in the first character and compatible to
+        // existing subtitle detection rules in other implementations.
+        match **self {
+            1 => Some("BEGINNER"),
+            2 => Some("NORMAL"),
+            3 => Some("HARD"),
+            4 => Some("EXTRA"),
+            5 => Some("INSANE"),
+            _ => None,
+        }
+    }
+}
+
 /// Loaded BMS metadata and resources.
 pub struct BmsMeta {
     /// Title. Maps to BMS #TITLE command.
@@ -128,9 +149,8 @@ pub struct BmsMeta {
     /// Game level specified by the author. Does not affect the actual game play. Maps to BMS
     /// #PLAYLEVEL command.
     playlevel: int,
-    /// Difficulty level specified by the author. Does not affect the actual game play but affects
-    /// the selection screen by grouping related BMSes. Maps to BMS #DIFFICULTY command.
-    difficulty: Option<int>,
+    /// Difficulty level specified by the author. Maps to BMS #DIFFICULTY command.
+    difficulty: Option<Difficulty>,
     /// Gauge difficulty. Higher is easier. Maps to BMS #RANK command.
     rank: int,
 
