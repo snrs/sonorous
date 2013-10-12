@@ -15,7 +15,7 @@ use format::bms;
 use format::bms::Bms;
 use util::gfx::*;
 use util::gl::{PreparedSurface, Texture, ShadedDrawingTraits, TexturedDrawingTraits};
-use util::bmfont::{LeftAligned};
+use util::bmfont::{LeftAligned, RightAligned};
 use util::filesearch::SearchContext;
 use util::envelope::Envelope;
 use engine::input::read_keymap;
@@ -81,6 +81,32 @@ struct PreloadedData {
     duration: f64,
     /// A list of diagnostic messages returned during the loading.
     messages: ~[(Option<uint>,bms::diag::BmsMessage)],
+    /// Metadata string.
+    brief: ~str,
+}
+
+impl PreloadedData {
+    /// Creates and calculates some necessary informations from given processed BMS and messages.
+    pub fn new(preproc: ~PreprocessedBms,
+               messages: ~[(Option<uint>,bms::diag::BmsMessage)]) -> PreloadedData {
+        let originoffset = preproc.infos.originoffset;
+        let duration = preproc.bms.timeline.duration(originoffset, |_| 0.0);
+
+        let duration_ = (duration * 10.0) as uint;
+        let difficultyname = preproc.bms.meta.difficulty.and_then(|d| d.name());
+        let brief = format!("{:02}:{:02}.{} | Level {level} | BPM {bpm:.2}{hasbpmchange} | \
+                             {nnotes, plural, =1{# note} other{# notes}} \
+                             [{nkeys}KEY{haslongnote}{difficulty}]",
+                            duration_/600, duration_/10%60, duration_%10,
+                            level = preproc.bms.meta.playlevel, bpm = *preproc.bms.timeline.initbpm,
+                            hasbpmchange = if preproc.infos.hasbpmchange {"?"} else {""},
+                            nnotes = preproc.infos.nnotes, nkeys = preproc.keyspec.nkeys(),
+                            haslongnote = if preproc.infos.haslongnote {"-LN"} else {""},
+                            difficulty = difficultyname.map_default(~"", |name| ~" " + *name));
+
+        PreloadedData { preproc: preproc, banner: None, duration: duration, messages: messages,
+                        brief: brief }
+    }
 }
 
 /// The state of preloaded game data.
@@ -400,13 +426,7 @@ impl Scene for SelectingScene {
                 BmsLoaded(bmspath,preproc,messages) => {
                     if !self.is_current(&bmspath) { loop; }
                     self.preloaded = match preproc {
-                        Ok(preproc) => {
-                            let originoffset = preproc.infos.originoffset;
-                            let duration = preproc.bms.timeline.duration(originoffset, |_| 0.0);
-                            let data = PreloadedData { preproc: preproc, banner: None,
-                                                       duration: duration, messages: messages };
-                            Preloaded(data)
-                        },
+                        Ok(preproc) => Preloaded(PreloadedData::new(preproc, messages)),
                         Err(err) => PreloadFailed(err),
                     };
                 }
@@ -456,21 +476,25 @@ impl Scene for SelectingScene {
 
         static META_TOP: f32 = NUMENTRIES as f32 * 20.0;
 
-        // prints the banner first, so that the overflowing title etc. can overlap
+        static WHITE:     Color = RGB(0xff,0xff,0xff);
+        static LIGHTGRAY: Color = RGB(0xc0,0xc0,0xc0);
+        static GRAY:      Color = RGB(0x80,0x80,0x80);
+        static BLACK:     Color = RGB(0,0,0);
+
+        // prints the banner first, so that the overflowing title etc. can overlap (for now)
         match self.preloaded {
             Preloaded(ref data) => {
-                let x1 = SCREENW as f32 - 302.0; let y1 = META_TOP + 4.0;
-                let x2 = SCREENW as f32 - 2.0;   let y2 = META_TOP + 84.0;
+                let x1 = SCREENW as f32 - 302.0; let y1 = META_TOP + 24.0;
+                let x2 = SCREENW as f32 - 2.0;   let y2 = META_TOP + 104.0;
                 if data.banner.is_some() {
                     do self.screen.draw_textured(data.banner.get_ref()) |d| {
                         d.rect(x1, y1, x2, y2);
                     }
                 } else {
                     do self.screen.draw_shaded_prim(gl::LINES) |d| {
-                        let c = RGB(0xff,0xff,0xff);
-                        d.line(x1, y1, x1, y2, c); d.line(x1, y1, x2, y1, c);
-                        d.line(x1, y1, x2, y2, c); d.line(x1, y2, x2, y1, c);
-                        d.line(x1, y2, x2, y2, c); d.line(x2, y1, x2, y2, c);
+                        d.line(x1, y1, x1, y2, WHITE); d.line(x1, y1, x2, y1, WHITE);
+                        d.line(x1, y1, x2, y2, WHITE); d.line(x1, y2, x2, y1, WHITE);
+                        d.line(x1, y2, x2, y2, WHITE); d.line(x2, y1, x2, y2, WHITE);
                     }
                 }
             }
@@ -487,54 +511,54 @@ impl Scene for SelectingScene {
             for (i, path) in windowedfiles.iter().enumerate() {
                 let path = root.get_relative_to(&path.push("_"));
                 if self.scrolloffset + i == self.offset { // inverted
-                    d.rect(10.0, y, SCREENW as f32, y + 20.0, RGB(0xff,0xff,0xff));
-                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.to_str(), RGB(0,0,0));
+                    d.rect(10.0, y, SCREENW as f32, y + 20.0, WHITE);
+                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.to_str(), BLACK);
                 } else {
-                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.to_str(), RGB(0xff,0xff,0xff));
+                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.to_str(), WHITE);
                 }
                 y += 20.0;
             }
             let pixelsperslot = (META_TOP - 4.0) / cmp::max(NUMENTRIES, self.files.len()) as f32;
             d.rect(2.0, 2.0 + top as f32 * pixelsperslot,
-                   7.0, 2.0 + (top + NUMENTRIES) as f32 * pixelsperslot, RGB(0xc0,0xc0,0xc0));
-            d.rect(0.0, META_TOP + 1.0, SCREENW as f32, META_TOP + 2.0, RGB(0xff,0xff,0xff));
+                   7.0, 2.0 + (top + NUMENTRIES) as f32 * pixelsperslot, LIGHTGRAY);
+            d.rect(0.0, META_TOP + 1.0, SCREENW as f32, META_TOP + 2.0, WHITE);
 
+            // preloaded data if any
             match self.preloaded {
                 NothingToPreload | PreloadAfter(*) => {}
                 Preloading(*) => {
-                    d.string(2.0, META_TOP + 4.0, 1.0, LeftAligned,
-                             "loading...", RGB(0xc0,0xc0,0xc0));
+                    d.string(4.0, META_TOP + 4.0, 1.0, LeftAligned,
+                             "loading...", LIGHTGRAY);
                 }
                 Preloaded(ref data) => {
                     let meta = &data.preproc.bms.meta;
-                    let mut top = META_TOP + 6.0;
+
+                    let mut top = META_TOP + 4.0;
                     let genre = meta.genre.map_default("", |s| s.as_slice());
-                    if !genre.is_empty() {
-                        d.string(4.0, top, 1.0, LeftAligned, genre, RGB(0xc0,0xc0,0xc0));
-                        top += 18.0;
-                    }
+                    d.string(4.0, top, 1.0, LeftAligned, genre, LIGHTGRAY);
+                    top += 18.0;
                     let title = meta.title.map_default("", |s| s.as_slice());
                     if !title.is_empty() {
-                        d.string(6.0, top + 2.0, 2.0, LeftAligned, title, RGB(0x80,0x80,0x80));
-                        d.string(4.0, top, 2.0, LeftAligned, title, RGB(0xff,0xff,0xff));
+                        d.string(6.0, top + 2.0, 2.0, LeftAligned, title, GRAY);
+                        d.string(4.0, top, 2.0, LeftAligned, title, WHITE);
                     } else {
-                        d.string(4.0, top, 2.0, LeftAligned, "(no title)", RGB(0x80,0x80,0x80));
+                        d.string(4.0, top, 2.0, LeftAligned, "(no title)", GRAY);
                     }
                     top += 36.0;
                     for subtitle in meta.subtitles.iter() {
                         if subtitle.is_empty() { loop; }
-                        d.string(21.0, top + 1.0, 1.0, LeftAligned, *subtitle, RGB(0x80,0x80,0x80));
-                        d.string(20.0, top, 1.0, LeftAligned, *subtitle, RGB(0xff,0xff,0xff));
+                        d.string(21.0, top + 1.0, 1.0, LeftAligned, *subtitle, GRAY);
+                        d.string(20.0, top, 1.0, LeftAligned, *subtitle, WHITE);
                         top += 18.0;
                     }
                     let artist = meta.artist.map_default("", |s| s.as_slice());
                     if !artist.is_empty() {
-                        d.string(4.0, top, 1.0, LeftAligned, artist, RGB(0xff,0xff,0xff));
+                        d.string(4.0, top, 1.0, LeftAligned, artist, WHITE);
                         top += 18.0;
                     }
                     for subartist in meta.subartists.iter() {
                         if subartist.is_empty() { loop; }
-                        d.string(20.0, top, 1.0, LeftAligned, *subartist, RGB(0xff,0xff,0xff));
+                        d.string(20.0, top, 1.0, LeftAligned, *subartist, WHITE);
                         top += 18.0;
                     }
                     for comment in meta.comments.iter() {
@@ -558,15 +582,18 @@ impl Scene for SelectingScene {
                         d.string(4.0, top, 1.0, LeftAligned, text, color);
                         top += 18.0;
                     }
+
+                    d.string(SCREENW as f32 - 2.0, META_TOP + 4.0, 1.0, RightAligned,
+                             data.brief, GRAY);
                 }
                 PreloadFailed(ref err) => {
-                    d.string(2.0, META_TOP + 4.0, 1.0, LeftAligned,
-                             format!("error: {}", *err), RGB(0xc0,0xc0,0xc0));
+                    d.string(4.0, META_TOP + 4.0, 1.0, LeftAligned,
+                             format!("error: {}", *err), LIGHTGRAY);
                 }
             }
 
             // status bar will overwrite any overflowing messages
-            d.rect(0.0, SCREENH as f32 - 20.0, SCREENW as f32, SCREENH as f32, RGB(0xff,0xff,0xff));
+            d.rect(0.0, SCREENH as f32 - 20.0, SCREENW as f32, SCREENH as f32, WHITE);
             d.string(2.0, SCREENH as f32 - 18.0, 1.0, LeftAligned,
                      format!("Up/Down/PgUp/PgDn/Home/End: Select   \
                               Enter: {}   F5: Refresh   Esc: Quit",
