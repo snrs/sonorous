@@ -392,6 +392,9 @@ impl<'self> ShadedDrawingTraits for ShadedFontDrawing<'self> {
     fn point(&mut self, x: f32, y: f32, c: Color) {
         self.drawing.point(x, y, c)
     }
+    fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: Color) {
+        self.drawing.line(x1, y1, x2, y2, c)
+    }
     fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, c: Color) {
         self.drawing.triangle(x1, y1, x2, y2, x3, y3, c)
     }

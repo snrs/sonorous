@@ -609,7 +609,10 @@ pub trait ShadedDrawingTraits {
     /// Adds a point to the state.
     fn point(&mut self, x: f32, y: f32, c: video::Color);
 
-    /// Adds a triangle to the state, with an uniform color.
+    /// Adds two endpoints of a line segment to the state, with an uniform color.
+    fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: video::Color);
+
+    /// Adds three corner points of a triangle to the state, with an uniform color.
     fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, c: video::Color);
 
     /// Adds four points of a rectangle to the state, with direct RGBA colors.
@@ -635,6 +638,11 @@ impl ShadedDrawingTraits for ShadedDrawing {
 
     fn point(&mut self, x: f32, y: f32, c: video::Color) {
         self.point_rgba(x, y, to_rgba(c));
+    }
+
+    fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: video::Color) {
+        let (r, g, b, a) = to_rgba(c);
+        self.vertices.push_all([(x1, y1, r, g, b, a), (x2, y2, r, g, b, a)]);
     }
 
     fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, c: video::Color) {

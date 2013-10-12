@@ -9,12 +9,13 @@ use std::rand::{rng, Rng};
 use extra::arc::RWArc;
 
 use sdl::*;
+use gl = opengles::gl2;
 use format::timeline::TimelineInfo;
 use format::bms;
 use format::bms::Bms;
 use util::gfx::*;
 use util::gl::{PreparedSurface, Texture, ShadedDrawingTraits, TexturedDrawingTraits};
-use util::bmfont::{LeftAligned, RightAligned};
+use util::bmfont::{LeftAligned};
 use util::filesearch::SearchContext;
 use util::envelope::Envelope;
 use engine::input::read_keymap;
@@ -448,6 +449,27 @@ impl Scene for SelectingScene {
 
         static META_TOP: f32 = NUMENTRIES as f32 * 20.0;
 
+        // prints the banner first, so that the overflowing title etc. can overlap
+        match self.preloaded {
+            Preloaded(ref data) => {
+                let x1 = SCREENW as f32 - 302.0; let y1 = META_TOP + 4.0;
+                let x2 = SCREENW as f32 - 2.0;   let y2 = META_TOP + 84.0;
+                if data.banner.is_some() {
+                    do self.screen.draw_textured(data.banner.get_ref()) |d| {
+                        d.rect(x1, y1, x2, y2);
+                    }
+                } else {
+                    do self.screen.draw_shaded_prim(gl::LINES) |d| {
+                        let c = RGB(0xff,0xff,0xff);
+                        d.line(x1, y1, x1, y2, c); d.line(x1, y1, x2, y1, c);
+                        d.line(x1, y1, x2, y2, c); d.line(x1, y2, x2, y1, c);
+                        d.line(x1, y2, x2, y2, c); d.line(x2, y1, x2, y2, c);
+                    }
+                }
+            }
+            _ => {}
+        }
+
         let root = self.root.push("_"); // for the calculation of `Path::get_relative_to`
         do self.screen.draw_shaded_with_font |d| {
             let top = cmp::min(self.scrolloffset, self.files.len());
@@ -481,10 +503,23 @@ impl Scene for SelectingScene {
                     let title = meta.title.map_default("", |s| s.as_slice());
                     let genre = meta.genre.map_default("", |s| s.as_slice());
                     let artist = meta.artist.map_default("", |s| s.as_slice());
-                    d.string(2.0, META_TOP + 4.0, 2.0, LeftAligned, title, RGB(0xff,0xff,0xff));
-                    d.string(2.0, META_TOP + 40.0, 1.0, LeftAligned, artist, RGB(0xff,0xff,0xff));
-                    d.string(SCREENW as f32 - 2.0, META_TOP + 40.0, 1.0, RightAligned,
-                             genre, RGB(0xff,0xff,0xff));
+                    let mut top = META_TOP + 6.0;
+                    d.string(4.0, top, 1.0, LeftAligned, genre, RGB(0xc0,0xc0,0xc0));
+                    top += 18.0;
+                    d.string(6.0, top + 2.0, 2.0, LeftAligned, title, RGB(0x80,0x80,0x80));
+                    d.string(4.0, top, 2.0, LeftAligned, title, RGB(0xff,0xff,0xff));
+                    top += 36.0;
+                    for subtitle in meta.subtitles.iter() {
+                        d.string(21.0, top + 1.0, 1.0, LeftAligned, *subtitle, RGB(0x80,0x80,0x80));
+                        d.string(20.0, top, 1.0, LeftAligned, *subtitle, RGB(0xff,0xff,0xff));
+                        top += 18.0;
+                    }
+                    d.string(4.0, top, 1.0, LeftAligned, artist, RGB(0xff,0xff,0xff));
+                    top += 18.0;
+                    for subartist in meta.subartists.iter() {
+                        d.string(20.0, top, 1.0, LeftAligned, *subartist, RGB(0xff,0xff,0xff));
+                        top += 18.0;
+                    }
                 }
                 PreloadFailed(ref err) => {
                     d.string(2.0, META_TOP + 4.0, 1.0, LeftAligned,
@@ -499,15 +534,6 @@ impl Scene for SelectingScene {
                               Enter: {}   F5: Refresh   Esc: Quit",
                              if self.opts.is_autoplay() {"Autoplay"} else {"Play"}),
                      RGB(0xff,0xff,0xff));
-        }
-
-        match self.preloaded {
-            Preloaded(ref data) if data.banner.is_some() => {
-                do self.screen.draw_textured(data.banner.get_ref()) |d| {
-                    d.rect(2.0, META_TOP + 60.0, 302.0, META_TOP + 140.0);
-                }
-            }
-            _ => {}
         }
 
         self.screen.swap_buffers();
