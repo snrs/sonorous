@@ -95,8 +95,8 @@ impl BmsMessage {
                 (Warning, "There are multiple #LNOBJ commands. Only the last such line will \
                            be used."),
             BmsHasUnimplementedFlow =>
-                (Warning, "#SWITCH and related flow commands are not yet implemented. \
-                           BMS files with those commands may be parsed incorrectly."),
+                (Warning, "#SWITCH and related flow commands are not yet implemented \
+                           and may malfunction."),
 
             BmsHasFullWidthSharp =>
                 (Note, "# should be a half-width letter for the compatibility."),
