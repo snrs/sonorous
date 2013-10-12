@@ -59,6 +59,7 @@ use self::util::std::io::*;
     pub mod bmfont;
     pub mod filesearch;
     pub mod opt_owned;
+    pub mod envelope;
 }
 pub mod ext {
     //! Bindings to external libraries or APIs.
@@ -136,7 +137,7 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
     use format::bms;
     use ui::init::{init_audio, init_video, init_joystick};
     use ui::scene::{Scene, run_scene};
-    use ui::selecting::{preprocess_bms, PreprocessedBms, SelectingScene};
+    use ui::selecting::{preprocess_bms, PreprocessedBms, print_diag, SelectingScene};
     use ui::loading::{LoadingScene, TextualLoadingScene};
 
     let scene;
@@ -150,10 +151,7 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
         let screen = init_video(false, opts.fullscreen);
         scene = SelectingScene::new(screen, bmspath, opts) as ~Scene:
     } else {
-        let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
-            let atline = match line { Some(line) => format!(" at line {}", line), None => ~"" };
-            warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
-        };
+        let mut callback = |line, msg| print_diag(line, msg);
 
         if opts.debug_dumpbmscommand || opts.debug_dumpbmscommandfull {
             dump_bmscommand(bmspath, opts.debug_dumpbmscommandfull, &mut callback);

@@ -204,9 +204,7 @@ impl LoadingContext {
             apply_blitcmd(imgres, bc);
         }
 
-        let duration = bms.timeline.duration(infos.originoffset,
-                                             |sref| sndres[**sref].duration());
-        let player = Player::new(opts, bms, infos, duration, keyspec, keymap, sndres);
+        let player = Player::new(opts, bms, infos, keyspec, keymap, sndres);
         (player, imgres)
     }
 }

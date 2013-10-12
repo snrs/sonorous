@@ -257,7 +257,7 @@ fn create_beep() -> ~mixer::Chunk {
 impl Player {
     /// Creates a new player object. The player object owns other related structures, including
     /// the options, BMS file, key specification, input mapping and sound resources.
-    pub fn new(opts: @Options, bms: Bms, infos: TimelineInfo, duration: f64, keyspec: ~KeySpec,
+    pub fn new(opts: @Options, bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec,
                keymap: ~KeyMap, sndres: ~[SoundResource]) -> Player {
         // we no longer need the full `Bms` structure.
         let Bms { bmspath: _, meta: meta, timeline: timeline } = bms;
@@ -275,6 +275,7 @@ impl Player {
 
         // set all pointers to the origin and let the `tick` do the initial calculation
         let origin = timeline.pointer(VirtualPos, originoffset);
+        let duration = timeline.duration(originoffset, |sref| sndres[**sref].duration());
         let mut player = Player {
             opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
             keyspec: keyspec, keymap: keymap,

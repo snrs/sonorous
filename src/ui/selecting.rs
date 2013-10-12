@@ -13,11 +13,13 @@ use format::timeline::TimelineInfo;
 use format::bms;
 use format::bms::Bms;
 use util::gfx::*;
-use util::gl::ShadedDrawingTraits;
+use util::gl::{PreparedSurface, Texture, ShadedDrawingTraits, TexturedDrawingTraits};
 use util::bmfont::{LeftAligned, RightAligned};
 use util::filesearch::SearchContext;
+use util::envelope::Envelope;
 use engine::input::read_keymap;
 use engine::keyspec::{KeySpec, key_spec};
+use engine::resource::{SearchContextAdditions, LoadedImageResource, LoadedImage};
 use engine::player::apply_modf;
 use ui::screen::Screen;
 use ui::init::{SCREENW, SCREENH};
@@ -57,10 +59,24 @@ enum Message {
     PushFiles(~[Path]),
     /// The worker has finished scanning files.
     NoMoreFiles,
+    /// The worker has sent a diagnostic message during loading.
     BmsMessageCallback(Option<uint>,bms::diag::BmsMessage),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
     BmsLoaded(Path,Result<~PreprocessedBms,~str>),
+    /// The worker has loaded the banner image (the second `~str`) for the BMS file (the first
+    /// `Path`). This may be sent after `BmsLoaded` message. Due to the same reason as above
+    /// the main task should ignore the message with non-current paths.
+    BmsBannerLoaded(Path,~str,Envelope<PreparedSurface>),
+}
+
+/// Preloaded game data.
+struct PreloadedData {
+    /// A part of the game data necessary for initializing `Player`. Anything else is used for
+    /// the selection screen only.
+    preproc: ~PreprocessedBms,
+    /// A banner texture, if any.
+    banner: Option<Texture>,
 }
 
 /// The state of preloaded game data.
@@ -71,8 +87,10 @@ enum PreloadingState {
     PreloadAfter(uint),
     /// Preloading is in progress, the result of the worker task will be delivered with this port.
     Preloading(comm::Port<task::TaskResult>),
-    /// Preloading finished.
-    Preloaded(Result<~PreprocessedBms,~str>),
+    /// Preloading finished with a success.
+    Preloaded(PreloadedData),
+    /// Preloading finished with a failure. Error message is available.
+    PreloadFailed(~str),
 }
 
 /// Song/pattern selection scene context. Used when the directory path is specified.
@@ -121,6 +139,15 @@ fn worker_task(name: ~str) -> task::TaskBuilder {
     builder.sched_mode(task::SingleThreaded); // XXX
     builder.supervised();
     builder
+}
+
+/// Prints a diagnostic message to the screen.
+pub fn print_diag(line: Option<uint>, msg: bms::diag::BmsMessage) {
+    let atline = match line {
+        Some(line) => format!(" at line {}", line),
+        None => ~"",
+    };
+    warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
 }
 
 /// The maximum number of entries displayed in one screen.
@@ -188,7 +215,7 @@ impl SelectingScene {
 
     /// Spawns a new preloading task and returns the port for its result.
     pub fn spawn_preloading_task(&self, path: &Path) -> comm::Port<task::TaskResult> {
-        let path = path.clone();
+        let bmspath = path.clone();
         let opts = (*self.opts).clone();
         let chan = self.chan.clone();
         let mut future = None;
@@ -200,10 +227,40 @@ impl SelectingScene {
             let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
                 chan.send(BmsMessageCallback(line, msg));
             };
-            let result = preprocess_bms(&path, @opts, &mut r, &loaderopts, &mut callback);
-            chan.send(BmsLoaded(path.clone(), result));
+            let result = preprocess_bms(&bmspath, @opts, &mut r, &loaderopts, &mut callback);
+
+            let (banner, basepath) = match result {
+                Ok(ref preproc) =>
+                    (preproc.bms.meta.banner.clone(), preproc.bms.meta.basepath.clone()),
+                Err(_) => (None, None),
+            };
+            chan.send(BmsLoaded(bmspath.clone(), result));
+
+            for bannerpath in banner.iter() {
+                let mut search = SearchContext::new();
+                let basedir = basepath.clone().unwrap_or(Path("."));
+                let fullpath = search.resolve_relative_path_for_image(*bannerpath, &basedir);
+                let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
+                match res {
+                    Ok(LoadedImage(surface)) => {
+                        chan.send(BmsBannerLoaded(bmspath.clone(), bannerpath.clone(),
+                                                  Envelope::new(surface)));
+                    }
+                    _ => {}
+                }
+            }
         }
         future.unwrap()
+    }
+
+    /// Returns a `Path` to the currently selected entry if any.
+    pub fn current<'r>(&'r self) -> Option<&'r Path> {
+        if self.offset < self.files.len() {Some(&self.files[self.offset])} else {None}
+    }
+
+    /// Checks if a given `Path` indeed points to the current entry.
+    pub fn is_current(&self, path: &Path) -> bool {
+        match self.current() { Some(current) => current == path, None => false }
     }
 
     /// Updates the selected entry. `offset` may be out of the range.
@@ -220,6 +277,35 @@ impl SelectingScene {
         } else if self.scrolloffset + (NUMENTRIES-1) < offset {
             self.scrolloffset = offset - (NUMENTRIES-1);
         }
+    }
+
+    /// Creates a new `LoadingScene` from the currently selected entry. It will load the BMS file
+    /// or use the preloaded data if possible.
+    pub fn create_loading_scene(&mut self) -> Option<~Scene:> {
+        let preloaded = util::replace(&mut self.preloaded, PreloadAfter(0));
+        let PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec } =
+            match preloaded {
+                Preloaded(data) => *data.preproc, // use the preloaded data if possible
+                _ => {
+                    let path = match self.current() {
+                        Some(path) => path,
+                        None => { return None; }
+                    };
+                    let mut r = rng();
+                    let loaderopts = bms::load::BmsLoaderOptions::new();
+                    let mut callback = |line, msg| print_diag(line, msg);
+                    let ret = preprocess_bms(path, self.opts, &mut r, &loaderopts, &mut callback);
+                    match ret {
+                        Ok(preproc) => *preproc,
+                        Err(err) => { warn!("{}", err); return None; }
+                    }
+                }
+            };
+        let keymap = match read_keymap(keyspec, os::getenv) {
+            Ok(map) => ~map,
+            Err(err) => die!("{}", err)
+        };
+        Some(LoadingScene::new(self.screen, bms, infos, keyspec, keymap, self.opts) as ~Scene:)
     }
 }
 
@@ -285,20 +371,9 @@ impl Scene for SelectingScene {
 
                 // (auto)play
                 event::KeyEvent(event::ReturnKey,true,_,_) => {
-                    let canplay = match self.preloaded { Preloaded(Ok(*)) => true, _ => false };
-                    if canplay {
-                        let preloaded = util::replace(&mut self.preloaded, PreloadAfter(0));
-                        let PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec } =
-                            match preloaded {
-                                Preloaded(Ok(preproc)) => *preproc,
-                                _ => { fail!("unreachable"); }
-                            };
-                        let keymap = match read_keymap(keyspec, os::getenv) {
-                            Ok(map) => ~map,
-                            Err(err) => die!("{}", err)
-                        };
-                        return PushScene(LoadingScene::new(self.screen, bms, infos, keyspec,
-                                                           keymap, self.opts) as ~Scene:);
+                    match self.create_loading_scene() {
+                        Some(scene) => { return PushScene(scene); }
+                        None => {}
                     }
                 }
 
@@ -318,16 +393,27 @@ impl Scene for SelectingScene {
                     self.filesdone = true;
                 }
                 BmsMessageCallback(line,msg) => {
-                    let atline = match line {
-                        Some(line) => format!(" at line {}", line),
-                        None => ~"",
-                    };
-                    warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
+                    print_diag(line, msg);
                 }
-                BmsLoaded(bmspath,preloaded) => {
-                    // the loading jobs may lag, we need to verify the data is indeed current
-                    if self.offset < self.files.len() && bmspath == self.files[self.offset] {
-                        self.preloaded = Preloaded(preloaded);
+                BmsLoaded(bmspath,preproc) => {
+                    if !self.is_current(&bmspath) { loop; }
+                    self.preloaded = match preproc {
+                        Ok(preproc) => Preloaded(PreloadedData { preproc: preproc, banner: None }),
+                        Err(err) => PreloadFailed(err),
+                    };
+                }
+                BmsBannerLoaded(bmspath,imgpath,prepared) => {
+                    if !self.is_current(&bmspath) { loop; }
+                    match self.preloaded {
+                        Preloaded(ref mut data) if data.banner.is_none() => {
+                            let prepared = prepared.unwrap();
+                            match Texture::from_prepared_surface(&prepared, false, false) {
+                                Ok(tex) => { data.banner = Some(tex); }
+                                Err(_err) => { warn!("failed to load image \\#BANNER ({})",
+                                                     imgpath.to_str()); }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -337,13 +423,15 @@ impl Scene for SelectingScene {
             let newpreloaded = match self.preloaded {
                 PreloadAfter(timeout) if timeout < get_ticks() => {
                     // preload the current entry after some delay
-                    let future = self.spawn_preloading_task(&self.files[self.offset]);
-                    Some(Preloading(future))
+                    match self.current() {
+                        Some(path) => Some(Preloading(self.spawn_preloading_task(path))),
+                        None => Some(NothingToPreload), // XXX wait what happened?!
+                    }
                 },
                 Preloading(ref port) if port.peek() && port.recv() == task::Failure => {
                     // port.recv() may also return `task::Success` when the message is sent
                     // but being delayed. in this case we can safely ignore it.
-                    Some(Preloaded(Err(~"unexpected failure")))
+                    Some(PreloadFailed(~"unexpected failure"))
                 },
                 _ => None,
             };
@@ -358,13 +446,13 @@ impl Scene for SelectingScene {
     fn render(&self) {
         self.screen.clear();
 
+        static META_TOP: f32 = NUMENTRIES as f32 * 20.0;
+
         let root = self.root.push("_"); // for the calculation of `Path::get_relative_to`
         do self.screen.draw_shaded_with_font |d| {
             let top = cmp::min(self.scrolloffset, self.files.len());
             let bottom = cmp::min(self.scrolloffset + NUMENTRIES, self.files.len());
             let windowedfiles = self.files.slice(top, bottom);
-
-            static META_TOP: f32 = NUMENTRIES as f32 * 20.0;
 
             let mut y = 0.0;
             for (i, path) in windowedfiles.iter().enumerate() {
@@ -388,16 +476,17 @@ impl Scene for SelectingScene {
                     d.string(2.0, META_TOP + 4.0, 1.0, LeftAligned,
                              "loading...", RGB(0xc0,0xc0,0xc0));
                 }
-                Preloaded(Ok(ref preloaded)) => {
-                    let title = preloaded.bms.meta.title.map_default("", |s| s.as_slice());
-                    let genre = preloaded.bms.meta.genre.map_default("", |s| s.as_slice());
-                    let artist = preloaded.bms.meta.artist.map_default("", |s| s.as_slice());
+                Preloaded(ref data) => {
+                    let meta = &data.preproc.bms.meta;
+                    let title = meta.title.map_default("", |s| s.as_slice());
+                    let genre = meta.genre.map_default("", |s| s.as_slice());
+                    let artist = meta.artist.map_default("", |s| s.as_slice());
                     d.string(2.0, META_TOP + 4.0, 2.0, LeftAligned, title, RGB(0xff,0xff,0xff));
                     d.string(2.0, META_TOP + 40.0, 1.0, LeftAligned, artist, RGB(0xff,0xff,0xff));
                     d.string(SCREENW as f32 - 2.0, META_TOP + 40.0, 1.0, RightAligned,
                              genre, RGB(0xff,0xff,0xff));
                 }
-                Preloaded(Err(ref err)) => {
+                PreloadFailed(ref err) => {
                     d.string(2.0, META_TOP + 4.0, 1.0, LeftAligned,
                              format!("error: {}", *err), RGB(0xc0,0xc0,0xc0));
                 }
@@ -410,6 +499,15 @@ impl Scene for SelectingScene {
                               Enter: {}   F5: Refresh   Esc: Quit",
                              if self.opts.is_autoplay() {"Autoplay"} else {"Play"}),
                      RGB(0xff,0xff,0xff));
+        }
+
+        match self.preloaded {
+            Preloaded(ref data) if data.banner.is_some() => {
+                do self.screen.draw_textured(data.banner.get_ref()) |d| {
+                    d.rect(2.0, META_TOP + 60.0, 302.0, META_TOP + 140.0);
+                }
+            }
+            _ => {}
         }
 
         self.screen.swap_buffers();
