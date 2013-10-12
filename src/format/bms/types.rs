@@ -49,26 +49,26 @@ impl Key {
 
     /// Returns if the alphanumeric key is in the proper range. Sonorous supports the full
     /// range of 00-ZZ (0-1295) for every case.
-    pub fn is_valid(self) -> bool {
-        0 <= *self && *self < MAXKEY
+    pub fn is_valid(&self) -> bool {
+        0 <= **self && **self < MAXKEY
     }
 
     /// Re-reads the alphanumeric key as a hexadecimal number if possible. This is required
     /// due to handling of channel #03 (BPM is expected to be in hexadecimal).
-    pub fn to_hex(self) -> Option<int> {
-        let sixteens = *self / 36;
-        let ones = *self % 36;
+    pub fn to_hex(&self) -> Option<int> {
+        let sixteens = **self / 36;
+        let ones = **self % 36;
         if sixteens < 16 && ones < 16 {Some(sixteens * 16 + ones)} else {None}
     }
 
     /// Converts the channel number to the lane number.
-    pub fn to_lane(self) -> Lane {
-        let player = match *self / 36 {
+    pub fn to_lane(&self) -> Lane {
+        let player = match **self / 36 {
             1 | 3 | 5 | 0xD => 0,
             2 | 4 | 6 | 0xE => 1,
             _ => fail!(~"non-object channel")
         };
-        Lane(player * 36 + *self as uint % 36)
+        Lane(player * 36 + **self as uint % 36)
     }
 }
 

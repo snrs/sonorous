@@ -57,6 +57,7 @@ enum Message {
     PushFiles(~[Path]),
     /// The worker has finished scanning files.
     NoMoreFiles,
+    BmsMessageCallback(Option<uint>,bms::diag::BmsMessage),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
     BmsLoaded(Path,Result<~PreprocessedBms,~str>),
@@ -196,7 +197,9 @@ impl SelectingScene {
         do builder.spawn_with(opts) |opts| {
             let mut r = rng();
             let loaderopts = bms::load::BmsLoaderOptions::new();
-            let mut callback = bms::diag::IgnoringMessageListener;
+            let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
+                chan.send(BmsMessageCallback(line, msg));
+            };
             let result = preprocess_bms(&path, @opts, &mut r, &loaderopts, &mut callback);
             chan.send(BmsLoaded(path.clone(), result));
         }
@@ -214,7 +217,7 @@ impl SelectingScene {
 
         if self.scrolloffset > offset {
             self.scrolloffset = offset;
-        } else if self.scrolloffset + (NUMENTRIES-1) < offset { 
+        } else if self.scrolloffset + (NUMENTRIES-1) < offset {
             self.scrolloffset = offset - (NUMENTRIES-1);
         }
     }
@@ -313,6 +316,13 @@ impl Scene for SelectingScene {
                 }
                 NoMoreFiles => {
                     self.filesdone = true;
+                }
+                BmsMessageCallback(line,msg) => {
+                    let atline = match line {
+                        Some(line) => format!(" at line {}", line),
+                        None => ~"",
+                    };
+                    warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
                 }
                 BmsLoaded(bmspath,preloaded) => {
                     // the loading jobs may lag, we need to verify the data is indeed current

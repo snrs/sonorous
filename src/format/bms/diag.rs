@@ -30,6 +30,7 @@ pub enum BmsMessage {
 
     BmsHasNoTITLE,
     BmsHasEmptyTITLE,
+    BmsHasMultipleTITLEs,
     BmsUsesCouplePlay,
     BmsUsesBattlePlay,
     BmsHasInvalidLNTYPE,
@@ -40,13 +41,17 @@ pub enum BmsMessage {
     BmsHasFullWidthSharp,
     BmsHasNoARTIST,
     BmsHasEmptyARTIST,
+    BmsHasMultipleARTISTs,
     BmsHasNoGENRE,
     BmsHasEmptyGENRE,
+    BmsHasMultipleGENREs,
     BmsHasGENLE,
     BmsHasEmptyPath,
     BmsHasInvalidPLAYER,
     BmsHasNegativePLAYLEVEL,
+    BmsHasDIFFICULTYOutOfRange,
     BmsHasEXBPM,
+    BmsHasNonpositiveBPM,
     BmsUsesLNTYPE2,
     BmsHasUnknownWAVCMD,
     BmsHasSONG,
@@ -74,11 +79,14 @@ impl BmsMessage {
                 (Warning, "#TITLE is missing."),
             BmsHasEmptyTITLE =>
                 (Warning, "#TITLE is empty."),
+            BmsHasMultipleTITLEs =>
+                (Warning, "There are multiple #TITLE commands. Only the last such line will \
+                           be used."),
             BmsUsesCouplePlay =>
                 (Warning, "Support for Couple Play (#PLAYER 2) is limited."),
             BmsUsesBattlePlay =>
                 (Warning, "Battle Play (#PLAYER 4) is not supported, and will be treated as \
-                           Couple Play."),
+                           Single Play."),
             BmsHasInvalidLNTYPE =>
                 (Warning, "Invalid #LNTYPE value will be ignored."),
             BmsHasZeroLNOBJ =>
@@ -96,10 +104,16 @@ impl BmsMessage {
                 (Note, "#ARTIST is missing."),
             BmsHasEmptyARTIST =>
                 (Note, "#ARTIST is empty."),
+            BmsHasMultipleARTISTs =>
+                (Note, "There are multiple #ARTIST commands. Only the last such line will \
+                        be used."),
             BmsHasNoGENRE =>
                 (Note, "#GENRE is missing."),
             BmsHasEmptyGENRE =>
                 (Note, "#GENRE is empty."),
+            BmsHasMultipleGENREs =>
+                (Note, "There are multiple #GENRE commands. Only the last such line will \
+                        be used."),
             BmsHasGENLE =>
                 (Note, "#GENLE [sic] will be interpreted as #GENRE."),
             BmsHasEmptyPath =>
@@ -108,8 +122,12 @@ impl BmsMessage {
                 (Note, "Invalid #PLAYER value will be ignored."),
             BmsHasNegativePLAYLEVEL =>
                 (Note, "#PLAYLEVEL should be non-negative for the compatibility."),
+            BmsHasDIFFICULTYOutOfRange =>
+                (Note, "#DIFFICULTY should be between 1 and 5 for the compatibility."),
             BmsHasEXBPM =>
                 (Note, "#EXBPMxx is a temporary measure, you should use #BPMxx instead."),
+            BmsHasNonpositiveBPM =>
+                (Note, "Non-positive BPM is not portable and its use is discouraged."),
             BmsUsesLNTYPE2 =>
                 (Note, "#LNTYPE 2 is deprecated, you should use #LNTYPE 1 (implied) or \
                         #LNOBJ instead."),

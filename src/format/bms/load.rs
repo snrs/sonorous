@@ -11,7 +11,8 @@ use format::obj::*;
 use format::bms::parse;
 use format::bms::types::{Key, MAXKEY};
 use format::bms::diag::*;
-use format::bms::{ImageRef, SoundRef, DefaultBPM, SinglePlay, BmsMeta, Bms};
+use format::bms::{ImageRef, SoundRef, DefaultBPM, BmsMeta, Bms};
+use format::bms::{SinglePlay, CouplePlay, DoublePlay, BattlePlay};
 
 /// Loader options for BMS format.
 pub struct BmsLoaderOptions {
@@ -31,7 +32,8 @@ impl BmsLoaderOptions {
 struct BmsLine {
     measure: uint,
     chan: Key,
-    data: ~str
+    data: ~str,
+    lineno: uint,
 }
 
 impl Ord for BmsLine {
@@ -47,12 +49,17 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
     use format::timeline::builder::{TimelineBuilder, Mark};
 
     let mut title = None;
+    let mut subtitles = ~[];
     let mut genre = None;
     let mut artist = None;
+    let mut subartists = ~[];
+    let mut comments = ~[];
     let mut stagefile = None;
+    let mut banner = None;
     let mut basepath = None;
-    let mut player = SinglePlay;
+    let mut mode = SinglePlay;
     let mut playlevel = 0;
+    let mut difficulty = None;
     let mut rank = 2;
     let mut sndpath = vec::from_elem(MAXKEY as uint, None);
     let mut imgpath = vec::from_elem(MAXKEY as uint, None);
@@ -81,24 +88,124 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
     // command.
     let mut lnobj = None;
 
-    do parse::each_bms_command(f, r, &opts.parser, callback) |_, cmd| {
+    let mut callback_ = |line, msg| callback.on_message(line, msg);
+    let mut ret = true;
+    do parse::each_bms_command(f, r, &opts.parser, &mut callback_) |lineno, cmd| {
+        macro_rules! diag(
+            ($e:expr) => (
+                if !callback.on_message(None, $e) { ret = false; }
+            );
+            ($e:expr at $line:expr) => (
+                if !callback.on_message(Some($line), $e) { ret = false; }
+            )
+        )
+
         match cmd {
-            parse::BmsTitle(s)            => { title = Some(s.into_owned()); }
-            parse::BmsGenre(s)            => { genre = Some(s.into_owned()); }
-            parse::BmsArtist(s)           => { artist = Some(s.into_owned()); }
-            parse::BmsStageFile(s)        => { stagefile = Some(s.into_owned()); }
-            parse::BmsBPM(bpm)            => { builder.set_initbpm(bpm); }
-            parse::BmsExBPM(Key(i), bpm)  => { bpmtab[i] = bpm; }
-            parse::BmsPlayer(v)           => { player = v; }
-            parse::BmsPlayLevel(v)        => { playlevel = v; }
-            parse::BmsRank(v)             => { rank = v; }
-            parse::BmsLNType(lntype)      => { consecutiveln = (lntype == 2); }
-            parse::BmsLNObj(key)          => { lnobj = Some(key); }
-            parse::BmsWAV(Key(i), s)      => { sndpath[i] = Some(s.into_owned()); }
-            parse::BmsBMP(Key(i), s)      => { imgpath[i] = Some(s.into_owned()); }
-            parse::BmsBGA(bc)             => { blitcmd.push(bc); }
-            parse::BmsStop(Key(i), dur)   => { stoptab[i] = dur; }
-            parse::BmsStp(pos, dur)       => { builder.add(pos, Stop(dur)); }
+            parse::BmsTitle(s) => {
+                let s = s.into_owned();
+                if s.is_empty() { diag!(BmsHasEmptyTITLE at lineno); }
+                if title.is_some() { diag!(BmsHasMultipleTITLEs at lineno); }
+                title = Some(s);
+            }
+            parse::BmsSubtitle(s) => {
+                subtitles.push(s.into_owned());
+            }
+            parse::BmsGenre(s) => {
+                let s = s.into_owned();
+                if s.is_empty() { diag!(BmsHasEmptyGENRE at lineno); }
+                if genre.is_some() { diag!(BmsHasMultipleGENREs at lineno); }
+                genre = Some(s);
+            }
+            parse::BmsArtist(s) => {
+                let s = s.into_owned();
+                if s.is_empty() { diag!(BmsHasEmptyARTIST at lineno); }
+                if artist.is_some() { diag!(BmsHasMultipleARTISTs at lineno); }
+                artist = Some(s);
+            }
+            parse::BmsSubartist(s) => {
+                subartists.push(s.into_owned());
+            }
+            parse::BmsComment(s) => {
+                let mut s_ = s.as_slice().trim();
+                if s_.starts_with("\"") && s_.ends_with("\"") { // strip quotes
+                    s_ = s_.slice(1, s_.len()-1);
+                }
+                comments.push(s_.to_owned());
+            }
+
+            parse::BmsStageFile(s) => {
+                stagefile = Some(s.into_owned());
+            }
+            parse::BmsBanner(s) => {
+                banner = Some(s.into_owned());
+            }
+
+            parse::BmsBPM(bpm) => {
+                if *bpm < 0.0 {
+                    diag!(BmsHasNegativeInitBPM at lineno);
+                } else if *bpm == 0.0 {
+                    diag!(BmsHasZeroInitBPM at lineno);
+                } else {
+                    builder.set_initbpm(bpm);
+                }
+            }
+            parse::BmsExBPM(Key(i), bpm) => {
+                if *bpm <= 0.0 {
+                    diag!(BmsHasNonpositiveBPM at lineno);
+                } else {
+                    bpmtab[i] = bpm;
+                }
+            }
+
+            parse::BmsPlayer(1) => { mode = SinglePlay; }
+            parse::BmsPlayer(2) => { mode = CouplePlay; diag!(BmsUsesCouplePlay at lineno); }
+            parse::BmsPlayer(3) => { mode = DoublePlay; }
+            parse::BmsPlayer(4) => { mode = BattlePlay; diag!(BmsUsesBattlePlay at lineno); }
+            parse::BmsPlayer(_) => { diag!(BmsHasInvalidPLAYER at lineno); }
+
+            parse::BmsPlayLevel(v) => {
+                if v < 0 { diag!(BmsHasNegativePLAYLEVEL at lineno); }
+                playlevel = v;
+            }
+            parse::BmsDifficulty(v) => {
+                if v < 1 || v > 5 { diag!(BmsHasDIFFICULTYOutOfRange at lineno); }
+                difficulty = Some(v);
+            }
+            parse::BmsRank(v) => {
+                rank = v;
+            }
+
+            parse::BmsLNType(1) => { consecutiveln = false; }
+            parse::BmsLNType(2) => { consecutiveln = true; diag!(BmsUsesLNTYPE2 at lineno); }
+            parse::BmsLNType(_) => { diag!(BmsHasInvalidLNTYPE at lineno); }
+
+            parse::BmsLNObj(key) => {
+                if lnobj.is_some() { diag!(BmsHasMultipleLNOBJs at lineno); }
+                if *key == 0 {
+                    diag!(BmsHasZeroLNOBJ at lineno);
+                } else {
+                    lnobj = Some(key);
+                }
+            }
+
+            parse::BmsWAV(Key(i), s) => { sndpath[i] = Some(s.into_owned()); }
+            parse::BmsBMP(Key(i), s) => { imgpath[i] = Some(s.into_owned()); }
+            parse::BmsBGA(bc) => { blitcmd.push(bc); }
+
+            parse::BmsStop(Key(i), dur) => {
+                if dur.sign() < 0 {
+                    diag!(BmsHasNegativeSTOPDuration at lineno);
+                } else {
+                    stoptab[i] = dur;
+                }
+            }
+            parse::BmsStp(pos, dur) => {
+                if dur.sign() < 0 {
+                    diag!(BmsHasNegativeSTPDuration at lineno);
+                } else {
+                    builder.add(pos, Stop(dur));
+                }
+            }
 
             parse::BmsPathWAV(s) => {
                 // TODO this logic assumes that #PATH_WAV is always interpreted as a native path,
@@ -113,14 +220,29 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
                 }
             }
             parse::BmsData(measure, chan, data) => {
-                bmsline.push(BmsLine { measure: measure, chan: chan, data: data.into_owned() })
+                bmsline.push(BmsLine { measure: measure, chan: chan,
+                                       data: data.into_owned(), lineno: lineno })
             }
 
             parse::BmsFlow(_) => { fail!("unexpected"); }
             _ => {}
         }
-        true
+        ret
     };
+    if !ret { return Err(~"aborted"); }
+
+    macro_rules! diag(
+        ($e:expr) => (
+            if !callback.on_message(None, $e) { return Err(~"aborted"); }
+        );
+        ($e:expr at $line:expr) => (
+            if !callback.on_message(Some($line), $e) { return Err(~"aborted"); }
+        )
+    )
+
+    if title.is_none() { diag!(BmsHasNoTITLE); }
+    if artist.is_none() { diag!(BmsHasNoARTIST); }
+    if genre.is_none() { diag!(BmsHasNoGENRE); }
 
     // Poor BGA defined by #BMP00 wouldn't be played if it is a movie. We can't just let it
     // played at the beginning of the chart as the "beginning" is not always 0.0 (actually,
@@ -141,7 +263,8 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
     // Handles a non-00 alphanumeric key `v` positioned at the particular channel `chan` and
     // particular position `t`. The position `t2` next to `t` is used for some cases that
     // an alphanumeric key designates an area rather than a point.
-    let handle_key = |chan: Key, t: f64, t2: f64, v: Key| {
+    let handle_key = |chan: Key, t: f64, t2: f64, v: Key, _lineno: uint| -> bool {
+        let /*mut*/ ret = true;
         match *chan {
             // channel #01: BGM
             1 => { builder.add(t, BGM(SoundRef(v))); }
@@ -167,10 +290,10 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
             7 => { builder.add(t, SetBGA(Layer2, Some(ImageRef(v)))); }
 
             // channel #08: BPM defined by #BPMxx
-            8 => { builder.add(t, SetBPM(bpmtab[*v])); } // TODO bpmtab validity check
+            8 => { builder.add(t, SetBPM(bpmtab[*v])); }
 
             // channel #09: scroll stopper defined by #STOPxx
-            9 => { builder.add(t, Stop(stoptab[*v])); } // TODO stoptab validity check
+            9 => { builder.add(t, Stop(stoptab[*v])); }
 
             // channel #0A: BGA layer 3
             10 => { builder.add(t, SetBGA(Layer3, Some(ImageRef(v)))); }
@@ -265,6 +388,7 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
             // #A5 (BGA on keypress), #A6 (player-specific option)
             _ => {}
         }
+        ret
     };
 
     // loop over the sorted bmslines
@@ -280,7 +404,9 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
                 if v != Key(0) { // ignores 00
                     let t = measure + i as f64 / count;
                     let t2 = measure + (i + 2) as f64 / count;
-                    handle_key(line.chan, t, t2, v);
+                    if !handle_key(line.chan, t, t2, v, line.lineno) {
+                        return Err(~"aborted");
+                    }
                 }
             }
         }
@@ -316,8 +442,10 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
 
     let timeline = builder.build();
     Ok(Bms { bmspath: None,
-             meta: BmsMeta { title: title, genre: genre, artist: artist, stagefile: stagefile,
-                             basepath: basepath, player: player, playlevel: playlevel, rank: rank,
+             meta: BmsMeta { title: title, subtitles: subtitles, genre: genre, artist: artist,
+                             subartists: subartists, comments: comments, stagefile: stagefile,
+                             banner: banner, basepath: basepath, mode: mode,
+                             playlevel: playlevel, difficulty: difficulty, rank: rank,
                              sndpath: sndpath, imgpath: imgpath, blitcmd: blitcmd },
              timeline: timeline })
 }

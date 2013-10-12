@@ -79,36 +79,58 @@ pub struct BlitCmd {
     x1: int, y1: int, x2: int, y2: int, dx: int, dy: int
 }
 
-/// A value of BMS #PLAYER command signifying Single Play (SP), where only channels #1x are used
-/// for the game play.
-pub static SinglePlay: int = 1;
-/// A value of BMS #PLAYER command signifying Couple Play, where channels #1x and #2x renders to
-/// the different panels. They are originally meant to be played by different players with
-/// separate gauges and scores, but this mode of game play is increasingly unsupported by modern
-/// implementations. Sonorous has only a limited support for Couple Play.
-pub static CouplePlay: int = 2;
-/// A value of BMS #PLAYER command signifying Double Play (DP), where both channels #1x and #2x
-/// renders to a single wide panel. The chart is still meant to be played by one person.
-pub static DoublePlay: int = 3;
+/// Play mode specified in the BMS file. This maps to BMS #PLAYER command. Over the course of
+/// the evolution of the BMS format, this value became highly ambiguous and the client is advised
+/// not to solely rely on this value.
+#[deriving(Eq,Clone)]
+pub enum PlayMode {
+    /// Single Play (SP), where only channels #1x are used for the game play.
+    SinglePlay = 1,
+    /// Couple Play, where channels #1x and #2x renders to the different panels. They are originally
+    /// meant to be played by different players with separate gauges and scores, but this mode of
+    /// game play is increasingly unsupported by modern implementations. Sonorous has only a limited
+    /// support for Couple Play.
+    CouplePlay = 2,
+    /// Double Play (DP), where both channels #1x and #2x renders to a single wide panel. The chart
+    /// is still meant to be played by one person.
+    DoublePlay = 3,
+    /// Battle Play, where channels #1x are copied to channels #2x and both renders to
+    /// the different panels. This was a temporary measure for the two-player game mode and
+    /// has been completely replaced by automatic support for two-player mode (or a lack thereof)
+    /// in modern implementations. Sonorous does not support Battle Play, but it does parse and
+    /// treats Battle Play as Single Play.
+    BattlePlay = 4,
+}
 
 /// Loaded BMS metadata and resources.
 pub struct BmsMeta {
     /// Title. Maps to BMS #TITLE command.
     title: Option<~str>,
+    /// Subtitle(s). Maps to BMS #SUBTITLE command.
+    subtitles: ~[~str],
     /// Genre. Maps to BMS #GENRE command.
     genre: Option<~str>,
     /// Artist. Maps to BMS #ARTIST command.
     artist: Option<~str>,
+    /// Secondary artist(s). Maps to BMS #SUBARTIST command.
+    subartists: ~[~str],
+    /// Comment(s). Maps to BMS #COMMENT command.
+    comments: ~[~str],
     /// Path to an image for loading screen. Maps to BMS #STAGEFILE command.
     stagefile: Option<~str>,
+    /// Path to an image for banner image for the selection screen. Maps to BMS #BANNER command.
+    banner: Option<~str>,
     /// A base path used for loading all other resources. Maps to BMS #PATH_WAV command.
     basepath: Option<Path>,
 
-    /// Game mode. One of `SinglePlay`(1), `CouplePlay`(2) or `DoublePlay`(3). Maps to BMS
-    /// #PLAYER command.
-    player: int,
-    /// Game level. Does not affect the actual game play. Maps to BMS #PLAYLEVEL command.
+    /// Game mode. Maps to BMS #PLAYER command.
+    mode: PlayMode,
+    /// Game level specified by the author. Does not affect the actual game play. Maps to BMS
+    /// #PLAYLEVEL command.
     playlevel: int,
+    /// Difficulty level specified by the author. Does not affect the actual game play but affects
+    /// the selection screen by grouping related BMSes. Maps to BMS #DIFFICULTY command.
+    difficulty: Option<int>,
     /// Gauge difficulty. Higher is easier. Maps to BMS #RANK command.
     rank: int,
 

@@ -216,7 +216,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
         None | Some(~"bms") | Some(~"bme") | Some(~"bml") => {
             let isbme = (present[8] || present[9] || present[36+8] || present[36+9]);
             let haspedal = (present[7] || present[36+7]);
-            let nkeys = match bms.meta.player {
+            let nkeys = match bms.meta.mode {
                 CouplePlay | DoublePlay => if isbme {~"14"} else {~"10"},
                 _                       => if isbme {~"7" } else {~"5" }
             };
@@ -284,8 +284,8 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
     if !rightkeys.is_empty() {
         match parse_and_add(rightkeys) {
             None => { return Err(format!("Invalid key spec for right hand side: {}", rightkeys)); }
-            Some(nkeys) => { // no split panes except for #PLAYER 2
-                if bms.meta.player != CouplePlay { keyspec.split += nkeys; }
+            Some(nkeys) => { // no split panes except for Couple Play
+                if bms.meta.mode != CouplePlay { keyspec.split += nkeys; }
             }
         }
     }

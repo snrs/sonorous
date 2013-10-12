@@ -50,6 +50,12 @@ impl BPM {
 pub enum Duration { Seconds(f64), Measures(f64) }
 
 impl Duration {
+    /// Returns the sign of the duration.
+    pub fn sign(&self) -> int {
+        let v = match *self { Seconds(secs) => secs, Measures(measures) => measures };
+        if v < 0.0 {-1} else if v > 0.0 {1} else {0}
+    }
+
     /// Calculates the actual seconds from the current BPM.
     pub fn to_sec(&self, bpm: BPM) -> f64 {
         match *self {
