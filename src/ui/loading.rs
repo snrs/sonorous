@@ -80,11 +80,14 @@ pub struct LoadingContext {
 /// Returns the interface string common to the graphical and textual loading screen.
 fn displayed_info(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec) -> (~str, ~str, ~str, ~str) {
     let brief = format!("Level {level} | BPM {bpm:.2}{hasbpmchange} | \
-                         {nnotes, plural, =1{# note} other{# notes}} [{nkeys}KEY{haslongnote}]",
+                         {nnotes, plural, =1{# note} other{# notes}} \
+                         [{nkeys}KEY{haslongnote}{difficulty}]",
                         level = bms.meta.playlevel, bpm = *bms.timeline.initbpm,
                         hasbpmchange = if infos.hasbpmchange {"?"} else {""},
                         nnotes = infos.nnotes, nkeys = keyspec.nkeys(),
-                        haslongnote = if infos.haslongnote {"-LN"} else {""});
+                        haslongnote = if infos.haslongnote {"-LN"} else {""},
+                        difficulty = bms.meta.difficulty.and_then(|d| d.name())
+                                                        .map_default(~"", |name| ~" " + *name));
     let title = bms.meta.title.clone().unwrap_or(~"");
     let genre = bms.meta.genre.clone().unwrap_or(~"");
     let artist = bms.meta.artist.clone().unwrap_or(~"");
@@ -328,15 +331,29 @@ impl TextualLoadingScene {
 impl Scene for TextualLoadingScene {
     fn activate(&mut self) -> SceneCommand {
         if self.context.opts.showinfo {
-            ::std::io::stderr().write_line(format!("\
+            let err = ::std::io::stderr();
+            err.write_str(format!("\
 ----------------------------------------------------------------------------------------------
-Title:    {title}
+Title:    {title}", title = self.context.title));
+            for subtitle in self.context.bms.meta.subtitles.iter() {
+                err.write_str(format!("
+          {subtitle}", subtitle = *subtitle));
+            }
+            err.write_str(format!("
 Genre:    {genre}
-Artist:   {artist}
+Artist:   {artist}", genre = self.context.genre, artist = self.context.artist));
+            for subartist in self.context.bms.meta.subartists.iter() {
+                err.write_str(format!("
+          {subartist}", subartist = *subartist));
+            }
+            for comment in self.context.bms.meta.comments.iter() {
+                err.write_str(format!("
+\"{comment}\"", comment = *comment));
+            }
+            err.write_line(format!("
 {brief}
 ----------------------------------------------------------------------------------------------",
-                title = self.context.title, genre = self.context.genre,
-                artist = self.context.artist, brief = self.context.brief));
+                brief = self.context.brief));
         }
         Continue
     }

@@ -60,11 +60,9 @@ enum Message {
     PushFiles(~[Path]),
     /// The worker has finished scanning files.
     NoMoreFiles,
-    /// The worker has sent a diagnostic message during loading.
-    BmsMessageCallback(Option<uint>,bms::diag::BmsMessage),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
-    BmsLoaded(Path,Result<~PreprocessedBms,~str>),
+    BmsLoaded(Path,Result<~PreprocessedBms,~str>,~[(Option<uint>,bms::diag::BmsMessage)]),
     /// The worker has loaded the banner image (the second `~str`) for the BMS file (the first
     /// `Path`). This may be sent after `BmsLoaded` message. Due to the same reason as above
     /// the main task should ignore the message with non-current paths.
@@ -78,6 +76,11 @@ struct PreloadedData {
     preproc: ~PreprocessedBms,
     /// A banner texture, if any.
     banner: Option<Texture>,
+    /// A tentatively calculated duration of the BMS file in seconds. This is tentative because
+    /// we don't know lengths of key sounds and BGMs yet.
+    duration: f64,
+    /// A list of diagnostic messages returned during the loading.
+    messages: ~[(Option<uint>,bms::diag::BmsMessage)],
 }
 
 /// The state of preloaded game data.
@@ -225,8 +228,9 @@ impl SelectingScene {
         do builder.spawn_with(opts) |opts| {
             let mut r = rng();
             let loaderopts = bms::load::BmsLoaderOptions::new();
+            let mut diags = ~[];
             let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
-                chan.send(BmsMessageCallback(line, msg));
+                diags.push((line, msg));
             };
             let result = preprocess_bms(&bmspath, @opts, &mut r, &loaderopts, &mut callback);
 
@@ -235,7 +239,7 @@ impl SelectingScene {
                     (preproc.bms.meta.banner.clone(), preproc.bms.meta.basepath.clone()),
                 Err(_) => (None, None),
             };
-            chan.send(BmsLoaded(bmspath.clone(), result));
+            chan.send(BmsLoaded(bmspath.clone(), result, diags));
 
             for bannerpath in banner.iter() {
                 let mut search = SearchContext::new();
@@ -393,13 +397,16 @@ impl Scene for SelectingScene {
                 NoMoreFiles => {
                     self.filesdone = true;
                 }
-                BmsMessageCallback(line,msg) => {
-                    print_diag(line, msg);
-                }
-                BmsLoaded(bmspath,preproc) => {
+                BmsLoaded(bmspath,preproc,messages) => {
                     if !self.is_current(&bmspath) { loop; }
                     self.preloaded = match preproc {
-                        Ok(preproc) => Preloaded(PreloadedData { preproc: preproc, banner: None }),
+                        Ok(preproc) => {
+                            let originoffset = preproc.infos.originoffset;
+                            let duration = preproc.bms.timeline.duration(originoffset, |_| 0.0);
+                            let data = PreloadedData { preproc: preproc, banner: None,
+                                                       duration: duration, messages: messages };
+                            Preloaded(data)
+                        },
                         Err(err) => PreloadFailed(err),
                     };
                 }
@@ -500,24 +507,55 @@ impl Scene for SelectingScene {
                 }
                 Preloaded(ref data) => {
                     let meta = &data.preproc.bms.meta;
-                    let title = meta.title.map_default("", |s| s.as_slice());
-                    let genre = meta.genre.map_default("", |s| s.as_slice());
-                    let artist = meta.artist.map_default("", |s| s.as_slice());
                     let mut top = META_TOP + 6.0;
-                    d.string(4.0, top, 1.0, LeftAligned, genre, RGB(0xc0,0xc0,0xc0));
-                    top += 18.0;
-                    d.string(6.0, top + 2.0, 2.0, LeftAligned, title, RGB(0x80,0x80,0x80));
-                    d.string(4.0, top, 2.0, LeftAligned, title, RGB(0xff,0xff,0xff));
+                    let genre = meta.genre.map_default("", |s| s.as_slice());
+                    if !genre.is_empty() {
+                        d.string(4.0, top, 1.0, LeftAligned, genre, RGB(0xc0,0xc0,0xc0));
+                        top += 18.0;
+                    }
+                    let title = meta.title.map_default("", |s| s.as_slice());
+                    if !title.is_empty() {
+                        d.string(6.0, top + 2.0, 2.0, LeftAligned, title, RGB(0x80,0x80,0x80));
+                        d.string(4.0, top, 2.0, LeftAligned, title, RGB(0xff,0xff,0xff));
+                    } else {
+                        d.string(4.0, top, 2.0, LeftAligned, "(no title)", RGB(0x80,0x80,0x80));
+                    }
                     top += 36.0;
                     for subtitle in meta.subtitles.iter() {
+                        if subtitle.is_empty() { loop; }
                         d.string(21.0, top + 1.0, 1.0, LeftAligned, *subtitle, RGB(0x80,0x80,0x80));
                         d.string(20.0, top, 1.0, LeftAligned, *subtitle, RGB(0xff,0xff,0xff));
                         top += 18.0;
                     }
-                    d.string(4.0, top, 1.0, LeftAligned, artist, RGB(0xff,0xff,0xff));
-                    top += 18.0;
+                    let artist = meta.artist.map_default("", |s| s.as_slice());
+                    if !artist.is_empty() {
+                        d.string(4.0, top, 1.0, LeftAligned, artist, RGB(0xff,0xff,0xff));
+                        top += 18.0;
+                    }
                     for subartist in meta.subartists.iter() {
+                        if subartist.is_empty() { loop; }
                         d.string(20.0, top, 1.0, LeftAligned, *subartist, RGB(0xff,0xff,0xff));
+                        top += 18.0;
+                    }
+                    for comment in meta.comments.iter() {
+                        if comment.is_empty() { loop; }
+                        d.string(4.0, top, 1.0, LeftAligned,
+                                 format!("> {}", *comment), RGB(0x80,0xff,0x80));
+                        top += 18.0;
+                    }
+                    for &(line, msg) in data.messages.iter() {
+                        let atline = match line {
+                            Some(line) => format!(" (line {})", line),
+                            None => ~"",
+                        };
+                        let text = format!("* {}: {}{}", msg.severity().to_str(),
+                                           msg.to_str(), atline);
+                        let color = match msg.severity() {
+                            bms::diag::Fatal => RGB(0xff,0x40,0x40),
+                            bms::diag::Warning => RGB(0xff,0xff,0x40),
+                            bms::diag::Note => RGB(0x40,0xff,0xff),
+                        };
+                        d.string(4.0, top, 1.0, LeftAligned, text, color);
                         top += 18.0;
                     }
                 }
@@ -527,13 +565,13 @@ impl Scene for SelectingScene {
                 }
             }
 
-            d.rect(0.0, SCREENH as f32 - 21.0,
-                   SCREENW as f32, SCREENH as f32 - 20.0, RGB(0xff,0xff,0xff));
+            // status bar will overwrite any overflowing messages
+            d.rect(0.0, SCREENH as f32 - 20.0, SCREENW as f32, SCREENH as f32, RGB(0xff,0xff,0xff));
             d.string(2.0, SCREENH as f32 - 18.0, 1.0, LeftAligned,
-                     format!("Up/Down/PgUp/PgDown/Home/End: Select   \
+                     format!("Up/Down/PgUp/PgDn/Home/End: Select   \
                               Enter: {}   F5: Refresh   Esc: Quit",
                              if self.opts.is_autoplay() {"Autoplay"} else {"Play"}),
-                     RGB(0xff,0xff,0xff));
+                     RGB(0,0,0));
         }
 
         self.screen.swap_buffers();
