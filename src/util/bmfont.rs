@@ -9,7 +9,6 @@
 //! Bitmap font.
 
 use std::iter;
-use sdl::video::Color;
 use util::gfx::*;
 use util::gl::{ShadedDrawing, ShadedDrawingTraits};
 use gl = opengles::gl2;
@@ -389,27 +388,17 @@ impl<'self> ShadedDrawingTraits for ShadedFontDrawing<'self> {
     fn point_rgba(&mut self, x: f32, y: f32, rgba: (u8,u8,u8,u8)) {
         self.drawing.point_rgba(x, y, rgba)
     }
-    fn point(&mut self, x: f32, y: f32, c: Color) {
-        self.drawing.point(x, y, c)
+    fn line_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                 rgba1: (u8,u8,u8,u8), rgba2: (u8,u8,u8,u8)) {
+        self.drawing.line_rgba(x1, y1, x2, y2, rgba1, rgba2)
     }
-    fn line(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: Color) {
-        self.drawing.line(x1, y1, x2, y2, c)
-    }
-    fn triangle(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32, c: Color) {
-        self.drawing.triangle(x1, y1, x2, y2, x3, y3, c)
+    fn triangle_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32,
+                     rgba1: (u8,u8,u8,u8), rgba2: (u8,u8,u8,u8), rgba3: (u8,u8,u8,u8)) {
+        self.drawing.triangle_rgba(x1, y1, x2, y2, x3, y3, rgba1, rgba2, rgba3)
     }
     fn rect_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, rgba11: (u8,u8,u8,u8),
                  rgba12: (u8,u8,u8,u8), rgba21: (u8,u8,u8,u8), rgba22: (u8,u8,u8,u8)) {
         self.drawing.rect_rgba(x1, y1, x2, y2, rgba11, rgba12, rgba21, rgba22)
-    }
-    fn rect_horiz(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, cx1: Color, cx2: Color) {
-        self.drawing.rect_horiz(x1, y1, x2, y2, cx1, cx2)
-    }
-    fn rect_vert(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, cy1: Color, cy2: Color) {
-        self.drawing.rect_vert(x1, y1, x2, y2, cy1, cy2)
-    }
-    fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, c: Color) {
-        self.drawing.rect(x1, y1, x2, y2, c)
     }
 }
 
