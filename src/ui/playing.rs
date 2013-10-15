@@ -96,28 +96,28 @@ impl LaneStyle {
     }
 
     /// Renders an object to the screen from the sprite.
-    pub fn render_note(&self, d: &mut TexturedDrawing, top: uint, bottom: uint) {
-        d.rect_area(self.left as f32, top as f32,
-                    (self.left + self.width) as f32, bottom as f32,
+    pub fn render_note(&self, d: &mut TexturedDrawing, top: f32, bottom: f32) {
+        d.rect_area(self.left as f32, top,
+                    (self.left + self.width) as f32, bottom,
                     (self.spriteleft + SCREENW) as f32, 0.0,
-                    (self.spriteleft + self.width + SCREENW) as f32, bottom as f32);
+                    (self.spriteleft + self.width + SCREENW) as f32, bottom);
     }
 
     /// Renders an elongated object to the screen from the sprite.
-    pub fn render_longnote(&self, d: &mut TexturedDrawing, top: uint, bottom: uint, alpha: u8) {
-        d.rect_area_rgba(self.left as f32, top as f32,
-                         (self.left + self.width) as f32, bottom as f32,
+    pub fn render_longnote(&self, d: &mut TexturedDrawing, top: f32, bottom: f32, alpha: u8) {
+        d.rect_area_rgba(self.left as f32, top,
+                         (self.left + self.width) as f32, bottom,
                          (self.spriteleft + SCREENW) as f32, 0.0,
-                         (self.spriteleft + self.width + SCREENW) as f32, bottom as f32,
+                         (self.spriteleft + self.width + SCREENW) as f32, bottom,
                          (255,255,255,alpha));
     }
 
     /// Renders a bomb object to the screen from the sprite.
-    pub fn render_bomb(&self, d: &mut TexturedDrawing, top: uint, bottom: uint) {
-        d.rect_area(self.left as f32, top as f32,
-                    (self.left + self.width) as f32, bottom as f32,
+    pub fn render_bomb(&self, d: &mut TexturedDrawing, top: f32, bottom: f32) {
+        d.rect_area(self.left as f32, top,
+                    (self.left + self.width) as f32, bottom,
                     (self.spritebombleft + SCREENW) as f32, 0.0,
-                    (self.spritebombleft + self.width + SCREENW) as f32, bottom as f32);
+                    (self.spritebombleft + self.width + SCREENW) as f32, bottom);
     }
 }
 
@@ -138,7 +138,7 @@ fn build_lane_styles(keyspec: &KeySpec) ->
             return Err(~"The screen can't hold that many lanes");
         }
     }
-    for &lane in keyspec.right_lanes().iter() {
+    for &lane in keyspec.right_lanes().rev_iter() {
         let kind = keyspec.kinds[*lane];
         assert!(kind.is_some());
         let kind = kind.unwrap();
@@ -362,7 +362,7 @@ impl Scene for PlayingScene {
             // fill the lanes to the border color
             d.rect(0.0, 30.0, self.leftmost as f32, H-80.0, RGB(0x40,0x40,0x40));
             for &rightmost in self.rightmost.iter() {
-                d.rect(rightmost as f32, 30.0, H, 520.0, RGB(0x40,0x40,0x40));
+                d.rect(rightmost as f32, 30.0, W, 520.0, RGB(0x40,0x40,0x40));
             }
 
             // clear the lanes to the background color
@@ -371,14 +371,16 @@ impl Scene for PlayingScene {
             }
         }
 
-        //let bottom = self.player.cur.find(ActualPos, -0.03 / self.player.playspeed);
-        //let top = self.player.cur.find(ActualPos, 1.22 / self.player.playspeed);
-        let bottom = self.player.cur.clone();
-        let top = self.player.cur.find(ActualPos, 1.25 / self.player.playspeed);
+        // basically, we use a window of 1.25 measures in the actual position, but then we will
+        // hide the topmost and bottommost 5 pixels behind the panels (for avoiding vanishing notes)
+        // and move the grading line accordingly. this bias represents the amount of such moves.
+        let bias = (6.25 / (H-100.0)) as f64; // H-100:1.25 = 5:bias
+        let bottom = self.player.cur.find(ActualPos, -bias / self.player.playspeed);
+        let top = self.player.cur.find(ActualPos, (1.25 - bias) / self.player.playspeed);
 
         let loc_to_y = |loc: &ObjLoc<f64>| {
-            let offset = loc.pos - bottom.loc.pos;
-            (SCREENH-70) - (400.0 * self.player.playspeed * offset) as uint
+            let offset = loc.pos - self.player.cur.loc.pos;
+            (H-80.0) - ((H-100.0)/1.25 * self.player.playspeed as f32 * offset as f32)
         };
 
         do self.screen.draw_textured(&self.sprite) |d| {
@@ -401,7 +403,7 @@ impl Scene for PlayingScene {
                 // LN starting before the bottom and ending after the top
                 let lnalpha = (150.0 - beat * 50.0) as u8;
                 if front.loc.vpos > top.loc.vpos && front.is_lndone() {
-                    style.render_longnote(d, 30, SCREENH - 80, lnalpha);
+                    style.render_longnote(d, 30.0, H-80.0, lnalpha);
                 } else {
                     let mut nextbottom = None;
                     for ptr in front.upto(&top) {
@@ -412,35 +414,34 @@ impl Scene for PlayingScene {
                                 nextbottom = Some(y);
                             }
                             LNDone(lane0,_) if lane0 == lane => {
-                                let bottom = SCREENH-80;
                                 match nextbottom {
                                     Some(y2) => {
                                         style.render_longnote(d, y, y2, lnalpha);
-                                        style.render_note(d, y2-5, y2);
-                                        style.render_note(d, y-5, y);
+                                        style.render_note(d, y2-5.0, y2);
+                                        style.render_note(d, y-5.0, y);
                                     }
                                     None => {
-                                        style.render_longnote(d, y, bottom, lnalpha);
-                                        style.render_note(d, y-5, y);
+                                        style.render_longnote(d, y, H-80.0, lnalpha);
+                                        style.render_note(d, y-5.0, y);
                                     }
                                 }
                                 nextbottom = None;
                             }
                             Visible(lane0,_) if lane0 == lane => {
                                 assert!(nextbottom.is_none());
-                                style.render_note(d, y-5, y);
+                                style.render_note(d, y-5.0, y);
                             }
                             Bomb(lane0,_,_) if lane0 == lane => {
                                 assert!(nextbottom.is_none());
-                                style.render_bomb(d, y-5, y);
+                                style.render_bomb(d, y-5.0, y);
                             }
                             _ => {}
                         }
                     }
 
                     for &y in nextbottom.iter() {
-                        style.render_longnote(d, 30, y, lnalpha);
-                        style.render_note(d, y-5, y);
+                        style.render_longnote(d, 30.0, y, lnalpha);
+                        style.render_note(d, y-5.0, y);
                     }
                 }
             }
@@ -451,15 +452,20 @@ impl Scene for PlayingScene {
             for ptr in bottom.upto(&top) {
                 match ptr.data() {
                     MeasureBar => {
-                        let y = loc_to_y(&ptr.loc) as f32;
+                        let y = loc_to_y(&ptr.loc);
                         d.rect(0.0, y, self.leftmost as f32, y + 1.0, RGB(0xc0,0xc0,0xc0));
                         for &rightmost in self.rightmost.iter() {
-                            d.rect(rightmost as f32, y,
-                                   (SCREENW - rightmost) as f32, y + 1.0, RGB(0xc0,0xc0,0xc0));
+                            d.rect(rightmost as f32, y, W, y + 1.0, RGB(0xc0,0xc0,0xc0));
                         }
                     }
                     _ => {}
                 }
+            }
+
+            // render grading line
+            d.rect(0.0, H-85.0, self.leftmost as f32, H-80.0, RGBA(0xff,0,0,0x40));
+            for &rightmost in self.rightmost.iter() {
+                d.rect(rightmost as f32, H-85.0, W, H-80.0, RGBA(0xff,0,0,0x40));
             }
 
             // render grading text
