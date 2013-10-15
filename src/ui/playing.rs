@@ -103,6 +103,15 @@ impl LaneStyle {
                     (self.spriteleft + self.width + SCREENW) as f32, bottom as f32);
     }
 
+    /// Renders an elongated object to the screen from the sprite.
+    pub fn render_longnote(&self, d: &mut TexturedDrawing, top: uint, bottom: uint, alpha: u8) {
+        d.rect_area_rgba(self.left as f32, top as f32,
+                         (self.left + self.width) as f32, bottom as f32,
+                         (self.spriteleft + SCREENW) as f32, 0.0,
+                         (self.spriteleft + self.width + SCREENW) as f32, bottom as f32,
+                         (255,255,255,alpha));
+    }
+
     /// Renders a bomb object to the screen from the sprite.
     pub fn render_bomb(&self, d: &mut TexturedDrawing, top: uint, bottom: uint) {
         d.rect_area(self.left as f32, top as f32,
@@ -338,6 +347,8 @@ impl Scene for PlayingScene {
         let W = SCREENW as f32;
         let H = SCREENH as f32;
 
+        let beat = self.player.cur.loc.vpos * 4.0 % 1.0;
+
         self.screen.clear();
 
         // render BGAs (should render before the lanes since lanes can overlap with BGAs)
@@ -388,8 +399,9 @@ impl Scene for PlayingScene {
                 let front = front.unwrap();
 
                 // LN starting before the bottom and ending after the top
+                let lnalpha = (150.0 - beat * 50.0) as u8;
                 if front.loc.vpos > top.loc.vpos && front.is_lndone() {
-                    style.render_note(d, 30, SCREENH - 80);
+                    style.render_longnote(d, 30, SCREENH - 80, lnalpha);
                 } else {
                     let mut nextbottom = None;
                     for ptr in front.upto(&top) {
@@ -401,7 +413,17 @@ impl Scene for PlayingScene {
                             }
                             LNDone(lane0,_) if lane0 == lane => {
                                 let bottom = SCREENH-80;
-                                style.render_note(d, y, nextbottom.unwrap_or(bottom));
+                                match nextbottom {
+                                    Some(y2) => {
+                                        style.render_longnote(d, y, y2, lnalpha);
+                                        style.render_note(d, y2-5, y2);
+                                        style.render_note(d, y-5, y);
+                                    }
+                                    None => {
+                                        style.render_longnote(d, y, bottom, lnalpha);
+                                        style.render_note(d, y-5, y);
+                                    }
+                                }
                                 nextbottom = None;
                             }
                             Visible(lane0,_) if lane0 == lane => {
@@ -417,7 +439,8 @@ impl Scene for PlayingScene {
                     }
 
                     for &y in nextbottom.iter() {
-                        style.render_note(d, 30, y);
+                        style.render_longnote(d, 30, y, lnalpha);
+                        style.render_note(d, y-5, y);
                     }
                 }
             }
@@ -494,12 +517,11 @@ impl Scene for PlayingScene {
                 d.rect(4.0, H-12.0, 360.0, H-4.0, black);
 
                 // cycles four times per measure, [0,40)
-                let cycle = (160.0 * self.player.cur.loc.vpos).floor() % 40.0;
                 let width = if self.player.gauge < 0 {0}
-                            else {self.player.gauge * 400 / MAXGAUGE - (cycle as int)};
+                            else {self.player.gauge * 400 / MAXGAUGE - (beat * 40.0) as int};
                 let width = num::clamp(width, 5, 360);
                 let color = if self.player.gauge >= self.player.survival {RGB(0xc0,0,0)}
-                            else {RGB(0xc0 - ((cycle * 4.0) as u8), 0, 0)};
+                            else {RGB(0xc0 - (beat * 160.0) as u8, 0, 0)};
                 d.rect(4.0, H-12.0, 4.0 + width as f32, H-4.0, color);
             }
         }
