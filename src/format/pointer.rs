@@ -128,7 +128,161 @@ fn interpolate_loc<S,I>(timeline: &Timeline<S,I>, index: uint,
              vtime: starts.vtime + diffs.vtime * frac, time: starts.time + diffs.time * frac }
 }
 
+/// An iterator object for `Pointer::upto`.
+#[deriving(Clone)]
+pub struct UptoIterator<SoundRef,ImageRef> {
+    priv timeline: @Timeline<SoundRef,ImageRef>,
+    priv cur: uint,
+    priv end: uint,
+}
+
+impl<S,I> Iterator<Pointer<S,I>> for UptoIterator<S,I> {
+    fn next(&mut self) -> Option<Pointer<S,I>> {
+        if self.cur < self.end {
+            let i = self.cur;
+            self.cur += 1;
+            Some(Pointer::from_index(self.timeline, i))
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        let remaining = self.end - self.cur;
+        (remaining, Some(remaining))
+    }
+}
+
+/// An iterator object for `Pointer::until`.
+#[deriving(Clone)]
+pub struct UntilIterator<SoundRef,ImageRef> {
+    priv timeline: @Timeline<SoundRef,ImageRef>,
+    priv cur: uint,
+    priv axis: ObjAxis,
+    priv endpos: f64,
+}
+
+impl<S,I> Iterator<Pointer<S,I>> for UntilIterator<S,I> {
+    fn next(&mut self) -> Option<Pointer<S,I>> {
+        if self.cur < self.timeline.objs.len() {
+            let i = self.cur;
+            if self.timeline.objs[i].loc[self.axis] < self.endpos {
+                self.cur += 1;
+                Some(Pointer::from_index(self.timeline, i))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        (0, Some(self.timeline.objs.len() - self.cur))
+    }
+}
+
+/// An iterator object for `Pointer::mut_upto`.
+pub struct MutUptoIterator<'self,SoundRef,ImageRef> {
+    priv ptr: &'self mut Pointer<SoundRef,ImageRef>,
+    priv finished: bool,
+    priv lastloc: Option<ObjLoc<f64>>,
+    priv cur: uint,
+    priv end: uint,
+    priv endloc: ObjLoc<f64>,
+}
+
+impl<'self,S,I> Iterator<Pointer<S,I>> for MutUptoIterator<'self,S,I> {
+    fn next(&mut self) -> Option<Pointer<S,I>> {
+        if self.finished { return None; }
+
+        if self.cur < self.end {
+            let i = self.cur;
+            self.lastloc = Some(self.ptr.timeline.objs[i].loc.clone());
+            self.cur += 1;
+            return Some(Pointer::from_index(self.ptr.timeline, i));
+        }
+
+        self.ptr.index = self.cur;
+        self.ptr.loc = self.endloc.clone();
+        self.finished = true;
+        None
+    }
+
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        if self.finished {
+            (0, Some(0))
+        } else {
+            let remaining = self.end - self.cur;
+            (remaining, Some(remaining))
+        }
+    }
+}
+
+#[unsafe_destructor]
+impl<'self,S,I> Drop for MutUptoIterator<'self,S,I> {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.ptr.index = self.cur - 1;
+            self.ptr.loc = self.lastloc.expect("next() was never called").clone();
+        }
+    }
+}
+
+/// An iterator object for `Pointer::mut_until`.
+pub struct MutUntilIterator<'self,SoundRef,ImageRef> {
+    priv ptr: &'self mut Pointer<SoundRef,ImageRef>,
+    priv finished: bool,
+    priv lastloc: Option<ObjLoc<f64>>,
+    priv cur: uint,
+    priv axis: ObjAxis,
+    priv endpos: f64,
+}
+
+impl<'self,S,I> Iterator<Pointer<S,I>> for MutUntilIterator<'self,S,I> {
+    fn next(&mut self) -> Option<Pointer<S,I>> {
+        if self.finished { return None; }
+
+        if self.cur < self.ptr.timeline.objs.len() {
+            let i = self.cur;
+            if self.ptr.timeline.objs[i].loc[self.axis] < self.endpos {
+                self.lastloc = Some(self.ptr.timeline.objs[i].loc.clone());
+                self.cur += 1;
+                return Some(Pointer::from_index(self.ptr.timeline, i));
+            }
+        }
+
+        self.ptr.index = self.cur;
+        self.ptr.loc = interpolate_loc(&*self.ptr.timeline, self.cur, self.axis, self.endpos);
+        self.finished = true;
+        None
+    }
+
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        if self.finished {
+            (0, Some(0))
+        } else {
+            (0, Some(self.ptr.timeline.objs.len() - self.cur))
+        }
+    }
+}
+
+#[unsafe_destructor]
+impl<'self,S,I> Drop for MutUntilIterator<'self,S,I> {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.ptr.index = self.cur - 1;
+            self.ptr.loc = self.lastloc.expect("next() was never called").clone();
+        }
+    }
+}
+
 impl<S:Clone,I:Clone> Pointer<S,I> {
+    /// Returns the associated game data of pointed object. Short for `to_obj_data`.
+    pub fn data(&self) -> ObjData<S,I> { self.to_obj_data() }
+}
+
+impl<S,I> Pointer<S,I> {
     /// Returns true if the pointer invariant holds.
     pub fn invariant(&self) -> bool {
         if self.index > 0 {
@@ -147,9 +301,6 @@ impl<S:Clone,I:Clone> Pointer<S,I> {
         }
         true
     }
-
-    /// Returns the associated game data of pointed object. Short for `to_obj_data`.
-    pub fn data(&self) -> ObjData<S,I> { self.to_obj_data() }
 
     /// Returns a pointer to the first object which position is no less than `pos`.
     /// It takes `O(log n)` time, and should be preferred when there is no more information about
@@ -224,77 +375,37 @@ impl<S:Clone,I:Clone> Pointer<S,I> {
     }
 
     /// Iterates up to given pointer (not including it).
-    pub fn upto(&self, end: &Pointer<S,I>, f: &fn(Pointer<S,I>) -> bool) -> bool {
+    pub fn upto(&self, end: &Pointer<S,I>) -> UptoIterator<S,I> {
         assert!(has_same_timeline(self, end));
-        let timeline = self.timeline;
-        for i in range(self.index, end.index) {
-            if !f(Pointer::from_index(timeline, i)) { return false; }
-        }
-        true
+        UptoIterator { timeline: self.timeline, cur: self.index, end: end.index }
     }
 
     /// Iterates objects until the object is no less than `delta` measures/seconds away from
     /// the current position.
-    pub fn until(&self, axis: ObjAxis, delta: f64, f: &fn(Pointer<S,I>) -> bool) -> bool {
+    pub fn until(&self, axis: ObjAxis, delta: f64) -> UntilIterator<S,I> {
         let pos = self.loc[axis] + delta;
-        let timeline = self.timeline;
-        let objs: &[Obj<S,I>] = self.timeline.objs;
-        let nobjs = objs.len();
-        let mut i = self.index;
-        while i < nobjs && objs[i].loc[axis] < pos {
-            if !f(Pointer::from_index(timeline, i)) { return false; }
-            i += 1;
-        }
-        true
+        UntilIterator { timeline: self.timeline, cur: self.index, axis: axis, endpos: pos }
     }
 
     /// Iterates up to given pointer (not including it) while updating the current pointer.
     /// If the caller breaks the loop, the pointer points to the last returned object. Otherwise
     /// the pointer is set to given pointer. In any case the pointer doesn't change during the loop.
-    pub fn mut_upto(&mut self, end: &Pointer<S,I>, f: &fn(Pointer<S,I>) -> bool) -> bool {
+    pub fn mut_upto<'r>(&'r mut self, end: &Pointer<S,I>) -> MutUptoIterator<'r,S,I> {
         assert!(has_same_timeline(self, end));
-        if self.index > end.index || self.loc > end.loc { return true; }
-
-        let timeline = self.timeline;
-        let objs: &[Obj<S,I>] = self.timeline.objs;
-        let limit = end.index;
-        let mut i = self.index;
-        while i < limit {
-            if !f(Pointer::from_index(timeline, i)) {
-                self.index = i;
-                self.loc = objs[i].loc.clone();
-                return false;
-            }
-            i += 1;
-        }
-        self.index = i;
-        self.loc = end.loc.clone();
-        true
+        let donotupdate = (self.index > end.index || self.loc > end.loc);
+        MutUptoIterator { ptr: self, finished: donotupdate, lastloc: None,
+                          cur: self.index, end: end.index, endloc: end.loc.clone() }
     }
 
     /// Iterates objects until the object is no less than `delta` measures/seconds away from
     /// the current position, while updating the current pointer. If the caller breaks the loop,
     /// the pointer points to the last returned object. Otherwise the location is set to given
     /// position. In any case the pointer doesn't change during the loop.
-    pub fn mut_until(&mut self, axis: ObjAxis, delta: f64, f: &fn(Pointer<S,I>) -> bool) -> bool {
-        if delta <= 0.0 { return true; }
+    pub fn mut_until<'r>(&'r mut self, axis: ObjAxis, delta: f64) -> MutUntilIterator<'r,S,I> {
+        let donotupdate = (delta <= 0.0);
         let pos = self.loc[axis] + delta;
-
-        let timeline = self.timeline;
-        let objs: &[Obj<S,I>] = self.timeline.objs;
-        let nobjs = objs.len();
-        let mut i = self.index;
-        while i < nobjs && objs[i].loc[axis] < pos {
-            if !f(Pointer::from_index(timeline, i)) {
-                self.index = i;
-                self.loc = objs[i].loc.clone();
-                return false;
-            }
-            i += 1;
-        }
-        self.index = i;
-        self.loc = interpolate_loc(&*self.timeline, i, axis, pos);
-        true
+        MutUntilIterator { ptr: self, finished: donotupdate, lastloc: None,
+                           cur: self.index, axis: axis, endpos: pos }
     }
 
     /// Finds the next object that satisfies given condition if any, without updating itself.

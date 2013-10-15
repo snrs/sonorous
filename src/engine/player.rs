@@ -455,9 +455,7 @@ impl Player {
             }
             None => {
                 // apply object-like effects while advancing `self.cur`
-                // TODO make `Pointer::*` a proper iterator?
-                let nodeath = do cur.mut_until(ActualTime, curtime - cur.loc.time) |p| {
-                    let mut ret = true;
+                for p in cur.mut_until(ActualTime, curtime - cur.loc.time) {
                     match p.data() {
                         BGM(sref) => {
                             self.play_sound_if_nonzero(sref, true);
@@ -468,7 +466,7 @@ impl Player {
                         SetBPM(newbpm) => {
                             self.bpm = newbpm;
                             if *newbpm == 0.0 {
-                                ret = false; // finish immediately
+                                return false; // finish immediately
                             } else if *newbpm < 0.0 {
                                 self.reverse = Some(p.clone()); // activate reverse motion
                             }
@@ -483,37 +481,32 @@ impl Player {
                         }
                         _ => {}
                     }
-                    ret
-                };
-                if !nodeath { return false; }
+                }
             }
         }
 
         // grade objects that have escaped the grading area
         if !self.opts.is_autoplay() {
-            do checked.mut_upto(&cur) |p| {
+            for p in checked.mut_upto(&cur) {
                 let dist = (cur.loc.vtime - p.loc.vtime) * self.gradefactor;
-                if dist < BAD_CUTOFF {
-                    false
-                } else {
-                    if !self.nograding[p.index] {
-                        let lane = p.object_lane(); // XXX #3511
-                        for &Lane(lane) in lane.iter() {
-                            let missable =
-                                match p.data() {
-                                    Visible(*) | LNStart(*) => true,
-                                    LNDone(*) => thru[lane].is_some(),
-                                    _ => false,
-                                };
-                            if missable {
-                                self.update_grade_to_miss();
-                                thru[lane] = None;
-                            }
+                if dist < BAD_CUTOFF { break; }
+
+                if !self.nograding[p.index] {
+                    let lane = p.object_lane(); // XXX #3511
+                    for &Lane(lane) in lane.iter() {
+                        let missable =
+                            match p.data() {
+                                Visible(*) | LNStart(*) => true,
+                                LNDone(*) => thru[lane].is_some(),
+                                _ => false,
+                            };
+                        if missable {
+                            self.update_grade_to_miss();
+                            thru[lane] = None;
                         }
                     }
-                    true
                 }
-            };
+            }
         }
 
         // process inputs
@@ -658,8 +651,7 @@ impl Player {
 
         // process bombs
         if !self.opts.is_autoplay() {
-            // TODO make `Pointer::*` a proper iterator?
-            let nodeath = do prev.upto(&cur) |p| {
+            for p in prev.upto(&cur) {
                 match p.data() {
                     Bomb(lane,sref,damage) if self.key_pressed(lane) => {
                         // ongoing long note is not graded twice
@@ -670,15 +662,12 @@ impl Player {
                         if !self.update_grade_from_damage(damage) {
                             // instant death
                             self.cur = cur.find_end();
-                            false
-                        } else {
-                            true
+                            return false;
                         }
-                    },
-                    _ => true
+                    }
+                    _ => {}
                 }
-            };
-            if !nodeath { return false; }
+            }
         }
 
         self.cur = cur;

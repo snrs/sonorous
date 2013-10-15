@@ -392,7 +392,7 @@ impl Scene for PlayingScene {
                     style.render_note(d, 30, SCREENH - 80);
                 } else {
                     let mut nextbottom = None;
-                    do front.upto(&top) |ptr| {
+                    for ptr in front.upto(&top) {
                         let y = loc_to_y(&ptr.loc);
                         match ptr.data() {
                             LNStart(lane0,_) if lane0 == lane => {
@@ -414,8 +414,7 @@ impl Scene for PlayingScene {
                             }
                             _ => {}
                         }
-                        true
-                    };
+                    }
 
                     for &y in nextbottom.iter() {
                         style.render_note(d, 30, y);
@@ -426,7 +425,7 @@ impl Scene for PlayingScene {
 
         do self.screen.draw_shaded_with_font |d| {
             // render non-note objects (currently, measure bars)
-            do bottom.upto(&top) |ptr| {
+            for ptr in bottom.upto(&top) {
                 match ptr.data() {
                     MeasureBar => {
                         let y = loc_to_y(&ptr.loc) as f32;
@@ -438,8 +437,7 @@ impl Scene for PlayingScene {
                     }
                     _ => {}
                 }
-                true
-            };
+            }
 
             // render grading text
             if self.gradelimit.is_some() && self.player.lastgrade.is_some() {
