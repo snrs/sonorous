@@ -4,13 +4,15 @@
 
 //! BMS parser.
 
-use std::{io, iter};
+use std::{io, iter, f64};
 use std::rand::Rng;
+use encoding::Encoding;
 
 use util::opt_owned::{OptOwnedStr, IntoOptOwnedStr};
 use format::obj::{BPM, Duration, Seconds, Measures};
 use format::bms::types::{Key};
 use format::bms::diag::*;
+use format::bms::encoding::{decode_stream, guess_decode_stream};
 use format::bms::{ImageRef, BlitCmd};
 
 /// A tuple of four `u8` values. Mainly used for BMS #ARGB command and its family.
@@ -247,12 +249,14 @@ impl<'self> ToStr for BmsCommand<'self> {
 pub struct BmsParserOptions {
     /// Enables a parsing of several obviously mistyped commands. (Default: true)
     autofix_commands: bool,
+    /// Disables an automatic encoding detection and forces the use of given encoding.
+    force_encoding: Option<&'static Encoding>,
 }
 
 impl BmsParserOptions {
     /// Returns default parser options.
     pub fn new() -> BmsParserOptions {
-        BmsParserOptions { autofix_commands: true }
+        BmsParserOptions { autofix_commands: true, force_encoding: None }
     }
 }
 
@@ -260,14 +264,19 @@ impl BmsParserOptions {
 pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
                                 f: @io::Reader, opts: &BmsParserOptions, callback: &mut Listener,
                                 blk: &fn(uint,BmsCommand) -> bool) -> bool {
-    use util::std::str::from_fixed_utf8_bytes;
     use std::ascii::StrAsciiExt;
 
-    let file = f.read_whole_stream();
+    let (file, encoding, confidence) = match opts.force_encoding {
+        Some(enc) => (decode_stream(f, enc), enc, f64::infinity),
+        None => guess_decode_stream(f),
+    };
+    if !callback.on_message(None, BmsUsesEncoding(encoding.name(), confidence)) {
+        return false;
+    }
+
     let mut lineno = 0;
     let mut ret = true;
-    'eachline: for line0 in file.split_iter(|&ch| ch == 10u8) {
-        let line0 = from_fixed_utf8_bytes(line0, |_| ~"\ufffd");
+    'eachline: for line in file.split_iter('\u000a') {
         lineno += 1;
 
         macro_rules! diag(
@@ -286,7 +295,7 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
         )
 
         // skip non-command lines
-        let line = line0.trim_left();
+        let line = line.trim_left();
         if line.is_empty() { loop; }
         let (ch, line) = line.slice_shift_char();
         if ch == '\uff03' {

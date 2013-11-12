@@ -5,6 +5,8 @@
 //! Global game options.
 
 use std::{char, str, hashmap};
+use encoding::label::encoding_from_whatwg_label;
+use format::bms::load::BmsLoaderOptions;
 
 /// Game play modes.
 #[deriving(Eq,Clone)]
@@ -73,6 +75,8 @@ pub struct Options {
     rightkeys: Option<~str>,
     /// An initial play speed.
     playspeed: f64,
+    /// A character encoding *name* forced to the loader.
+    encoding: Option<~str>,
 
     /// If set, prints the recognized BMS commands after parsing and exits.
     debug_dumpbmscommandfull: bool,
@@ -98,6 +102,14 @@ impl Options {
 
     /// Returns true if the graphical screen is enabled.
     pub fn has_screen(&self) -> bool { !self.is_exclusive() || self.has_bga() }
+
+    /// Returns loader options.
+    pub fn loader_options(&self) -> BmsLoaderOptions {
+        let mut loaderopts = BmsLoaderOptions::new();
+        loaderopts.parser.force_encoding =
+            self.encoding.and_then_ref(|s| encoding_from_whatwg_label(*s));
+        loaderopts
+    }
 }
 
 /// A return value from `parse_opts`.
@@ -125,7 +137,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
         (~"--random", 'r'), (~"--random-ex", 'R'), (~"--preset", 'k'),
         (~"--key-spec", 'K'), (~"--bga", ' '), (~"--no-bga", 'B'),
         (~"--movie", ' '), (~"--no-movie", 'M'), (~"--joystick", 'j'),
-        (~"--debug", 'Z'),
+        (~"--encoding", 'E'), (~"--debug", 'Z'),
     ]).move_iter().collect::<hashmap::HashMap<~str,char>>();
 
     let nargs = args.len();
@@ -141,6 +153,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
     let mut leftkeys = None;
     let mut rightkeys = None;
     let mut playspeed = 1.0;
+    let mut encoding = None;
     let mut debug_dumpbmscommandfull = false;
     let mut debug_dumpbmscommand = false;
     let mut debug_dumptimeline = false;
@@ -226,6 +239,14 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
                             _ => { return Error(format!("Invalid argument to option -j")); }
                         }
                     }
+                    'E' => {
+                        let arg = fetch_arg!('E');
+                        // since `Encoding`s are not `Send`able we keep only the encoding name
+                        match encoding_from_whatwg_label(arg) {
+                            Some(*) => { encoding = Some(arg.to_owned()); }
+                            None => { return Error(format!("Invalid encoding name: {}", arg)); }
+                        }
+                    }
                     'Z' => match fetch_arg!('Z') {
                         &"dump-bmscommand-full" => { debug_dumpbmscommandfull = true; }
                         &"dump-bmscommand" => { debug_dumpbmscommand = true; }
@@ -259,6 +280,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
             preset: preset,
             leftkeys: leftkeys, rightkeys: rightkeys,
             playspeed: playspeed,
+            encoding: encoding,
             debug_dumpbmscommandfull: debug_dumpbmscommandfull,
             debug_dumpbmscommand: debug_dumpbmscommand,
             debug_dumptimeline: debug_dumptimeline,

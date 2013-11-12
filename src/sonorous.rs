@@ -44,7 +44,6 @@ extern mod encoding;
 // see below for specifics.
 use self::util::std::str::*;
 use self::util::std::option::*;
-use self::util::std::io::*;
 
 #[macro_escape] pub mod util {
     /*!
@@ -60,6 +59,7 @@ use self::util::std::io::*;
     pub mod filesearch;
     pub mod opt_owned;
     pub mod envelope;
+    pub mod chardet;
 }
 pub mod ext {
     //! Bindings to external libraries or APIs.
@@ -106,16 +106,17 @@ pub fn exename() -> ~str {
 
 /// Dumps the recognized BMS commands. This is used by `-Z dump-bmscommand[-full]` debug options.
 pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
-                                bmspath: &Path, full: bool, callback: &mut Listener) {
+                                bmspath: &Path, full: bool,
+                                parseropts: &format::bms::parse::BmsParserOptions,
+                                callback: &mut Listener) {
     use std::{io, rand};
-    use format::bms::parse::{BmsParserOptions, BmsCommand, BmsUnknown};
+    use format::bms::parse::{BmsCommand, BmsUnknown};
     use format::bms::parse::{each_bms_command_with_flow, each_bms_command};
 
     let f = match io::file_reader(bmspath) {
         Ok(f) => f,
         Err(err) => die!("Couldn't load BMS file: {}", err)
     };
-    let parseropts = BmsParserOptions::new();
     let blk = |_lineno: uint, cmd: BmsCommand| {
         match cmd {
             BmsUnknown(*) => {}
@@ -124,10 +125,10 @@ pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
         true
     };
     if full {
-        each_bms_command_with_flow(f, &parseropts, callback, blk);
+        each_bms_command_with_flow(f, parseropts, callback, blk);
     } else {
         let mut r = rand::rng();
-        each_bms_command(f, &mut r, &parseropts, callback, blk);
+        each_bms_command(f, &mut r, parseropts, callback, blk);
     }
 }
 
@@ -135,7 +136,6 @@ pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
 /// loop.
 pub fn play(bmspath: &Path, opts: @ui::options::Options) {
     use std::{rand, os};
-    use format::bms;
     use ui::init::{init_audio, init_video, init_joystick};
     use ui::scene::{Scene, run_scene};
     use ui::selecting::{preprocess_bms, PreprocessedBms, print_diag, SelectingScene};
@@ -155,15 +155,15 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
         let mut callback = |line, msg| print_diag(line, msg);
 
         if opts.debug_dumpbmscommand || opts.debug_dumpbmscommandfull {
-            dump_bmscommand(bmspath, opts.debug_dumpbmscommandfull, &mut callback);
+            dump_bmscommand(bmspath, opts.debug_dumpbmscommandfull,
+                            &opts.loader_options().parser, &mut callback);
             ui::common::exit(0);
         }
 
         // parses the file and sanitizes it
         let mut r = rand::rng();
-        let loaderopts = bms::load::BmsLoaderOptions::new();
-        let PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec } =
-            match preprocess_bms(bmspath, opts, &mut r, &loaderopts, &mut callback) {
+        let PreprocessedBms { bms, infos, keyspec } =
+            match preprocess_bms(bmspath, opts, &mut r, &opts.loader_options(), &mut callback) {
                 Ok(preproc) => *preproc,
                 Err(err) => die!("Couldn't load BMS file: {}", err)
             };
@@ -239,6 +239,7 @@ Options:
   -B, --no-bga            Do not load and show the BGA
   -M, --no-movie          Do not load and show the BGA movie
   -j N, --joystick N      Enables the joystick with index N (normally 0)
+  -E ENCODING             Forces the use of specified encoding
   -Z OPTION               Enables the specified debugging option
 
 Environment Variables:
@@ -260,11 +261,40 @@ Available debugging options:
     ui::common::exit(1);
 }
 
+#[cfg(subprogram)]
+pub fn subprogram(args: &[~str]) -> ! {
+    let ret: int = match args.head_opt() {
+        None => {
+            std::io::stderr().write_str("\
+The list of available subprograms:
+  chardet-train         Trains a character encoding detection algorithm.
+
+");
+            0
+        }
+        Some(&~"chardet-train") => util::chardet::chardet_train(args.tail()),
+        Some(prog) => {
+            std::io::stderr().write_str(format!("Subprogram {} is unknown.", *prog));
+            1
+        }
+    };
+    ui::common::exit(ret);
+}
+
+#[cfg(not(subprogram))]
+pub fn subprogram(_args: &[~str]) -> ! {
+    std::io::stderr().write_str("Subprograms are not supported in this build.\n");
+    ui::common::exit(1);
+}
+
 /// The entry point. Parses the command line options and delegates other things to `play`.
 pub fn main() {
     use ui::options::*;
     let args = std::os::args();
     let args = args.slice(1, args.len());
+    if !args.is_empty() && "--subprogram".equiv(&args[0]) {
+        subprogram(args.slice(1, args.len()));
+    }
     match parse_opts(args, ui::common::get_path_from_dialog) {
         ShowVersion => { println(version()); }
         ShowUsage => { usage(); }

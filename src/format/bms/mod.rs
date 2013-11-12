@@ -41,6 +41,7 @@ pub use format::bms::types::{Key, MAXKEY};
 
 pub mod types;
 pub mod diag;
+pub mod encoding;
 pub mod parse;
 pub mod load;
 
@@ -125,6 +126,10 @@ impl Difficulty {
 
 /// Loaded BMS metadata and resources.
 pub struct BmsMeta {
+    /// The name of character encoding used by the BMS file, and its confidence between 0 and 1.
+    /// Confidence is set to infinity when it is forced by the loader.
+    encoding: (&'static str, f64),
+
     /// Title. Maps to BMS #TITLE command.
     title: Option<~str>,
     /// Subtitle(s). Maps to BMS #SUBTITLE command.

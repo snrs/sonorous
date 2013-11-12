@@ -253,11 +253,11 @@ impl SelectingScene {
         do builder.future_result |f| { future = Some(f); }
         do builder.spawn_with(opts) |opts| {
             let mut r = rng();
-            let loaderopts = bms::load::BmsLoaderOptions::new();
             let mut diags = ~[];
             let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
                 diags.push((line, msg));
             };
+            let loaderopts = opts.loader_options();
             let result = preprocess_bms(&bmspath, @opts, &mut r, &loaderopts, &mut callback);
 
             let (banner, basepath) = match result {
@@ -314,7 +314,7 @@ impl SelectingScene {
     /// or use the preloaded data if possible.
     pub fn create_loading_scene(&mut self) -> Option<~Scene:> {
         let preloaded = util::replace(&mut self.preloaded, PreloadAfter(0));
-        let PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec } =
+        let PreprocessedBms { bms, infos, keyspec } =
             match preloaded {
                 Preloaded(data) => *data.preproc, // use the preloaded data if possible
                 _ => {
@@ -323,9 +323,9 @@ impl SelectingScene {
                         None => { return None; }
                     };
                     let mut r = rng();
-                    let loaderopts = bms::load::BmsLoaderOptions::new();
                     let mut callback = |line, msg| print_diag(line, msg);
-                    let ret = preprocess_bms(path, self.opts, &mut r, &loaderopts, &mut callback);
+                    let ret = preprocess_bms(path, self.opts, &mut r,
+                                             &self.opts.loader_options(), &mut callback);
                     match ret {
                         Ok(preproc) => *preproc,
                         Err(err) => { warn!("{}", err); return None; }
@@ -578,9 +578,19 @@ impl Scene for SelectingScene {
                             bms::diag::Fatal => RGB(0xff,0x40,0x40),
                             bms::diag::Warning => RGB(0xff,0xff,0x40),
                             bms::diag::Note => RGB(0x40,0xff,0xff),
+                            bms::diag::Internal => loop, // impossible
                         };
                         d.string(4.0, top, 1.0, LeftAligned, text, color);
                         top += 18.0;
+
+                        if msg == bms::diag::BmsUsesLegacyEncoding {
+                            let (encname, confidence) = meta.encoding;
+                            d.string(4.0, top, 1.0, LeftAligned,
+                                     format!("  (Detected \"{}\" encoding with confidence {:.2}%)",
+                                             encname, confidence * 100.0),
+                                     RGB(0x20,0x80,0x80));
+                            top += 18.0;
+                        }
                     }
 
                     d.string(SCREENW as f32 - 2.0, META_TOP + 4.0, 1.0, RightAligned,

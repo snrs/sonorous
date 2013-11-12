@@ -12,42 +12,6 @@
 pub mod str {
     use std::str::*;
 
-    static tag_cont_u8: u8 = 128u8; // copied from libstd/str.rs
-
-    /// Given a potentially invalid UTF-8 byte sequence, fixes an invalid UTF-8 sequence with
-    /// given error handler.
-    pub fn fix_utf8(v: &[u8], handler: &fn(&[u8]) -> ~[u8]) -> ~[u8] {
-        let mut i = 0u;
-        let total = v.len();
-        let mut result = ~[];
-        while i < total {
-            let chend = i + utf8_char_width(v[i]);
-            let mut j = i + 1u;
-            while j < total && j < chend && v[j] & 192u8 == tag_cont_u8 {
-                j += 1u;
-            }
-            if j == chend {
-                assert!(i != chend);
-                result.push_all(v.slice(i, j));
-            } else {
-                result.push_all(handler(v.slice(i, j)));
-            }
-            i = j;
-        }
-        result
-    }
-
-    /// Converts a vector of bytes to a UTF-8 string. Any invalid UTF-8 sequences are fixed with
-    /// given error handler.
-    pub fn from_fixed_utf8_bytes(v: &[u8], handler: &fn(&[u8]) -> ~str) -> ~str {
-        let newhandler: &fn(&[u8]) -> ~[u8] = |v: &[u8]| -> ~[u8] {
-            let ret = handler(v);
-            ret.as_bytes().to_owned()
-        };
-        let bytes = fix_utf8(v, newhandler);
-        unsafe { raw::from_utf8(bytes) }
-    }
-
     /// Extensions to `str`.
     pub trait StrUtil<'self> {
         /// Returns a slice of the given string starting from `begin` and up to the byte
@@ -59,25 +23,21 @@ pub mod str {
         /// the string, or `end` points beyond the last character of the string
         fn slice_upto(&self, begin: uint, end: uint) -> &'self str;
 
-        /// Given a potentially invalid UTF-8 string, fixes an invalid UTF-8 string with given
-        /// error handler.
-        fn fix_utf8(&self, handler: &fn(&[u8]) -> ~str) -> ~str;
-
         /// Counts the number of bytes in the complete UTF-8 sequences up to `limit` bytes
         /// in `s` starting from `start`.
         fn count_bytes_upto(&self, start: uint, limit: uint) -> uint;
 
-        /// Returns a length of the longest prefix of given string, which `uint::from_str`
+        /// Returns a length of the longest prefix of given string, which `from_str::<uint>`
         /// accepts without a failure, if any.
         //
-        // Rust: actually, it is better to have `{uint,int,f64}::from_str` returning a tuple.
+        // Rust: actually, it is better to have `from_str::<{uint,int,f64}>` returning a tuple.
         fn scan_uint(&self) -> Option<uint>;
 
-        /// Returns a length of the longest prefix of given string, which `int::from_str`
+        /// Returns a length of the longest prefix of given string, which `from_str::<int>`
         /// accepts without a failure, if any.
         fn scan_int(&self) -> Option<uint>;
 
-        /// Returns a length of the longest prefix of given string, which `f64::from_str`
+        /// Returns a length of the longest prefix of given string, which `from_str::<f64>`
         /// accepts without a failure, if any.
         fn scan_f64(&self) -> Option<uint>;
 
@@ -89,10 +49,6 @@ pub mod str {
     impl<'self> StrUtil<'self> for &'self str {
         fn slice_upto(&self, begin: uint, end: uint) -> &'self str {
             self.slice(begin, begin + self.count_bytes_upto(begin, end))
-        }
-
-        fn fix_utf8(&self, handler: &fn(&[u8]) -> ~str) -> ~str {
-            from_fixed_utf8_bytes(self.as_bytes(), handler)
         }
 
         fn count_bytes_upto(&self, start: uint, limit: uint) -> uint {
@@ -222,39 +178,5 @@ pub mod option {
             merge(self, other, f)
         }
     }
-}
-
-/// I/O utilities for Rust. Parallels to `std::io`.
-pub mod io {
-
-    /// Extensions to `ReaderUtil`.
-    pub trait ReaderUtilEx {
-        /// Reads up until the first '\n' char (which is not returned), or EOF. Any invalid
-        /// UTF-8 sequences are fixed with given error handler.
-        fn read_and_fix_utf8_line(&self, handler: &fn(&[u8]) -> ~str) -> ~str;
-
-        /// Iterates over every line until the iterator breaks or EOF. Any invalid UTF-8
-        /// sequences are fixed with given error handler.
-        fn each_fixed_utf8_line(&self, handler: &fn(&[u8]) -> ~str, it: &fn(&str) -> bool);
-    }
-
-    impl<T: Reader> ReaderUtilEx for T {
-        fn read_and_fix_utf8_line(&self, handler: &fn(&[u8]) -> ~str) -> ~str {
-            let mut bytes = ~[];
-            loop {
-                let ch = self.read_byte();
-                if ch == -1 || ch == 10 { break; }
-                bytes.push(ch as u8);
-            }
-            ::util::std::str::from_fixed_utf8_bytes(bytes, handler)
-        }
-
-        fn each_fixed_utf8_line(&self, handler: &fn(&[u8]) -> ~str, it: &fn(&str) -> bool) {
-            while !self.eof() {
-                if !it(self.read_and_fix_utf8_line(|buf| handler(buf))) { break; } // XXX #7363
-            }
-        }
-    }
-
 }
 

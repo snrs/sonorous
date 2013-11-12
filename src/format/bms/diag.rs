@@ -7,6 +7,9 @@
 /// The severity of messages. Every error message has one of the severity assigned.
 #[deriving(Eq,Ord,ToStr,Clone)]
 pub enum Severity {
+    /// Internal use only. This kind of diagnostics is not intended to be visible at all,
+    /// but exists in order to send metadata and callbacks via the diagnostics interface.
+    Internal,
     /// Various notes. This kind of diagnostics does not affect the game play at all but indicates
     /// possible incompatibilities or deprecated features.
     Note,
@@ -38,6 +41,7 @@ pub enum BmsMessage {
     BmsHasMultipleLNOBJs,
     BmsHasUnimplementedFlow,
 
+    BmsUsesLegacyEncoding,
     BmsHasFullWidthSharp,
     BmsHasNoARTIST,
     BmsHasEmptyARTIST,
@@ -60,6 +64,8 @@ pub enum BmsMessage {
     BmsHasIFWithoutWhitespace,
     BmsHasIFEND,
     BmsHasENDNotFollowedByIF,
+
+    BmsUsesEncoding(&'static str, f64),
 }
 
 impl BmsMessage {
@@ -98,6 +104,9 @@ impl BmsMessage {
                 (Warning, "#SWITCH and related flow commands are not yet implemented \
                            and may malfunction."),
 
+            BmsUsesLegacyEncoding =>
+                (Note, "The file is encoded in the legacy CJK encodings. \
+                        Their continued use is discouraged."),
             BmsHasFullWidthSharp =>
                 (Note, "# should be a half-width letter for the compatibility."),
             BmsHasNoARTIST =>
@@ -145,6 +154,8 @@ impl BmsMessage {
                 (Note, "#IFEND [sic] will be interpreted as #ENDIF."),
             BmsHasENDNotFollowedByIF =>
                 (Note, "#END not followed by IF will be interpreted as #ENDIF."),
+
+            BmsUsesEncoding(*) => (Internal, ""),
         }
     }
 

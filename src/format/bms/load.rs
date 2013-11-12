@@ -48,6 +48,8 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
                                 callback: &mut Listener) -> Result<Bms,~str> {
     use format::timeline::builder::{TimelineBuilder, Mark};
 
+    let mut encoding = ("ascii", 0.0);
+
     let mut title = None;
     let mut subtitles = ~[];
     let mut genre = None;
@@ -88,7 +90,21 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
     // command.
     let mut lnobj = None;
 
-    let mut callback_ = |line, msg| callback.on_message(line, msg);
+    let mut callback_ = |line, msg: BmsMessage| {
+        match msg {
+            // we intercept this internal diagnostic to set the relevant fields in `Bms`
+            BmsUsesEncoding(encname, confidence) => {
+                encoding = (encname, confidence);
+                if confidence > 1.0 || "ascii".equiv(&encname) || "utf-8".equiv(&encname) {
+                    true
+                } else {
+                    callback.on_message(line, BmsUsesLegacyEncoding)
+                }
+            },
+            msg => callback.on_message(line, msg),
+        }
+    };
+
     let mut ret = true;
     do parse::each_bms_command(f, r, &opts.parser, &mut callback_) |lineno, cmd| {
         macro_rules! diag(
@@ -442,9 +458,9 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
 
     let timeline = builder.build();
     Ok(Bms { bmspath: None,
-             meta: BmsMeta { title: title, subtitles: subtitles, genre: genre, artist: artist,
-                             subartists: subartists, comments: comments, stagefile: stagefile,
-                             banner: banner, basepath: basepath, mode: mode,
+             meta: BmsMeta { encoding: encoding, title: title, subtitles: subtitles, genre: genre,
+                             artist: artist, subartists: subartists, comments: comments,
+                             stagefile: stagefile, banner: banner, basepath: basepath, mode: mode,
                              playlevel: playlevel, difficulty: difficulty, rank: rank,
                              sndpath: sndpath, imgpath: imgpath, blitcmd: blitcmd },
              timeline: timeline })
