@@ -69,7 +69,7 @@ pub fn guess_decode_stream(f: @io::Reader) -> (~str, &'static Encoding, f64) {
     let first1k = s.slice_to(cmp::min(s.len(), 1024));
     let first1keol = first1k.iter().position(|&c| c == 0x0a).unwrap_or(first1k.len());
     let firstline = first1k.slice_to(first1keol);
-    if firstline.iter().any(|&c| c >= 0x80) && UTF_8.decode(s, Strict).is_ok() {
+    if firstline.iter().any(|&c| c >= 0x80) && UTF_8.decode(firstline, Strict).is_ok() {
         return (UTF_8.decode(s, Replace).unwrap(), UTF_8 as &'static Encoding, 1.0);
     }
 
