@@ -15,6 +15,7 @@ use util::gl::{Texture, ShadedDrawingTraits, TexturedDrawingTraits};
 use util::gfx::*;
 use util::bmfont::{LeftAligned, Centered, RightAligned};
 use util::filesearch::SearchContext;
+use util::console::{printerr, printerrln};
 use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
 use engine::resource::{SoundResource, LoadedSoundResource, NoSound};
@@ -331,26 +332,25 @@ impl TextualLoadingScene {
 impl Scene for TextualLoadingScene {
     fn activate(&mut self) -> SceneCommand {
         if self.context.opts.showinfo {
-            let err = ::std::io::stderr();
-            err.write_str(format!("\
+            printerr(format!("\
 ----------------------------------------------------------------------------------------------
 Title:    {title}", title = self.context.title));
             for subtitle in self.context.bms.meta.subtitles.iter() {
-                err.write_str(format!("
+                printerr(format!("
           {subtitle}", subtitle = *subtitle));
             }
-            err.write_str(format!("
+            printerr(format!("
 Genre:    {genre}
 Artist:   {artist}", genre = self.context.genre, artist = self.context.artist));
             for subartist in self.context.bms.meta.subartists.iter() {
-                err.write_str(format!("
+                printerr(format!("
           {subartist}", subartist = *subartist));
             }
             for comment in self.context.bms.meta.comments.iter() {
-                err.write_str(format!("
+                printerr(format!("
 \"{comment}\"", comment = *comment));
             }
-            err.write_line(format!("
+            printerrln(format!("
 {brief}
 ----------------------------------------------------------------------------------------------",
                 brief = self.context.brief));

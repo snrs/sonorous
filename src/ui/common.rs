@@ -6,8 +6,8 @@
 
 #[macro_escape];
 
-use std::io::stderr;
 use sdl::event;
+use util::console::{printerr, printerrln};
 
 /// Immediately terminates the program with given exit code.
 pub fn exit(exitcode: int) -> ! {
@@ -32,13 +32,13 @@ pub fn die(s: ~str) -> ! {
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(not(target_os = "win32"))]
 pub fn die(s: ~str) -> ! {
-    stderr().write_line(format!("{}: {}", ::exename(), s));
+    printerrln(format!("{}: {}", ::exename(), s));
     exit(1)
 }
 
 /// Prints an warning message. Internally used in the `warn!` macro below.
 pub fn warn(s: ~str) {
-    stderr().write_line(format!("*** Warning: {}", s));
+    printerrln(format!("*** Warning: {}", s));
 }
 
 // Exits with a formatted error message.
@@ -71,7 +71,7 @@ pub fn check_exit(atexit: &fn()) {
 /// Writes a line to the console without advancing to the next line. `s` should be short enough
 /// to be replaced (currently up to 72 bytes).
 pub fn update_line(s: &str) {
-    stderr().write_str(format!("\r{:72}\r{}", "", s));
+    printerr(format!("\r{:72}\r{}", "", s));
 }
 
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user

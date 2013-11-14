@@ -60,6 +60,7 @@ use self::util::std::option::*;
     pub mod opt_owned;
     pub mod envelope;
     pub mod chardet;
+    pub mod console;
 }
 pub mod ext {
     //! Bindings to external libraries or APIs.
@@ -120,7 +121,7 @@ pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
     let blk = |_lineno: uint, cmd: BmsCommand| {
         match cmd {
             BmsUnknown(*) => {}
-            cmd => { println(cmd.to_str()); }
+            cmd => { util::console::printoutln(cmd.to_str()); }
         }
         true
     };

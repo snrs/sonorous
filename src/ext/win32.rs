@@ -71,6 +71,7 @@ pub mod ll {
         pub fn FindNextFileA(hFindFile: HANDLE, lpFindFileData: *WIN32_FIND_DATAA) -> BOOL;
         pub fn FindClose(hFindFile: HANDLE) -> BOOL;
         pub fn LoadLibraryA(lpFileName: LPCSTR) -> HANDLE;
+        pub fn GetACP() -> c_uint;
     }
 
     #[link_args = "-luser32"]
