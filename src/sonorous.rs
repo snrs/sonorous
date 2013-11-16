@@ -61,6 +61,7 @@ use self::util::std::option::*;
     pub mod envelope;
     pub mod chardet;
     pub mod console;
+    pub mod md5;
 }
 pub mod ext {
     //! Bindings to external libraries or APIs.
