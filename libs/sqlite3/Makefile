@@ -5,7 +5,7 @@ LIB = libsqlite3.a
 
 AR ?= ar
 CC ?= gcc
-CFLAGS ?= -Os
+CFLAGS ?= -Os -fPIC
 
 .PHONY: all clean
 
