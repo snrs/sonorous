@@ -10,3 +10,6 @@
 [submodule "libs/rust-encoding"]
 	path = libs/rust-encoding
 	url = https://github.com/lifthrasiir/rust-encoding.git
+[submodule "libs/rustsqlite"]
+	path = libs/rustsqlite
+	url = https://github.com/linuxfood/rustsqlite.git

@@ -40,6 +40,7 @@ extern mod extra;
 extern mod sdl;
 extern mod opengles;
 extern mod encoding;
+extern mod sqlite;
 
 // see below for specifics.
 use self::util::std::str::*;
