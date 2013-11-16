@@ -442,10 +442,13 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
         }
     }
 
-    // convert shortens to objects and insert measure bars
-    shortens.grow_set(nmeasures, &1.0, 1.0); // so we always have a normal measure at the end
+    // convert shortens to objects and insert measure bars.
+    // since shortens are properties of the axis and not of the chart itself,
+    // it is possible that some shortens can be placed after the end of chart.
+    // therefore we ignore any shortens after the logical end of the chart.
+    shortens.grow(nmeasures + 1, &1.0); // we would have SetMeasureFactor up to nmeasures
     let mut prevfactor = 1.0;
-    for (measure, &factor) in shortens.iter().enumerate() {
+    for (measure, &factor) in shortens.slice_to(nmeasures + 1).iter().enumerate() {
         builder.add(measure as f64, MeasureBar);
         if prevfactor != factor {
             builder.add(measure as f64, SetMeasureFactor(factor));
