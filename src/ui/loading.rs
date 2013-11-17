@@ -17,6 +17,7 @@ use gfx::color::{Gradient, RGB, RGBA};
 use gfx::gl::Texture;
 use gfx::draw::{ShadedDrawingTraits, TexturedDrawingTraits};
 use gfx::bmfont::{LeftAligned, Centered, RightAligned};
+use gfx::screen::Screen;
 use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
 use engine::resource::{SoundResource, LoadedSoundResource, NoSound};
@@ -24,7 +25,6 @@ use engine::resource::{ImageResource, LoadedImageResource, NoImage, LoadedImage}
 use engine::resource::{SearchContextAdditions};
 use engine::player::Player;
 use ui::common::{update_line};
-use ui::screen::Screen;
 use ui::options::Options;
 use ui::init::{SCREENW, SCREENH};
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, ReplaceScene, Exit};

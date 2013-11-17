@@ -6,7 +6,7 @@
 
 use sdl::*;
 use engine::resource::{BGAW, BGAH, SAMPLERATE};
-use ui::screen::Screen;
+use gfx::screen::Screen;
 
 /// The width of screen, unless the exclusive mode.
 pub static SCREENW: uint = 800;

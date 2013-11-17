@@ -73,6 +73,7 @@ pub mod gfx {
     pub mod gl;
     pub mod draw;
     pub mod bmfont;
+    pub mod screen;
 }
 pub mod format {
     //! Data structures and operations for formats used by music video games.
@@ -93,7 +94,6 @@ pub mod engine {
     //! User interface. Most user interaction is implemented via the `Scene` interface.
     pub mod common;
     pub mod options;
-    pub mod screen;
     pub mod init;
     pub mod scene;
     pub mod selecting;

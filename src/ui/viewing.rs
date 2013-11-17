@@ -9,11 +9,11 @@ use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
 use format::obj::{ImageSlice, BlankBGA, ImageBGA, SlicedImageBGA};
 use gfx::gl::Texture;
 use gfx::draw::TexturedDrawingTraits;
+use gfx::screen::Screen;
 use engine::resource::{BGAW, BGAH};
 use engine::resource::{ImageResource, NoImage, Image, Movie};
 use engine::player::{BGAState, initial_bga_state, Player};
 use ui::common::{Ticker, update_line};
-use ui::screen::Screen;
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene};
 
 /// Similar to `BGAState` but also has a set of textures used to render the BGA.
