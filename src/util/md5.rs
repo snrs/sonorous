@@ -265,6 +265,13 @@ impl MD5 {
         MD5 { lo: 0, hi: 0, state: MD5State::new(), buffer: [0, ..64] }
     }
 
+    /// Creates a new MD5 state and immediately updates it with given buffer.
+    pub fn from_buffer(buf: &[u8]) -> MD5 {
+        let mut md5 = MD5::new();
+        md5.update(buf);
+        md5
+    }
+
     /// Feeds the state with a stream of bytes.
     pub fn update(&mut self, mut data: &[u8]) {
         let saved_lo = self.lo;
@@ -298,7 +305,7 @@ impl MD5 {
     }
 
     /// Returns a finished 16-byte digest.
-    fn final(self) -> [u8, ..16] {
+    pub fn final(self) -> [u8, ..16] {
         let mut ctx = self;
 
         let mut used = (ctx.lo & 0x3f) as uint;

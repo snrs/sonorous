@@ -168,3 +168,23 @@ pub struct Bms {
     timeline: BmsTimeline,
 }
 
+impl Bms {
+    /// Sets a path to the BMS file, which affects some metadata.
+    pub fn with_bmspath(self, bmspath: &Path) -> Bms {
+        let Bms { bmspath: bmspath0, meta, timeline } = self;
+        if bmspath0.is_some() {
+            Bms { bmspath: bmspath0, meta: meta, timeline: timeline }
+        } else {
+            let bmspath = bmspath.clone();
+            let mut meta = meta;
+            if meta.basepath.is_none() {
+                let basepath = bmspath.dir_path();
+                // Rust: `Path("")` is not same as `Path(".")` but `Path::dir_path` may produce it!
+                let basepath = if basepath == Path("") {Path(".")} else {basepath};
+                meta.basepath = Some(basepath);
+            }
+            Bms { bmspath: Some(bmspath), meta: meta, timeline: timeline }
+        }
+    }
+}
+

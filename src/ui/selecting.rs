@@ -4,7 +4,7 @@
 
 //! Song and pattern selection screen.
 
-use std::{cmp, os, comm, task, util};
+use std::{cmp, io, os, comm, task, util};
 use std::rand::{rng, Rng};
 use extra::arc::RWArc;
 
@@ -15,6 +15,7 @@ use format::bms;
 use format::bms::Bms;
 use util::filesearch::SearchContext;
 use util::envelope::Envelope;
+use util::md5::{MD5, ToHex};
 use gfx::color::{Color, RGB};
 use gfx::gl::{PreparedSurface, Texture};
 use gfx::draw::{ShadedDrawingTraits, TexturedDrawingTraits};
@@ -41,10 +42,11 @@ pub struct PreprocessedBms {
 
 /// Loads and preprocesses the BMS file from given options. Frontend routines should use this.
 pub fn preprocess_bms<R:Rng,Listener:bms::diag::BmsMessageListener>(
-                                bmspath: &Path, opts: @Options, r: &mut R,
+                                bmspath: &Path, f: @io::Reader, opts: @Options, r: &mut R,
                                 loaderopts: &bms::load::BmsLoaderOptions,
                                 callback: &mut Listener) -> Result<~PreprocessedBms,~str> {
-    let mut bms = earlyexit!(bms::load::load_bms(bmspath, r, loaderopts, callback));
+    let bms = earlyexit!(bms::load::load_bms(f, r, loaderopts, callback));
+    let mut bms = bms.with_bmspath(bmspath);
     let keyspec = earlyexit!(key_spec(&bms, opts.preset.clone(),
                                       opts.leftkeys.clone(), opts.rightkeys.clone()));
     keyspec.filter_timeline(&mut bms.timeline);
@@ -61,9 +63,13 @@ enum Message {
     PushFiles(~[Path]),
     /// The worker has finished scanning files.
     NoMoreFiles,
+    /// The worker has failed to read and/or load the BMS file. Error message follows.
+    BmsFailed(Path,~str),
+    /// The worker has read the BMS file and calculated its MD5 hash.
+    BmsHashRead(Path,[u8, ..16]),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
-    BmsLoaded(Path,Result<~PreprocessedBms,~str>,~[(Option<uint>,bms::diag::BmsMessage)]),
+    BmsLoaded(Path,~PreprocessedBms,~[(Option<uint>,bms::diag::BmsMessage)]),
     /// The worker has loaded the banner image (the second `~str`) for the BMS file (the first
     /// `Path`). This may be sent after `BmsLoaded` message. Due to the same reason as above
     /// the main task should ignore the message with non-current paths.
@@ -132,8 +138,8 @@ pub struct SelectingScene {
     opts: @Options,
     /// The root path of the scanner.
     root: Path,
-    /// A list of paths to loaded files.
-    files: ~[Path],
+    /// A list of paths to loaded files, and MD5 hashes of them if read.
+    files: ~[(Path, Option<[u8, ..16]>)],
     /// Set to true when the scanner finished scanning.
     filesdone: bool,
     /// The index of the topmost entry visible on the screen.
@@ -254,32 +260,58 @@ impl SelectingScene {
         let mut builder = worker_task(~"preloader");
         do builder.future_result |f| { future = Some(f); }
         do builder.spawn_with(opts) |opts| {
-            let mut r = rng();
-            let mut diags = ~[];
-            let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
-                diags.push((line, msg));
-            };
-            let loaderopts = opts.loader_options();
-            let result = preprocess_bms(&bmspath, @opts, &mut r, &loaderopts, &mut callback);
+            let opts = @opts;
 
-            let (banner, basepath) = match result {
-                Ok(ref preproc) =>
-                    (preproc.bms.meta.banner.clone(), preproc.bms.meta.basepath.clone()),
-                Err(_) => (None, None),
-            };
-            chan.send(BmsLoaded(bmspath.clone(), result, diags));
-
-            for bannerpath in banner.iter() {
+            let load_banner = |bannerpath: ~str, basepath: Option<Path>| {
                 let mut search = SearchContext::new();
                 let basedir = basepath.clone().unwrap_or(Path("."));
-                let fullpath = search.resolve_relative_path_for_image(*bannerpath, &basedir);
+                let fullpath = search.resolve_relative_path_for_image(bannerpath, &basedir);
                 let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
                 match res {
                     Ok(LoadedImage(surface)) => {
-                        chan.send(BmsBannerLoaded(bmspath.clone(), bannerpath.clone(),
+                        chan.send(BmsBannerLoaded(bmspath.clone(), bannerpath,
                                                   Envelope::new(surface)));
                     }
                     _ => {}
+                }
+            };
+
+            let load_with_reader = |f| {
+                let mut r = rng();
+                let mut diags = ~[];
+                let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
+                    diags.push((line, msg));
+                };
+
+                let loaderopts = opts.loader_options();
+                match preprocess_bms(&bmspath, f, opts, &mut r, &loaderopts, &mut callback) {
+                    Ok(preproc) => {
+                        let banner = preproc.bms.meta.banner.clone();
+                        let basepath = preproc.bms.meta.basepath.clone();
+                        chan.send(BmsLoaded(bmspath.clone(), preproc, diags));
+                        if banner.is_some() {
+                            load_banner(banner.unwrap(), basepath);
+                        }
+                    }
+                    Err(err) => {
+                        chan.send(BmsFailed(bmspath.clone(), err));
+                    }
+                }
+            };
+
+            match io::file_reader(&bmspath) {
+                Ok(f) => {
+                    let buf = f.read_whole_stream();
+                    let hash = MD5::from_buffer(buf).final();
+                    chan.send(BmsHashRead(bmspath.clone(), hash));
+
+                    // since we have read the file we don't want the parser to read it again.
+                    do io::with_bytes_reader(buf) |f| {
+                        load_with_reader(f);
+                    }
+                }
+                Err(err) => {
+                    chan.send(BmsFailed(bmspath.clone(), err));
                 }
             }
         }
@@ -288,7 +320,12 @@ impl SelectingScene {
 
     /// Returns a `Path` to the currently selected entry if any.
     pub fn current<'r>(&'r self) -> Option<&'r Path> {
-        if self.offset < self.files.len() {Some(&self.files[self.offset])} else {None}
+        if self.offset < self.files.len() {
+            let (ref path, _) = self.files[self.offset];
+            Some(path)
+        } else {
+            None
+        }
     }
 
     /// Checks if a given `Path` indeed points to the current entry.
@@ -324,9 +361,13 @@ impl SelectingScene {
                         Some(path) => path,
                         None => { return None; }
                     };
+                    let f = match io::file_reader(path) {
+                        Ok(f) => f,
+                        Err(err) => { warn!("{}", err); return None; }
+                    };
                     let mut r = rng();
                     let mut callback = |line, msg| print_diag(line, msg);
-                    let ret = preprocess_bms(path, self.opts, &mut r,
+                    let ret = preprocess_bms(path, f, self.opts, &mut r,
                                              &self.opts.loader_options(), &mut callback);
                     match ret {
                         Ok(preproc) => *preproc,
@@ -420,17 +461,25 @@ impl Scene for SelectingScene {
                     if self.files.is_empty() { // immediately preloads the first entry
                         self.preloaded = PreloadAfter(0);
                     }
-                    self.files.push_all_move(paths);
+                    for path in paths.move_iter() {
+                        self.files.push((path, None));
+                    }
                 }
                 NoMoreFiles => {
                     self.filesdone = true;
                 }
+                BmsFailed(bmspath,err) => {
+                    if !self.is_current(&bmspath) { loop; }
+                    self.preloaded = PreloadFailed(err);
+                }
+                BmsHashRead(bmspath,hash) => {
+                    if !self.is_current(&bmspath) { loop; }
+                    let (_, ref mut hash0) = self.files[self.offset];
+                    *hash0 = Some(hash);
+                }
                 BmsLoaded(bmspath,preproc,messages) => {
                     if !self.is_current(&bmspath) { loop; }
-                    self.preloaded = match preproc {
-                        Ok(preproc) => Preloaded(PreloadedData::new(preproc, messages)),
-                        Err(err) => PreloadFailed(err),
-                    };
+                    self.preloaded = Preloaded(PreloadedData::new(preproc, messages));
                 }
                 BmsBannerLoaded(bmspath,imgpath,prepared) => {
                     if !self.is_current(&bmspath) { loop; }
@@ -510,13 +559,16 @@ impl Scene for SelectingScene {
             let windowedfiles = self.files.slice(top, bottom);
 
             let mut y = 0.0;
-            for (i, path) in windowedfiles.iter().enumerate() {
+            for (i, &(ref path, ref hash)) in windowedfiles.iter().enumerate() {
                 let path = root.get_relative_to(&path.push("_"));
                 if self.scrolloffset + i == self.offset { // inverted
                     d.rect(10.0, y, SCREENW as f32, y + 20.0, WHITE);
                     d.string(12.0, y + 2.0, 1.0, LeftAligned, path.to_str(), BLACK);
                 } else {
                     d.string(12.0, y + 2.0, 1.0, LeftAligned, path.to_str(), WHITE);
+                }
+                for hash in hash.iter() {
+                    d.string(SCREENW as f32 - 4.0, y + 2.0, 1.0, RightAligned, hash.to_hex(), GRAY);
                 }
                 y += 20.0;
             }

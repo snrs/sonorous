@@ -143,7 +143,7 @@ pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop.
 pub fn play(bmspath: &Path, opts: @ui::options::Options) {
-    use std::{rand, os};
+    use std::{rand, io, os};
     use ui::init::{init_audio, init_video, init_joystick};
     use ui::scene::{Scene, run_scene};
     use ui::selecting::{preprocess_bms, PreprocessedBms, print_diag, SelectingScene};
@@ -170,11 +170,13 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
 
         // parses the file and sanitizes it
         let mut r = rand::rng();
-        let PreprocessedBms { bms, infos, keyspec } =
-            match preprocess_bms(bmspath, opts, &mut r, &opts.loader_options(), &mut callback) {
-                Ok(preproc) => *preproc,
-                Err(err) => die!("Couldn't load BMS file: {}", err)
-            };
+        let preproc = do io::file_reader(bmspath).and_then |f| {
+            preprocess_bms(bmspath, f, opts, &mut r, &opts.loader_options(), &mut callback)
+        };
+        let PreprocessedBms { bms, infos, keyspec } = match preproc {
+            Ok(preproc) => *preproc,
+            Err(err) => die!("Couldn't load BMS file: {}", err)
+        };
 
         if opts.debug_dumptimeline {
             bms.timeline.dump(std::io::stdout());

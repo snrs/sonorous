@@ -43,7 +43,7 @@ impl Ord for BmsLine {
 }
 
 /// Reads the BMS file with given RNG from given reader. Diagnostic messages are sent via callback.
-pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
+pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
                                 f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
                                 callback: &mut Listener) -> Result<Bms,~str> {
     use format::timeline::builder::{TimelineBuilder, Mark};
@@ -493,24 +493,5 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
                              playlevel: playlevel, difficulty: difficulty, rank: rank,
                              sndpath: sndpath, imgpath: imgpath },
              timeline: timeline })
-}
-
-/// Reads the BMS file with given RNG.
-pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
-                                bmspath: &Path, r: &mut R, opts: &BmsLoaderOptions,
-                                callback: &mut Listener) -> Result<Bms,~str> {
-    do io::file_reader(bmspath).and_then |f| {
-        do load_bms_from_reader(f, r, opts, callback).map_move |bms| {
-            let mut bms = bms;
-            bms.bmspath = Some(bmspath.clone());
-            if bms.meta.basepath.is_none() {
-                let basepath = bmspath.dir_path();
-                // Rust: `Path("")` is not same as `Path(".")` but `Path::dir_path` may produce it!
-                let basepath = if basepath == Path("") {Path(".")} else {basepath};
-                bms.meta.basepath = Some(basepath);
-            }
-            bms
-        }
-    }
 }
 
