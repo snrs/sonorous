@@ -54,9 +54,6 @@ use self::util::std::option::*;
     pub mod std;
     pub mod macros;
     pub mod lex;
-    pub mod gfx;
-    pub mod gl;
-    pub mod bmfont;
     pub mod filesearch;
     pub mod opt_owned;
     pub mod envelope;
@@ -68,6 +65,14 @@ pub mod ext {
     //! Bindings to external libraries or APIs.
     pub mod sdl;
     pub mod win32;
+}
+pub mod gfx {
+    //! Various graphics routines.
+    pub mod color;
+    pub mod surface;
+    pub mod gl;
+    pub mod draw;
+    pub mod bmfont;
 }
 pub mod format {
     //! Data structures and operations for formats used by music video games.

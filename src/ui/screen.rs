@@ -5,9 +5,9 @@
 //! Abstracted graphical screen.
 
 use sdl::video;
-use util::gl::{Buffer, Texture, ProgramForShades, ProgramForTextures,
-               ShadedDrawing, TexturedDrawing};
-use util::bmfont::{Font, FontDrawingUtils, ShadedFontDrawing};
+use gfx::gl::{Buffer, Texture};
+use gfx::draw::{ProgramForShades, ProgramForTextures, ShadedDrawing, TexturedDrawing};
+use gfx::bmfont::{Font, FontDrawingUtils, ShadedFontDrawing};
 use gl = opengles::gl2;
 
 #[cfg(target_os="win32")] use opengles::egl;

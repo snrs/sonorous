@@ -9,8 +9,8 @@
 //! Bitmap font.
 
 use std::iter;
-use util::gfx::*;
-use util::gl::{ShadedDrawing, ShadedDrawingTraits};
+use gfx::color::{Blend, to_rgba};
+use gfx::draw::{ShadedDrawing, ShadedDrawingTraits};
 use gl = opengles::gl2;
 
 /// Intrinsic width of the bitmap font.

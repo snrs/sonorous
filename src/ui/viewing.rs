@@ -7,7 +7,8 @@
 use ext::sdl::mpeg;
 use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
 use format::obj::{ImageSlice, BlankBGA, ImageBGA, SlicedImageBGA};
-use util::gl::{Texture, TexturedDrawingTraits};
+use gfx::gl::Texture;
+use gfx::draw::TexturedDrawingTraits;
 use engine::resource::{BGAW, BGAH};
 use engine::resource::{ImageResource, NoImage, Image, Movie};
 use engine::player::{BGAState, initial_bga_state, Player};

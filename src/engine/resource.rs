@@ -7,8 +7,8 @@
 use sdl::{img, video, mixer};
 use sdl::video::{Surface, RGB};
 use ext::sdl::mpeg;
-use util::gl::PreparedSurface;
 use util::filesearch::SearchContext;
+use gfx::gl::PreparedSurface;
 
 /// The width of BGA, or the width of screen for the exclusive mode.
 pub static BGAW: uint = 256;

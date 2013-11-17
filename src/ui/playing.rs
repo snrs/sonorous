@@ -7,9 +7,11 @@
 use std::{cmp, num, iter};
 
 use format::obj::*;
-use util::gl::{Texture, ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
-use util::gfx::*;
-use util::bmfont::{FontDrawingUtils, LeftAligned, Centered};
+use gfx::color::{Color, Gradient, RGB, RGBA, Blend};
+use gfx::surface::{Surface, SurfaceAreaUtil, SurfacePixelsUtil, new_surface};
+use gfx::gl::Texture;
+use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
+use gfx::bmfont::{FontDrawingUtils, LeftAligned, Centered};
 use engine::keyspec::*;
 use engine::resource::{BGAW, BGAH};
 use engine::resource::ImageResource;

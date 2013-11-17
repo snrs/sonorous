@@ -4,10 +4,10 @@
 
 //! Play result screen. Only used when the graphical `PlayingScene` finishes.
 
-use sdl::*;
-use util::gfx::*;
-use util::gl::ShadedDrawingTraits;
-use util::bmfont::{LeftAligned, Centered};
+use sdl::event;
+use gfx::color::{Color, RGB};
+use gfx::draw::ShadedDrawingTraits;
+use gfx::bmfont::{LeftAligned, Centered};
 use engine::player::Player;
 use engine::skin::ShadedFontDrawingAdditions;
 use ui::screen::Screen;

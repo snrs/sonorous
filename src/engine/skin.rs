@@ -4,8 +4,8 @@
 
 //! Skin-related facilities. For now it contains various utilities for rendering.
 
-use util::gfx::Blend;
-use util::bmfont::{NCOLUMNS, ShadedFontDrawing, Alignment, LeftAligned, Centered, RightAligned};
+use gfx::color::Blend;
+use gfx::bmfont::{NCOLUMNS, ShadedFontDrawing, Alignment, LeftAligned, Centered, RightAligned};
 
 /// Extensions to `ShadedFontDrawing`.
 pub trait ShadedFontDrawingAdditions {
