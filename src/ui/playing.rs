@@ -394,7 +394,7 @@ impl Scene for PlayingScene {
             for &(lane,style) in self.lanestyles.iter() {
                 if self.player.key_pressed(lane) { style.render_pressed_back(d); }
 
-                let front = do localbottom.find_next_of_type |&obj| {
+                let front = do localbottom.find_next_of_type |obj| {
                     obj.object_lane() == Some(lane) && obj.is_renderable()
                 };
                 if front.is_none() { loop; }

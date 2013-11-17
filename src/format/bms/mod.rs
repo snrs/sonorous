@@ -64,22 +64,6 @@ impl ToStr for ImageRef {
 /// Default BPM. This value comes from the original BMS specification.
 pub static DefaultBPM: BPM = BPM(130.0);
 
-/**
- * Blit commands, which manipulate the image after the image had been loaded. This maps to BMS
- * #BGA command.
- *
- * Blitting occurs from the region `(x1,y1)-(x2,y2)` in the source surface to the region
- * `(dx,dy)-(dx+(x2-x1),dy+(y2-y1))` in the destination surface. The rectangular region contains
- * the upper-left corner but not the lower-right corner. The region is clipped to make
- * the upper-left corner has non-negative coordinates and the size of the region doesn't exceed
- * 256 by 256 pixels.
- */
-#[deriving(Clone)]
-pub struct BlitCmd {
-    dst: ImageRef, src: ImageRef,
-    x1: int, y1: int, x2: int, y2: int, dx: int, dy: int
-}
-
 /// Play mode specified in the BMS file. This maps to BMS #PLAYER command. Over the course of
 /// the evolution of the BMS format, this value became highly ambiguous and the client is advised
 /// not to solely rely on this value.
@@ -163,8 +147,6 @@ pub struct BmsMeta {
     sndpath: ~[Option<~str>],
     /// Paths to image/movie file relative to `basepath` or BMS file.
     imgpath: ~[Option<~str>],
-    /// List of blit commands to be executed after `imgpath` is loaded.
-    blitcmd: ~[BlitCmd],
 }
 
 /// Timeline for the BMS file.

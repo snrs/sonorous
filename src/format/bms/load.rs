@@ -4,7 +4,7 @@
 
 //! BMS loader. Uses a BMS parser (`format::bms::parse`) to produce `format::bms::Bms` structure.
 
-use std::{vec, iter, io};
+use std::{vec, iter, io, cmp};
 use std::rand::Rng;
 
 use format::obj::*;
@@ -63,9 +63,10 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
     let mut playlevel = 0;
     let mut difficulty = None;
     let mut rank = 2;
+    let /*mut*/ canvassize = (256.0, 256.0);
     let mut sndpath = vec::from_elem(MAXKEY as uint, None);
     let mut imgpath = vec::from_elem(MAXKEY as uint, None);
-    let mut blitcmd = ~[];
+    let mut imgslices = vec::from_elem(MAXKEY as uint, None);
 
     // A builder for objects.
     let mut builder = TimelineBuilder::new();
@@ -206,7 +207,9 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
 
             parse::BmsWAV(Key(i), s) => { sndpath[i] = Some(s.into_owned()); }
             parse::BmsBMP(Key(i), s) => { imgpath[i] = Some(s.into_owned()); }
-            parse::BmsBGA(bc) => { blitcmd.push(bc); }
+            parse::BmsBGA(Key(i), Key(j), slice) => {
+                imgslices[i] = Some((ImageRef(Key(j)), slice));
+            }
 
             parse::BmsStop(Key(i), dur) => {
                 if dur.sign() < 0 {
@@ -260,6 +263,21 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
     if artist.is_none() { diag!(BmsHasNoARTIST); }
     if genre.is_none() { diag!(BmsHasNoGENRE); }
 
+    // clip the image slices if needed.
+    for slice in imgslices.mut_iter() {
+        match slice {
+            &Some((_, ref mut slice)) => {
+                slice.sx = cmp::max(slice.sx, 0.0);
+                slice.sy = cmp::max(slice.sy, 0.0);
+                slice.w = cmp::min(cmp::max(slice.w, 0.0), canvassize.n0());
+                slice.h = cmp::min(cmp::max(slice.h, 0.0), canvassize.n1());
+            }
+            &None => {}
+        }
+    }
+
+    // ----8<----
+
     // Poor BGA defined by #BMP00 wouldn't be played if it is a movie. We can't just let it
     // played at the beginning of the chart as the "beginning" is not always 0.0 (actually,
     // `originoffset`). Thus we add an artificial BGA object at time 0.0 only when the other
@@ -275,6 +293,15 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
     // during parsing; if off (#LNTYPE 1), it is solely used for checking if we are inside
     // the LN or not.
     let mut lastln: [Option<Mark>, ..NLANES] = [None, ..NLANES];
+
+    // Replaces the reference to #BGA/#@BGA keys into a pair of the reference to #BMP keys
+    // and corresponding `ImageSlice`, if possible.
+    let imgref_to_bgaref = |iref: ImageRef| -> BGARef<ImageRef> {
+        match imgslices[**iref] {
+            Some((iref, ref slice)) => SlicedImageBGA(iref.clone(), ~slice.clone()),
+            None => ImageBGA(iref),
+        }
+    };
 
     // Handles a non-00 alphanumeric key `v` positioned at the particular channel `chan` and
     // particular position `t`. The position `t2` next to `t` is used for some cases that
@@ -294,16 +321,16 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
             }
 
             // channel #04: BGA layer 1
-            4 => { builder.add(t, SetBGA(Layer1, Some(ImageRef(v)))); }
+            4 => { builder.add(t, SetBGA(Layer1, imgref_to_bgaref(ImageRef(v)))); }
 
             // channel #06: POOR BGA
             6 => {
-                builder.add(t, SetBGA(PoorBGA, Some(ImageRef(v))));
+                builder.add(t, SetBGA(PoorBGA, imgref_to_bgaref(ImageRef(v))));
                 poorbgafix = false; // we don't add artificial BGA
             }
 
             // channel #07: BGA layer 2
-            7 => { builder.add(t, SetBGA(Layer2, Some(ImageRef(v)))); }
+            7 => { builder.add(t, SetBGA(Layer2, imgref_to_bgaref(ImageRef(v)))); }
 
             // channel #08: BPM defined by #BPMxx
             8 => { builder.add(t, SetBPM(bpmtab[*v])); }
@@ -312,7 +339,7 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
             9 => { builder.add(t, Stop(stoptab[*v])); }
 
             // channel #0A: BGA layer 3
-            10 => { builder.add(t, SetBGA(Layer3, Some(ImageRef(v)))); }
+            10 => { builder.add(t, SetBGA(Layer3, imgref_to_bgaref(ImageRef(v)))); }
 
             // channels #1x/2x: visible object, possibly LNs when #LNOBJ is in active
             36/*1*36*/..107/*3*36-1*/ => {
@@ -430,7 +457,7 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
 
     // insert an artificial `SetBGA` object at 0.0 if required
     if poorbgafix {
-        builder.add(0.0, SetBGA(PoorBGA, Some(ImageRef(Key(0)))));
+        builder.add(0.0, SetBGA(PoorBGA, imgref_to_bgaref(ImageRef(Key(0)))));
     }
 
     // fix the unterminated longnote
@@ -465,7 +492,7 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
                              artist: artist, subartists: subartists, comments: comments,
                              stagefile: stagefile, banner: banner, basepath: basepath, mode: mode,
                              playlevel: playlevel, difficulty: difficulty, rank: rank,
-                             sndpath: sndpath, imgpath: imgpath, blitcmd: blitcmd },
+                             sndpath: sndpath, imgpath: imgpath },
              timeline: timeline })
 }
 

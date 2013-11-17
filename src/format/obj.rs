@@ -71,6 +71,40 @@ impl Duration {
 #[deriving(Eq,ToStr,Clone)]
 pub enum Damage { GaugeDamage(f64), InstantDeath }
 
+/**
+ * A slice of the image. BMS #BGA command can override the existing #BMP command with this slice.
+ *
+ * Blitting occurs from the region `(sx,sy)-(sx+w,sy+h)` in the source surface to the region
+ * `(dx,dy)-(dx+w,dy+h)` in the screen. The rectangular region contains the upper-left corner
+ * but not the lower-right corner. The region is clipped to make the upper-left corner has
+ * non-negative coordinates and the size of the region doesn't exceed the canvas dimension.
+ */
+#[deriving(Eq,ToStr,Clone)]
+pub struct ImageSlice {
+    sx: f32, sy: f32, dx: f32, dy: f32, w: f32, h: f32,
+}
+
+/// A reference to the BGA target, i.e. something that can be displayed in a single BGA layer.
+#[deriving(Eq,ToStr,Clone)]
+pub enum BGARef<ImageRef> {
+    /// Fully transparent image.
+    BlankBGA,
+    /// Static image.
+    ImageBGA(ImageRef),
+    /// A portion of static image.
+    SlicedImageBGA(ImageRef, ~ImageSlice),
+}
+
+impl<I> BGARef<I> {
+    /// Returns a reference to the underlying image resource if any.
+    pub fn as_image_ref<'r>(&'r self) -> Option<&'r I> {
+        match *self {
+            BlankBGA => None,
+            ImageBGA(ref iref) | SlicedImageBGA(ref iref, _) => Some(iref)
+        }
+    }
+}
+
 /// A data for objects (or object-like effects). Does not include the time information.
 #[deriving(Eq,Clone)]
 pub enum ObjData<SoundRef,ImageRef> {
@@ -93,14 +127,14 @@ pub enum ObjData<SoundRef,ImageRef> {
     /// Plays associated sound.
     BGM(SoundRef),
     /**
-     * Sets the virtual BGA layer to given image. The layer itself may not be displayed
-     * depending on the current game status.
+     * Sets the virtual BGA layer to given image (or anything available in `BGA`).
+     * The layer itself may not be displayed depending on the current game status.
      *
      * If the reference points to a movie, the movie starts playing; if the other layer had
      * the same movie started, it rewinds to the beginning. The resulting image from the movie
      * can be shared among multiple layers.
      */
-    SetBGA(BGALayer, Option<ImageRef>),
+    SetBGA(BGALayer, BGARef<ImageRef>),
     /// Sets the BPM. Negative BPM causes the chart scrolls backwards. Zero BPM causes the chart
     /// immediately terminates. In both cases, the chart is considered unfinished if there are
     /// remaining gradable objects.
@@ -150,8 +184,13 @@ impl<S:ToStr,I:ToStr> ToStr for ObjData<S,I> {
                                           damage.to_str()),
             BGM(ref sref) =>
                 format!("BGM({})", sref.to_str()),
-            SetBGA(layer,ref iref) =>
-                format!("SetBGA({},{})", layer.to_str(), to_str_or_default(iref, "--")),
+            SetBGA(layer,BlankBGA) =>
+                format!("SetBGA({},--)", layer.to_str()),
+            SetBGA(layer,ImageBGA(ref iref)) =>
+                format!("SetBGA({},{})", layer.to_str(), iref.to_str()),
+            SetBGA(layer,SlicedImageBGA(ref iref,~ImageSlice{sx,sy,dx,dy,w,h})) =>
+                format!("SetBGA({},{}:{}+{}+{}x{}:{}+{}+{}x{})",
+                        layer.to_str(), iref.to_str(), sx, sy, w, h, dx, dy, w, h),
             SetBPM(BPM(bpm)) =>
                 format!("SetBPM({})", bpm),
             Stop(Seconds(secs)) =>
@@ -386,7 +425,11 @@ impl<S:Clone,I:Clone,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
     }
 
     fn images(&self) -> ~[I] {
-        match self.to_obj_data() { SetBGA(_,Some(ref iref)) => ~[iref.clone()], _ => ~[] }
+        match self.to_obj_data() {
+            SetBGA(_,ImageBGA(ref iref)) |
+            SetBGA(_,SlicedImageBGA(ref iref,_)) => ~[iref.clone()],
+            _ => ~[]
+        }
     }
 
     fn through_damage(&self) -> Option<Damage> {

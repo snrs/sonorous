@@ -9,11 +9,10 @@ use std::rand::Rng;
 use encoding::Encoding;
 
 use util::opt_owned::{OptOwnedStr, IntoOptOwnedStr};
-use format::obj::{BPM, Duration, Seconds, Measures};
+use format::obj::{BPM, Duration, Seconds, Measures, ImageSlice};
 use format::bms::types::{Key};
 use format::bms::diag::*;
 use format::bms::encoding::{decode_stream, guess_decode_stream};
-use format::bms::{ImageRef, BlitCmd};
 
 /// A tuple of four `u8` values. Mainly used for BMS #ARGB command and its family.
 pub type ARGB = (u8,u8,u8,u8);
@@ -70,7 +69,7 @@ pub enum BmsCommand<'self> {
     BmsBMP(Key, OptOwnedStr<'self>),            // #BMP
     BmsExBMP(Key, ARGB, OptOwnedStr<'self>),    // #EXBMP
     BmsBackBMP(OptOwnedStr<'self>),             // #BACKBMP
-    BmsBGA(BlitCmd),                            // #BGA or #@BGA
+    BmsBGA(Key, Key, ImageSlice),               // #BGA or #@BGA
     BmsPoorBGA(int),                            // #POORBGA
     BmsSwBGA(Key, int, int, Key, bool, ARGB, OptOwnedStr<'self>), // #SWBGA
     BmsARGB(Key, ARGB),                         // #ARGB
@@ -123,7 +122,7 @@ impl<'self> BmsCommand<'self> {
             BmsBMP(key, s) => BmsBMP(key, s.into_send()),
             BmsExBMP(key, argb, s) => BmsExBMP(key, argb, s.into_send()),
             BmsBackBMP(s) => BmsBackBMP(s.into_send()),
-            BmsBGA(blitcmd) => BmsBGA(blitcmd),
+            BmsBGA(dst, src, slice) => BmsBGA(dst, src, slice),
             BmsPoorBGA(poorbga) => BmsPoorBGA(poorbga),
             BmsSwBGA(key, fr, time, line, doloop, argb, pattern) =>
                 BmsSwBGA(key, fr, time, line, doloop, argb, pattern.into_send()),
@@ -204,9 +203,9 @@ impl<'self> ToStr for BmsCommand<'self> {
             BmsExBMP(key, argb, ref s) =>
                 format!("\\#EXBMP{} {} {}", key.to_str(), argb_to_str(argb), *s),
             BmsBackBMP(ref s) => format!("\\#BACKBMP {}", *s),
-            BmsBGA(BlitCmd { dst, src, x1, y1, x2, y2, dx, dy }) =>
+            BmsBGA(dst, src, ImageSlice { sx, sy, dx, dy, w, h }) =>
                 format!("\\#BGA{} {} {} {} {} {} {} {}",
-                     dst.to_str(), src.to_str(), x1, y1, x2, y2, dx, dy),
+                     dst.to_str(), src.to_str(), sx, sy, sx + w, sy + h, dx, dy),
             BmsPoorBGA(poorbga) => format!("\\#POORBGA {}", poorbga),
             BmsSwBGA(key, fr, time, line, doloop, argb, ref pattern) =>
                 format!("\\#SWBGA{} {}:{}:{}:{}:{} {}",
@@ -559,30 +558,26 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
         })
 
         if_prefix!("BGA" |line| { // #BGAxx yy <int> <int> <int> <int> <int> <int>
-            let mut dst = Key(0);
-            let mut src = Key(0);
-            let mut bc = BlitCmd { dst: ImageRef(Key(0)), src: ImageRef(Key(0)),
-                                   x1: 0, y1: 0, x2: 0, y2: 0, dx: 0, dy: 0 };
-            if lex!(line; Key -> dst, ws, Key -> src, ws, int -> bc.x1, ws, int -> bc.y1, ws,
-                    int -> bc.x2, ws, int -> bc.y2, ws, int -> bc.dx, ws, int -> bc.dy) {
-                bc.src = ImageRef(src);
-                bc.dst = ImageRef(dst);
-                emit!(BmsBGA(bc));
+            let mut src = Key(0); let mut x1 = 0; let mut y1 = 0; let mut x2 = 0; let mut y2 = 0;
+            let mut dst = Key(0); let mut dx = 0; let mut dy = 0;
+            if lex!(line; Key -> dst, ws, Key -> src, ws, int -> x1, ws, int -> y1, ws,
+                    int -> x2, ws, int -> y2, ws, int -> dx, ws, int -> dy) {
+                let slice = ImageSlice { sx: x1 as f32, sy: y1 as f32,
+                                         dx: dx as f32, dy: dy as f32,
+                                         w: (x2 - x1) as f32, h: (y2 - y1) as f32 };
+                emit!(BmsBGA(dst, src, slice));
             }
         })
 
         if_prefix!("@BGA" |line| { // #@BGAxx yy <int> <int> <int> <int> <int> <int>
-            let mut dst = Key(0);
-            let mut src = Key(0);
-            let mut bc = BlitCmd { dst: ImageRef(Key(0)), src: ImageRef(Key(0)),
-                                   x1: 0, y1: 0, x2: 0, y2: 0, dx: 0, dy: 0 };
-            if lex!(line; Key -> dst, ws, Key -> src, ws, int -> bc.x1, ws, int -> bc.y1, ws,
-                    int -> bc.x2, ws, int -> bc.y2, ws, int -> bc.dx, ws, int -> bc.dy) {
-                bc.src = ImageRef(src);
-                bc.dst = ImageRef(dst);
-                bc.x2 += bc.x1;
-                bc.y2 += bc.y1;
-                emit!(BmsBGA(bc));
+            let mut src = Key(0); let mut sx = 0; let mut sy = 0; let mut w = 0; let mut h = 0;
+            let mut dst = Key(0); let mut dx = 0; let mut dy = 0;
+            if lex!(line; Key -> dst, ws, Key -> src, ws, int -> sx, ws, int -> sy, ws,
+                    int -> w, ws, int -> h, ws, int -> dx, ws, int -> dy) {
+                let slice = ImageSlice { sx: sx as f32, sy: sy as f32,
+                                         dx: dx as f32, dy: dy as f32,
+                                         w: w as f32, h: h as f32 };
+                emit!(BmsBGA(dst, src, slice));
             }
         })
 

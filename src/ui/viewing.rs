@@ -6,6 +6,7 @@
 
 use ext::sdl::mpeg;
 use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
+use format::obj::{ImageSlice, BlankBGA, ImageBGA, SlicedImageBGA};
 use util::gl::{Texture, TexturedDrawingTraits};
 use engine::resource::{BGAW, BGAH};
 use engine::resource::{ImageResource, NoImage, Image, Movie};
@@ -49,12 +50,12 @@ impl BGARenderState {
     /// Creates an initial state and textures.
     pub fn new(imgres: &[ImageResource]) -> BGARenderState {
         let state = initial_bga_state();
-        let textures = do state.map |&iref| {
+        let textures = do state.map |iref| {
             let texture = match Texture::new(BGAW, BGAH) {
                 Ok(texture) => texture,
                 Err(err) => die!("Texture::new failed: {}", err)
             };
-            for &iref in iref.iter() {
+            for &iref in iref.as_image_ref().move_iter() {
                 imgres[**iref].upload_to_texture(&texture);
             }
             texture
@@ -69,31 +70,40 @@ impl BGARenderState {
             // TODO this design can't handle the case that a BGA layer is updated to the same
             // image reference, which should rewind the movie playback.
             if self.state[layer] != current[layer] {
-                for &iref in self.state[layer].iter() {
-                    imgres[**iref].stop_movie();
+                for &iref in self.state[layer].as_image_ref().move_iter() {
+                    imgres[**iref].stop_animating();
                 }
-                for &iref in current[layer].iter() {
-                    imgres[**iref].start_movie();
+                for &iref in current[layer].as_image_ref().move_iter() {
+                    imgres[**iref].start_animating();
                     imgres[**iref].upload_to_texture(&self.textures[layer]);
                 }
             } else {
-                for &iref in self.state[layer].iter() {
+                for &iref in self.state[layer].as_image_ref().move_iter() {
                     if imgres[**iref].should_always_upload() {
                         imgres[**iref].upload_to_texture(&self.textures[layer]);
                     }
                 }
             }
+            self.state[layer] = current[layer].clone();
         }
-        self.state = *current;
     }
 
     /// Renders the image resources for the specified layers to the specified region of `screen`.
     pub fn render(&self, screen: &Screen, layers: &[BGALayer], x: f32, y: f32, w: f32, h: f32) {
         // the BGA area should have been already filled to black.
         for &layer in layers.iter() {
-            if self.state[layer as uint].is_some() {
-                do screen.draw_textured(&self.textures[layer as uint]) |d| {
-                    d.rect(x, y, x + w, y + h);
+            match self.state[layer as uint] {
+                BlankBGA => {}
+                ImageBGA(_) => {
+                    do screen.draw_textured(&self.textures[layer as uint]) |d| {
+                        d.rect(x, y, x + w, y + h);
+                    }
+                }
+                SlicedImageBGA(_, ~ImageSlice { sx, sy, dx, dy, w: sw, h: sh }) => {
+                    let (dx, dy, dw, dh) = (x + dx, y + dy, sw / 256.0 * w, sh / 256.0 * h);
+                    do screen.draw_textured(&self.textures[layer as uint]) |d| {
+                        d.rect_area(dx, dy, dx + dw, dy + dh, sx, sy, sx + sw, sy + sh);
+                    }
                 }
             }
         }

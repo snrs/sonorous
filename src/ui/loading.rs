@@ -20,7 +20,7 @@ use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
 use engine::resource::{SoundResource, LoadedSoundResource, NoSound};
 use engine::resource::{ImageResource, LoadedImageResource, NoImage, LoadedImage};
-use engine::resource::{SearchContextAdditions, apply_blitcmd};
+use engine::resource::{SearchContextAdditions};
 use engine::player::Player;
 use ui::common::{update_line};
 use ui::screen::Screen;
@@ -195,21 +195,9 @@ impl LoadingContext {
 
     /// Returns completely loaded `Player` and `ImageResource`s.
     pub fn to_player(self) -> (Player,~[ImageResource]) {
-        let LoadingContext {
-            opts: opts, bms: bms, infos: infos, keyspec: keyspec, keymap: keymap,
-            message: _, search: _, jobs: jobs, ntotaljobs: _,
-            basedir: _, stagefile: _, sndres: sndres, imgres: imgres,
-            brief: _, title: _, genre: _, artist: _
-        } = self;
+        let LoadingContext { opts, bms, infos, keyspec, keymap, jobs, sndres, imgres, _ } = self;
         assert!(jobs.is_empty());
-
-        let mut imgres = imgres;
-        for bc in bms.meta.blitcmd.iter() {
-            apply_blitcmd(imgres, bc);
-        }
-
-        let player = Player::new(opts, bms, infos, keyspec, keymap, sndres);
-        (player, imgres)
+        (Player::new(opts, bms, infos, keyspec, keymap, sndres), imgres)
     }
 }
 
@@ -302,8 +290,7 @@ impl Scene for LoadingScene {
     fn deactivate(&mut self) {}
 
     fn consume(~self) -> ~Scene: {
-        // Rust: do not destruct owned box in 0.7, it is seriously broken.
-        let LoadingScene { context: context, screen: screen, waituntil: _ } = *self;
+        let LoadingScene { context, screen, _ } = *self;
         let (player, imgres) = context.to_player();
         match PlayingScene::new(player, screen, imgres) {
             Ok(scene) => scene as ~Scene:,
@@ -386,8 +373,7 @@ Artist:   {artist}", genre = self.context.genre, artist = self.context.artist));
     }
 
     fn consume(~self) -> ~Scene: {
-        // Rust: do not destruct owned box in 0.7, it is seriously broken.
-        let TextualLoadingScene { context: context, screen: screen } = *self;
+        let TextualLoadingScene { context, screen } = *self;
         let (player, imgres) = context.to_player();
         match screen {
             Some(screen) => ViewingScene::new(screen, imgres, player) as ~Scene:,

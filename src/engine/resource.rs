@@ -4,12 +4,9 @@
 
 //! Resource management.
 
-use std::cmp;
 use sdl::{img, video, mixer};
 use sdl::video::{Surface, RGB};
 use ext::sdl::mpeg;
-use format::bms::BlitCmd;
-use util::gfx::SurfaceAreaUtil;
 use util::gl::PreparedSurface;
 use util::filesearch::SearchContext;
 
@@ -131,7 +128,7 @@ pub enum ImageResource {
     /// handled by `LoadedImageResource::new`.
     Image(@PreparedSurface), // XXX borrowck
     /// A movie is associated. A playback starts when `start_movie` method is called, and stops
-    /// when `stop_movie` is called. An associated surface is updated from the separate thread
+    /// when `stop_animating` is called. An associated surface is updated from the separate thread
     /// during the playback.
     Movie(@PreparedSurface, @~mpeg::MPEG) // XXX borrowck
 }
@@ -145,17 +142,17 @@ impl ImageResource {
         }
     }
 
-    /// Stops the movie playback if possible.
-    pub fn stop_movie(&self) {
+    /// Stops the animation/movie playback if possible.
+    pub fn stop_animating(&self) {
         match *self {
             NoImage | Image(_) => {}
             Movie(_,mpeg) => { mpeg.stop(); }
         }
     }
 
-    /// Starts (or restarts, if the movie was already being played) the movie playback
+    /// Starts (or restarts, if the movie was already being played) the animation/movie playback
     /// if possible.
-    pub fn start_movie(&self) {
+    pub fn start_animating(&self) {
         match *self {
             NoImage | Image(_) => {}
             Movie(_,mpeg) => { mpeg.rewind(); mpeg.play(); }
@@ -220,33 +217,5 @@ impl LoadedImageResource {
             LoadedMovie(surface, mpeg) => Movie(@surface, @mpeg)
         }
     }
-}
-
-/// Applies the blit command to given list of image resources.
-pub fn apply_blitcmd(imgres: &mut [ImageResource], bc: &BlitCmd) {
-    let origin: @PreparedSurface = match imgres[**bc.src] {
-        Image(src) => src,
-        _ => { return; }
-    };
-    let target: @PreparedSurface = match imgres[**bc.dst] {
-        Image(dst) => dst,
-        NoImage => {
-            let surface = match PreparedSurface::new(BGAW, BGAH, false) {
-                Ok(surface) => @surface,
-                Err(err) => fail!(format!("PreparedSurface::new failed: {}", err))
-            };
-            surface.fill(RGB(0, 0, 0));
-            surface.set_color_key([video::SrcColorKey, video::RLEAccel], RGB(0, 0, 0));
-            imgres[**bc.dst] = Image(surface);
-            surface
-        },
-        _ => { return; }
-    };
-
-    let x1 = cmp::max(bc.x1, 0);
-    let y1 = cmp::max(bc.y1, 0);
-    let x2 = cmp::min(bc.x2, bc.x1 + BGAW as int);
-    let y2 = cmp::min(bc.y2, bc.y1 + BGAH as int);
-    target.blit_area(**origin, (x1,y1), (bc.dx,bc.dy), (x2-x1,y2-y1));
 }
 

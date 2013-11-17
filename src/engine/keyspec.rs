@@ -205,7 +205,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
     use std::ascii::StrAsciiExt;
 
     let mut present = [false, ..NLANES];
-    for &obj in bms.timeline.objs.iter() {
+    for obj in bms.timeline.objs.iter() {
         let lane = obj.object_lane(); // XXX #3511
         for &Lane(lane) in lane.iter() {
             present[lane] = true;

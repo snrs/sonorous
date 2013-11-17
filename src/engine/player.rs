@@ -55,12 +55,12 @@ pub fn apply_modf<R:Rng>(bms: &mut Bms, modf: Modf, r: &mut R, keyspec: &KeySpec
 
 /// A list of image references displayed in BGA layers (henceforth the BGA state). Not all image
 /// referenced here is directly rendered, but the references themselves are kept.
-pub type BGAState = [Option<ImageRef>, ..NLAYERS];
+pub type BGAState = [BGARef<ImageRef>, ..NLAYERS];
 
 /// Returns the initial BGA state. Note that merely setting a particular layer doesn't start
 /// the movie playback; `poorbgafix` in `parser::parse` function handles it.
 pub fn initial_bga_state() -> BGAState {
-    [None, None, None, Some(ImageRef(Key(0)))]
+    [BlankBGA, BlankBGA, BlankBGA, ImageBGA(ImageRef(Key(0)))]
 }
 
 /// Grades. Sonorous performs the time-based grading as long as possible (it can go wrong when
@@ -260,7 +260,7 @@ impl Player {
     pub fn new(opts: @Options, bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec,
                keymap: ~KeyMap, sndres: ~[SoundResource]) -> Player {
         // we no longer need the full `Bms` structure.
-        let Bms { bmspath: _, meta: meta, timeline: timeline } = bms;
+        let Bms { meta, timeline, _ } = bms;
         let timeline = @timeline;
 
         let now = get_ticks();
@@ -460,8 +460,8 @@ impl Player {
                         BGM(sref) => {
                             self.play_sound_if_nonzero(sref, true);
                         }
-                        SetBGA(layer, iref) => {
-                            self.bga[layer as uint] = iref;
+                        SetBGA(layer, bgaref) => {
+                            self.bga[layer as uint] = bgaref;
                         }
                         SetBPM(newbpm) => {
                             self.bpm = newbpm;
@@ -571,7 +571,7 @@ impl Player {
                 // if LN grading is in progress and it is not within the threshold then
                 // MISS grade is issued
                 for &thru in thru[*lane].iter() {
-                    let nextlndone = do thru.find_next_of_type |&obj| {
+                    let nextlndone = do thru.find_next_of_type |obj| {
                         obj.object_lane() == Some(lane) && obj.is_lndone()
                     };
                     for &p in nextlndone.iter() {
@@ -589,7 +589,7 @@ impl Player {
             let process_press = |lane: Lane| {
                 // plays the closest key sound
                 let soundable =
-                    do cur.find_closest_of_type(VirtualTime) |&obj| {
+                    do cur.find_closest_of_type(VirtualTime) |obj| {
                         obj.object_lane() == Some(lane) && obj.is_soundable()
                     };
                 for &p in soundable.iter() {
@@ -601,7 +601,7 @@ impl Player {
 
                 // tries to grade the closest gradable object in the grading area
                 let gradable =
-                    do cur.find_closest_of_type(VirtualTime) |&obj| {
+                    do cur.find_closest_of_type(VirtualTime) |obj| {
                         obj.object_lane() == Some(lane) && obj.is_gradable()
                     };
                 for &p in gradable.iter() {
