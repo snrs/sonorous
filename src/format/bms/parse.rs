@@ -4,7 +4,7 @@
 
 //! BMS parser.
 
-use std::{io, iter, f64};
+use std::{io, iter, f64, char};
 use std::rand::Rng;
 use encoding::Encoding;
 
@@ -260,6 +260,15 @@ impl BmsParserOptions {
     }
 }
 
+/// Returns true if the character is treated as a whitespace for the purpose of parsing.
+///
+/// Includes the C0 whitespace (e.g. `\n`, handled in `char::is_whitespace`),
+/// the Zs/Zl/Zp category (also handled in `char::is_whitespace`),
+/// and a portion of the Cf category: U+0085 (NEL), U+FEFF (BOM).
+fn is_whitespace_or_similar(c: char) -> bool {
+    char::is_whitespace(c) || c == '\u0085' || c == '\ufeff'
+}
+
 /// Iterates over the parsed BMS commands, including flow commands.
 pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
                                 f: @io::Reader, opts: &BmsParserOptions, callback: &mut Listener,
@@ -295,7 +304,7 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
         )
 
         // skip non-command lines
-        let line = line.trim_left();
+        let line = line.trim_left_chars(&is_whitespace_or_similar);
         if line.is_empty() { loop; }
         let (ch, line) = line.slice_shift_char();
         if ch == '\uff03' {
