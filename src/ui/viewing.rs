@@ -69,7 +69,7 @@ impl BGARenderState {
         for layer in range(0, NLAYERS) {
             // TODO this design can't handle the case that a BGA layer is updated to the same
             // image reference, which should rewind the movie playback.
-            if self.state[layer] != current[layer] {
+            if self.state[layer].as_image_ref() != current[layer].as_image_ref() {
                 for &iref in self.state[layer].as_image_ref().move_iter() {
                     imgres[**iref].stop_animating();
                 }
