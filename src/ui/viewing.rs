@@ -91,19 +91,21 @@ impl BGARenderState {
 
     /// Renders the image resources for the specified layers to the specified region of `screen`.
     pub fn render(&self, screen: &Screen, layers: &[BGALayer], x: f32, y: f32, w: f32, h: f32) {
-        // the BGA area should have been already filled to black.
-        for &layer in layers.iter() {
-            match self.state[layer as uint] {
-                BlankBGA => {}
-                ImageBGA(_) => {
-                    do screen.draw_textured(&self.textures[layer as uint]) |d| {
-                        d.rect(x, y, x + w, y + h);
+        do screen.scissor(x.floor() as int, y.floor() as int, w.ceil() as uint, h.ceil() as uint) {
+            // the BGA area should have been already filled to black.
+            for &layer in layers.iter() {
+                match self.state[layer as uint] {
+                    BlankBGA => {}
+                    ImageBGA(_) => {
+                        do screen.draw_textured(&self.textures[layer as uint]) |d| {
+                            d.rect(x, y, x + w, y + h);
+                        }
                     }
-                }
-                SlicedImageBGA(_, ~ImageSlice { sx, sy, dx, dy, w: sw, h: sh }) => {
-                    let (dx, dy, dw, dh) = (x + dx, y + dy, sw / 256.0 * w, sh / 256.0 * h);
-                    do screen.draw_textured(&self.textures[layer as uint]) |d| {
-                        d.rect_area(dx, dy, dx + dw, dy + dh, sx, sy, sx + sw, sy + sh);
+                    SlicedImageBGA(_, ~ImageSlice { sx, sy, dx, dy, w: sw, h: sh }) => {
+                        let (dx, dy, dw, dh) = (x + dx, y + dy, sw / 256.0 * w, sh / 256.0 * h);
+                        do screen.draw_textured(&self.textures[layer as uint]) |d| {
+                            d.rect_area(dx, dy, dx + dw, dy + dh, sx, sy, sx + sw, sy + sh);
+                        }
                     }
                 }
             }

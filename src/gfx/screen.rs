@@ -13,6 +13,7 @@ use gfx::gl::{Buffer, Texture};
 use gfx::draw::{ProgramForShades, ProgramForTextures, ShadedDrawing, TexturedDrawing};
 use gfx::bmfont::{Font, FontDrawingUtils, ShadedFontDrawing};
 use gl = opengles::gl2;
+use opengles::gl2::{GLint, GLsizei};
 
 #[cfg(target_os="win32")] use opengles::egl;
 #[cfg(target_os="win32")] use ext::sdl::syswm;
@@ -203,6 +204,16 @@ impl Screen {
     /// Clears the whole screen.
     pub fn clear(&self) {
         gl::clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+    }
+
+    /// Sets the scissor box within given block.
+    /// Any draw operations inside the block will be clipped according to given scissor box.
+    pub fn scissor(&self, x: int, y: int, w: uint, h: uint, f: &fn()) {
+        assert!(!gl::is_enabled(gl::SCISSOR_TEST));
+        gl::enable(gl::SCISSOR_TEST);
+        gl::scissor(x as GLint, y as GLint, w as GLsizei, h as GLsizei);
+        f();
+        gl::disable(gl::SCISSOR_TEST);
     }
 
     /// Draws shaded primitives to the screen. The block receives a mutable reference to
