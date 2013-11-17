@@ -32,6 +32,8 @@
  * For the use in Sonorous, the following specifications have been added:
  *
  * - `Key [-> e2]`: Consumes a two-letter alphanumeric key and optionally saves it to `e2`.
+ * - `PartialKey [-> e2]`: Consumes an one- or two-letter alphanumeric key and saves it to `e2`.
+ *   Use `PartialKey::into_key` method in order to convert it to a proper alphanumeric key.
  * - `Measure [-> e2]`: Consumes exactly three digits and optionally saves it to `e2`.
  * - `ARGB [-> e2]`: Almost same as `uint [-> e2a], ',', uint [-> e2r], ',', uint [-> e2g], ',',
  *   uint [-> e2b]` but `e2` is a tuple of four `u8` values and overflows are considered an error.
@@ -129,6 +131,13 @@ macro_rules! lex(
             lex!(_line.slice_from(2u); $($tail)*)
         }
     });
+    ($e:expr; PartialKey -> $dst:expr, $($tail:tt)*) => ({
+        let _line: &str = $e;
+        do ::format::bms::types::PartialKey::from_str(_line).map_default(false) |&(_value, _line)| {
+            $dst = _value;
+            lex!(_line; $($tail)*)
+        }
+    });
     ($e:expr; Measure -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
         let _isdigit = |c| { '0' <= c && c <= '9' };
@@ -194,8 +203,12 @@ macro_rules! lex(
     });
     // start Sonorous-specific
     ($e:expr; Key, $($tail:tt)*) => ({
-        let mut _dummy: Key = Key(0);
+        let mut _dummy: Key = Key::dummy();
         lex!($e; Key -> _dummy, $($tail)*)
+    });
+    ($e:expr; PartialKey, $($tail:tt)*) => ({
+        let mut _dummy: PartialKey = PartialKey::dummy();
+        lex!($e; PartialKey -> _dummy, $($tail)*)
     });
     ($e:expr; Measure, $($tail:tt)*) => ({
         let mut _dummy: uint = 0;
@@ -222,6 +235,7 @@ macro_rules! lex(
     ($e:expr; char -> $dst:expr) => (lex!($e; char -> $dst, ));
     // start Sonorous-specific
     ($e:expr; Key -> $dst:expr) => (lex!($e; Key -> $dst, ));
+    ($e:expr; PartialKey -> $dst:expr) => (lex!($e; PartialKey -> $dst, ));
     ($e:expr; Measure -> $dst:expr) => (lex!($e; Measure -> $dst, ));
     ($e:expr; ARGB -> $dst:expr) => (lex!($e; ARGB -> $dst, ));
     // end Sonorous-specific
@@ -236,6 +250,7 @@ macro_rules! lex(
     ($e:expr; char) => (lex!($e; char, ));
     // start Sonorous-specific
     ($e:expr; Key) => (lex!($e; Key, ));
+    ($e:expr; PartialKey) => (lex!($e; PartialKey, ));
     ($e:expr; Measure) => (lex!($e; Measure, ));
     ($e:expr; ARGB) => (lex!($e; ARGB, ));
     // end Sonorous-specific

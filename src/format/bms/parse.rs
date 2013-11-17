@@ -10,7 +10,7 @@ use encoding::Encoding;
 
 use util::opt_owned::{OptOwnedStr, IntoOptOwnedStr};
 use format::obj::{BPM, Duration, Seconds, Measures, ImageSlice};
-use format::bms::types::{Key};
+use format::bms::types::{Key, PartialKey};
 use format::bms::diag::*;
 use format::bms::encoding::{decode_stream, guess_decode_stream};
 
@@ -302,6 +302,16 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
             )
         )
 
+        macro_rules! warn_on_partial_key(
+            ($e:expr) => ({
+                let key: PartialKey = $e;
+                if key.is_partial() {
+                    diag!(BmsHasOneDigitAlphanumericKey at lineno);
+                }
+                key.into_key()
+            })
+        )
+
         // skip non-command lines
         let line = line.trim_left_chars(&is_whitespace_or_similar);
         if line.is_empty() { loop; }
@@ -372,19 +382,17 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
                 })
             );
             ($prefix:tt key string -> $constr:expr) => (
-                if_prefix!($prefix |line| { // #<command>xx <string>
-                    let mut key = Key(-1);
+                if_prefix!($prefix |key, line| { // #<command>xx <string>
                     let mut text = "";
-                    if lex!(line; Key -> key, ws, str -> text, ws*, !) {
+                    if lex!(line; str -> text, ws*, !) {
                         emit!($constr(key, text.into_opt_owned_str()));
                     }
                 })
             );
             ($prefix:tt key string -> $constr:expr; $diag:expr) => (
-                if_prefix!($prefix |line| { // #<command>xx <string>
-                    let mut key = Key(-1);
+                if_prefix!($prefix |key, line| { // #<command>xx <string>
                     let mut text = "";
-                    if lex!(line; Key -> key, ws, str -> text, ws*, !) {
+                    if lex!(line; str -> text, ws*, !) {
                         diag!($diag at lineno);
                         emit!($constr(key, text.into_opt_owned_str()));
                     }
@@ -402,13 +410,30 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
                     emit!($constr);
                 }
             );
-            ($prefix:tt |$v:ident| $then:expr) => ({
+            ($prefix:tt |$v:ident| $then:expr) => ({ // #<command>...
                 let prefix: &'static str = tt_to_expr!($prefix);
                 if upperline.starts_with(prefix) {
                     let $v = line.slice_from(prefix.len());
                     let _ = $v; // removes warning
                     $then;
                     emit!(BmsUnknown($v.into_opt_owned_str())); // no more matching possible
+                }
+            });
+            ($prefix:tt |$k:ident, $v:ident| $then:expr) => ({ // #<command>xx ...
+                // Rust: we cannot write this via an existing `if_prefix!("..." |v| ...)` syntax??
+                let prefix: &'static str = tt_to_expr!($prefix);
+                if upperline.starts_with(prefix) {
+                    let line = line.slice_from(prefix.len());
+                    let mut key = PartialKey::dummy();
+                    let mut text = "";
+                    if lex!(line; PartialKey -> key, ws, str -> text, !) {
+                        let $k = warn_on_partial_key!(key);
+                        let $v = text;
+                        let _ = $k; // removes warning
+                        let _ = $v; // ditto
+                        $then;
+                    }
+                    emit!(BmsUnknown(line.into_opt_owned_str())); // no more matching possible
                 }
             })
         )
@@ -428,19 +453,19 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
         if_prefix!("PATH_WAV"  string -> BmsPathWAV)
 
         if_prefix!("BPM" |line| { // #BPM <float> or #BPMxx <float>
-            let mut key = Key(-1);
+            let mut key = PartialKey::dummy();
             let mut bpm = 0.0;
-            if lex!(line; Key -> key, ws, f64 -> bpm) {
+            if lex!(line; PartialKey -> key, ws, f64 -> bpm) {
+                let key = warn_on_partial_key!(key);
                 emit!(BmsExBPM(key, BPM(bpm)));
             } else if lex!(line; ws, f64 -> bpm) {
                 emit!(BmsBPM(BPM(bpm)));
             }
         })
 
-        if_prefix!("EXBPM" |line| { // #EXBPMxx <float>
-            let mut key = Key(-1);
+        if_prefix!("EXBPM" |key, line| { // #EXBPMxx <float>
             let mut bpm = 0.0;
-            if lex!(line; Key -> key, ws, f64 -> bpm) {
+            if lex!(line; f64 -> bpm) {
                 diag!(BmsHasEXBPM at lineno);
                 emit!(BmsExBPM(key, BPM(bpm)));
             }
@@ -455,16 +480,16 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
         if_prefix!("LNTYPE"     value -> BmsLNType)
 
         if_prefix!("LNOBJ" |line| { // #LNOBJ <key>
-            let mut key = Key(-1);
-            if lex!(line; ws, Key -> key) {
+            let mut key = PartialKey::dummy();
+            if lex!(line; ws, PartialKey -> key) {
+                let key = warn_on_partial_key!(key);
                 emit!(BmsLNObj(key));
             }
         })
 
-        if_prefix!("EXRANK" |line| { // #EXRANKxx <int>
-            let mut key = Key(-1);
+        if_prefix!("EXRANK" |key, line| { // #EXRANKxx <int>
             let mut value = 0;
-            if lex!(line; Key -> key, ws, int -> value) {
+            if lex!(line; int -> value) {
                 emit!(BmsExRank(key, value));
             }
         })
@@ -489,9 +514,10 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
 
         if_prefix!("WAVCMD" |line| { // #WAVCMD <int> xx <int>
             let mut cmd = 0;
-            let mut key = Key(0);
+            let mut key = PartialKey::dummy();
             let mut value = 0;
-            if lex!(line; ws, int -> cmd, ws, Key -> key, ws, int -> value) {
+            if lex!(line; ws, int -> cmd, ws, PartialKey -> key, ws, int -> value) {
+                let key = warn_on_partial_key!(key);
                 emit!(BmsWAVCmd(cmd, key, value));
             }
         })
@@ -500,47 +526,44 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
         if_prefix!("VOLWAV"    value -> BmsVolWAV)
         if_prefix!("MIDIFILE" string -> BmsMIDIFile)
 
-        if_prefix!("EXWAV" |line| { // #EXWAV [pvf] <int>* <string>
-            let mut key = Key(0);
-            let mut line_ = "";
-            if lex!(line; Key -> key, ws, str -> line_, !) {
-                match line_.find(|c: char| c.is_whitespace()) {
-                    Some(sep) => {
-                        let flags = line_.slice_to(sep);
-                        let mut pan = None;
-                        let mut vol = None;
-                        let mut freq = None;
+        if_prefix!("EXWAV" |key, line| { // #EXWAVxx [pvf] <int>* <string>
+            let mut line = line;
+            match line.find(|c: char| c.is_whitespace()) {
+                Some(sep) => {
+                    let flags = line.slice_to(sep);
+                    let mut pan = None;
+                    let mut vol = None;
+                    let mut freq = None;
 
-                        line_ = line_.slice_from(sep);
-                        let mut okay = true;
-                        for flag in flags.iter() {
-                            let mut value = 0;
-                            if !lex!(line_; ws, int -> value, str -> line_) { okay = false; break; }
-                            match flag {
-                                'p'|'P' => {
-                                    if pan.is_some() { okay = false; break; }
-                                    pan = Some(value);
-                                }
-                                'v'|'V' => {
-                                    if vol.is_some() { okay = false; break; }
-                                    vol = Some(value);
-                                }
-                                'f'|'F' => {
-                                    if freq.is_some() { okay = false; break; }
-                                    freq = Some(value);
-                                }
-                                _ => { okay = false; break; }
+                    line = line.slice_from(sep);
+                    let mut okay = true;
+                    for flag in flags.iter() {
+                        let mut value = 0;
+                        if !lex!(line; ws, int -> value, str -> line) { okay = false; break; }
+                        match flag {
+                            'p'|'P' => {
+                                if pan.is_some() { okay = false; break; }
+                                pan = Some(value);
                             }
-                        }
-                        if okay {
-                            let mut text = "";
-                            if lex!(line_; ws, str -> text, ws*, !) {
-                                emit!(BmsExWAV(key, pan, vol, freq, text.into_opt_owned_str()));
+                            'v'|'V' => {
+                                if vol.is_some() { okay = false; break; }
+                                vol = Some(value);
                             }
+                            'f'|'F' => {
+                                if freq.is_some() { okay = false; break; }
+                                freq = Some(value);
+                            }
+                            _ => { okay = false; break; }
                         }
                     }
-                    None => {}
+                    if okay {
+                        let mut text = "";
+                        if lex!(line; ws, str -> text, ws*, !) {
+                            emit!(BmsExWAV(key, pan, vol, freq, text.into_opt_owned_str()));
+                        }
+                    }
                 }
+                None => {}
             }
         })
 
@@ -548,20 +571,21 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
         if_prefix!("BACKBMP" string -> BmsBackBMP)
         if_prefix!("POORBGA"  value -> BmsPoorBGA)
 
-        if_prefix!("EXBMP" |line| { // #EXBMPxx <int8>,<int8>,<int8>,<int8> <string>
-            let mut key = Key(0);
+        if_prefix!("EXBMP" |key, line| { // #EXBMPxx <int8>,<int8>,<int8>,<int8> <string>
             let mut argb = (0,0,0,0);
             let mut text = "";
-            if lex!(line; Key -> key, ws, ARGB -> argb, ws, str -> text, ws*, !) {
+            if lex!(line; ARGB -> argb, ws, str -> text, ws*, !) {
                 emit!(BmsExBMP(key, argb, text.into_opt_owned_str()));
             }
         })
 
-        if_prefix!("BGA" |line| { // #BGAxx yy <int> <int> <int> <int> <int> <int>
-            let mut src = Key(0); let mut x1 = 0; let mut y1 = 0; let mut x2 = 0; let mut y2 = 0;
-            let mut dst = Key(0); let mut dx = 0; let mut dy = 0;
-            if lex!(line; Key -> dst, ws, Key -> src, ws, int -> x1, ws, int -> y1, ws,
+        if_prefix!("BGA" |dst, line| { // #BGAxx yy <int> <int> <int> <int> <int> <int>
+            let mut src = PartialKey::dummy();
+            let mut x1 = 0; let mut y1 = 0; let mut x2 = 0; let mut y2 = 0;
+            let mut dx = 0; let mut dy = 0;
+            if lex!(line; PartialKey -> src, ws, int -> x1, ws, int -> y1, ws,
                     int -> x2, ws, int -> y2, ws, int -> dx, ws, int -> dy) {
+                let src = warn_on_partial_key!(src);
                 let slice = ImageSlice { sx: x1 as f32, sy: y1 as f32,
                                          dx: dx as f32, dy: dy as f32,
                                          w: (x2 - x1) as f32, h: (y2 - y1) as f32 };
@@ -569,11 +593,13 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
             }
         })
 
-        if_prefix!("@BGA" |line| { // #@BGAxx yy <int> <int> <int> <int> <int> <int>
-            let mut src = Key(0); let mut sx = 0; let mut sy = 0; let mut w = 0; let mut h = 0;
-            let mut dst = Key(0); let mut dx = 0; let mut dy = 0;
-            if lex!(line; Key -> dst, ws, Key -> src, ws, int -> sx, ws, int -> sy, ws,
+        if_prefix!("@BGA" |dst, line| { // #@BGAxx yy <int> <int> <int> <int> <int> <int>
+            let mut src = PartialKey::dummy();
+            let mut sx = 0; let mut sy = 0; let mut w = 0; let mut h = 0;
+            let mut dx = 0; let mut dy = 0;
+            if lex!(line; PartialKey -> src, ws, int -> sx, ws, int -> sy, ws,
                     int -> w, ws, int -> h, ws, int -> dx, ws, int -> dy) {
+                let src = warn_on_partial_key!(src);
                 let slice = ImageSlice { sx: sx as f32, sy: sy as f32,
                                          dx: dx as f32, dy: dy as f32,
                                          w: w as f32, h: h as f32 };
@@ -581,17 +607,18 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
             }
         })
 
-        if_prefix!("SWBGA" |line| { // #SWBGAxx <int>:<int>:yy:<int>:<int8>,<int8>,<int8>,<int8> ...
-            let mut key = Key(0);
+        if_prefix!("SWBGA" |key, line| {
+            // #SWBGAxx <int>:<int>:yy:<int>:<int8>,<int8>,<int8>,<int8> ...
             let mut fr = 0;
             let mut time = 0;
-            let mut linekey = Key(0);
+            let mut linekey = PartialKey::dummy();
             let mut doloop = 0;
             let mut argb = (0,0,0,0);
             let mut pattern = "";
-            if lex!(line; Key -> key, ws, int -> fr, ws*, ':', ws*, int -> time, ws*, ':', ws*,
-                          Key -> linekey, ws*, ':', ws*, int -> doloop, ws*, ':', ws*,
+            if lex!(line; int -> fr, ws*, ':', ws*, int -> time, ws*, ':', ws*,
+                          PartialKey -> linekey, ws*, ':', ws*, int -> doloop, ws*, ':', ws*,
                           ARGB -> argb, ws, str -> pattern, ws*, !) {
+                let linekey = warn_on_partial_key!(linekey);
                 if doloop == 0 || doloop == 1 {
                     emit!(BmsSwBGA(key, fr, time, linekey, doloop == 1,
                                    argb, pattern.into_opt_owned_str()));
@@ -599,10 +626,9 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
             }
         })
 
-        if_prefix!("ARGB" |line| { // #ARGBxx <int8>,<int8>,<int8>,<int8>
-            let mut key = Key(0);
+        if_prefix!("ARGB" |key, line| { // #ARGBxx <int8>,<int8>,<int8>,<int8>
             let mut argb = (0,0,0,0);
-            if lex!(line; Key -> key, ws, ARGB -> argb) {
+            if lex!(line; ARGB -> argb) {
                 emit!(BmsARGB(key, argb));
             }
         })
@@ -619,10 +645,9 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
             }
         })
 
-        if_prefix!("STOP" |line| { // #STOPxx <int>
-            let mut key = Key(-1);
+        if_prefix!("STOP" |key, line| { // #STOPxx <int>
             let mut duration = 0;
-            if lex!(line; Key -> key, ws, int -> duration) {
+            if lex!(line; int -> duration) {
                 let duration = Measures(duration as f64 / 192.0);
                 emit!(BmsStop(key, duration));
             }
@@ -675,7 +700,7 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
         }
 
         let mut measure = 0;
-        let mut chan = Key(0);
+        let mut chan = Key::dummy();
         let mut data = "";
         if lex!(line; Measure -> measure, Key -> chan, ':', ws*, str -> data, ws*, !) {
             if chan == Key(2) { // #xxx02:<float>

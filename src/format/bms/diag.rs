@@ -43,6 +43,7 @@ pub enum BmsMessage {
 
     BmsUsesLegacyEncoding,
     BmsHasFullWidthSharp,
+    BmsHasOneDigitAlphanumericKey,
     BmsHasNoARTIST,
     BmsHasEmptyARTIST,
     BmsHasMultipleARTISTs,
@@ -109,6 +110,8 @@ impl BmsMessage {
                         Their continued use is discouraged."),
             BmsHasFullWidthSharp =>
                 (Note, "# should be a half-width letter for the compatibility."),
+            BmsHasOneDigitAlphanumericKey =>
+                (Note, "One-digit alphanumeric key is assumed to be prepended by 0 digit."),
             BmsHasNoARTIST =>
                 (Note, "#ARTIST is missing."),
             BmsHasEmptyARTIST =>

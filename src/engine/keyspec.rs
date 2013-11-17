@@ -156,7 +156,7 @@ pub fn parse_key_spec(s: &str) -> Option<~[(Lane, KeyKind)]> {
     let mut specs = ~[];
     let mut s = s.trim_left();
     while !s.is_empty() {
-        let mut chan = Key(0);
+        let mut chan = Key::dummy();
         let mut kind = '\x00';
         if !lex!(s; Key -> chan, char -> kind, ws*, str* -> s, !) {
             return None;

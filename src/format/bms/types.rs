@@ -9,11 +9,14 @@ use format::obj::Lane;
 
 /// Two-letter alphanumeric identifier used for virtually everything, including resource
 /// management, variable BPM and chart specification.
-#[deriving(Eq,Clone)]
+#[deriving(Eq,Ord,Clone)]
 pub struct Key(int);
 
 /// The number of all possible alphanumeric keys.
 pub static MAXKEY: int = 36*36;
+
+/// All base-36 digits.
+static BASE36_MAP: &'static [u8] = bytes!("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 
 /// Converts a single alphanumeric (base-36) letter to an integer.
 fn getdigit(n: char) -> Option<int> {
@@ -26,6 +29,11 @@ fn getdigit(n: char) -> Option<int> {
 }
 
 impl Key {
+    /// Returns a definitely invalid alphanumeric key.
+    pub fn dummy() -> Key {
+        Key(-1)
+    }
+
     /// Converts the first two letters of `s` to a `Key`.
     pub fn from_chars(s: &[char]) -> Option<Key> {
         if s.len() < 2 { return None; }
@@ -72,20 +80,96 @@ impl Key {
     }
 }
 
-impl Ord for Key {
-    // Rust: it is very easy to make an infinite recursion here.
-    fn lt(&self, other: &Key) -> bool { **self < **other }
-    fn le(&self, other: &Key) -> bool { **self <= **other }
-    fn ge(&self, other: &Key) -> bool { **self >= **other }
-    fn gt(&self, other: &Key) -> bool { **self > **other }
-}
-
 impl ToStr for Key {
     /// Returns a two-letter representation of alphanumeric key.
     fn to_str(&self) -> ~str {
         assert!(self.is_valid());
-        let map = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        format!("{}{}", map[**self / 36] as char, map[**self % 36] as char)
+        format!("{}{}", BASE36_MAP[**self / 36] as char, BASE36_MAP[**self % 36] as char)
+    }
+}
+
+/// Same as `Key` but accepts one-letter alphanumeric keys, encoded as a negative number
+/// from -1 (`0`) to -36 (`Z`) which is invalid in a plain `Key`.
+#[deriving(Eq,Ord,Clone)]
+pub struct PartialKey(int);
+
+impl PartialKey {
+    /// Returns a definitely invalid partial alphanumeric key.
+    pub fn dummy() -> PartialKey {
+        PartialKey(-37)
+    }
+
+    /// Converts the first one or two letters of `s` to a `PartialKey`.
+    /// Also returns a remaining portion of `s`.
+    pub fn from_chars<'r>(s: &'r [char]) -> Option<(PartialKey, &'r [char])> {
+        if s.len() < 1 { return None; }
+        do getdigit(s[0]).map |a| {
+            if s.len() < 2 {
+                (PartialKey(-a - 1), s.slice_from(1))
+            } else {
+                match getdigit(s[1]) {
+                    Some(b) => (PartialKey(a * 36 + b), s.slice_from(2)),
+                    None => (PartialKey(-a - 1), s.slice_from(1))
+                }
+            }
+        }
+    }
+
+    /// Converts the first one or two letters of `s` to a `PartialKey`.
+    /// Also returns a remaining portion of `s`.
+    pub fn from_str<'r>(s: &'r str) -> Option<(PartialKey, &'r str)> {
+        if s.len() < 1 { return None; }
+        let str::CharRange {ch:c1, next:p1} = s.char_range_at(0);
+        do getdigit(c1).map |a| {
+            assert!(p1 == 1); // c1 should be in ASCII
+            if s.len() < 2 { // do not advance
+                (PartialKey(-a - 1), s.slice_from(p1))
+            } else {
+                let str::CharRange {ch:c2, next:p2} = s.char_range_at(p1);
+                match getdigit(c2) {
+                    Some(b) => {
+                        assert!(p2 == 2); // both characters should be in ASCII
+                        (PartialKey(a * 36 + b), s.slice_from(p2))
+                    },
+                    None => (PartialKey(-a - 1), s.slice_from(p1))
+                }
+            }
+        }
+    }
+
+    /// Returns if the alphanumeric key is in the proper range.
+    /// In addition to `Key`s 00-ZZ (0 to 1295), `PartialKey` supports 0-Z (-1 to -36).
+    pub fn is_valid(&self) -> bool {
+        -36 <= **self && **self < MAXKEY
+    }
+
+    /// Returns if the alphanumeric key is one-digit long.
+    pub fn is_partial(&self) -> bool {
+        **self < 0
+    }
+
+    /// Re-reads the alphanumeric key as a hexadecimal number if possible.
+    pub fn to_hex(&self) -> Option<int> {
+        let (sixteens, ones) = if **self < 0 {(0, -**self - 1)} else {(**self / 36, **self % 36)};
+        if sixteens < 16 && ones < 16 {Some(sixteens * 16 + ones)} else {None}
+    }
+
+    /// Converts a partial alphanumeric key into a `Key`, assuming it's missing a leading `0`.
+    pub fn into_key(self) -> Key {
+        assert!(self.is_valid());
+        if *self < 0 {Key(-*self - 1)} else {Key(*self)}
+    }
+}
+
+impl ToStr for PartialKey {
+    /// Returns an one- or two-letter representation of alphanumeric key.
+    fn to_str(&self) -> ~str {
+        assert!(self.is_valid());
+        if **self < 0 {
+            format!("{}", BASE36_MAP[-**self - 1] as char)
+        } else {
+            format!("{}{}", BASE36_MAP[**self / 36] as char, BASE36_MAP[**self % 36] as char)
+        }
     }
 }
 

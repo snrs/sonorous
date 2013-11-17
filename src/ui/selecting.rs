@@ -173,6 +173,7 @@ fn worker_task(name: ~str) -> task::TaskBuilder {
 
 /// Prints a diagnostic message to the screen.
 pub fn print_diag(line: Option<uint>, msg: bms::diag::BmsMessage) {
+    if msg.severity() == bms::diag::Internal { return; }
     let atline = match line {
         Some(line) => format!(" at line {}", line),
         None => ~"",
@@ -568,6 +569,8 @@ impl Scene for SelectingScene {
                         top += 18.0;
                     }
                     for &(line, msg) in data.messages.iter() {
+                        if top > SCREENH as f32 { break; }
+
                         let atline = match line {
                             Some(line) => format!(" (line {})", line),
                             None => ~"",
