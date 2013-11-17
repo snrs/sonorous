@@ -169,9 +169,8 @@ pub fn load_bms_from_reader<R:Rng,Listener:BmsMessageListener>(
             parse::BmsExBPM(Key(i), bpm) => {
                 if *bpm <= 0.0 {
                     diag!(BmsHasNonpositiveBPM at lineno);
-                } else {
-                    bpmtab[i] = bpm;
                 }
+                bpmtab[i] = bpm;
             }
 
             parse::BmsPlayer(1) => { mode = SinglePlay; }
