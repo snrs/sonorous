@@ -7,7 +7,7 @@
 use ext::sdl::mpeg;
 use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
 use format::obj::{ImageSlice, BlankBGA, ImageBGA, SlicedImageBGA};
-use gfx::gl::Texture;
+use gfx::gl::Texture2D;
 use gfx::draw::TexturedDrawingTraits;
 use gfx::screen::Screen;
 use engine::resource::{BGAW, BGAH};
@@ -19,18 +19,18 @@ use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene};
 /// Similar to `BGAState` but also has a set of textures used to render the BGA.
 struct BGARenderState {
     state: BGAState,
-    textures: ~[Texture]
+    textures: ~[Texture2D]
 }
 
 trait Uploadable {
     /// Uploads an associated surface to the texture if any.
-    fn upload_to_texture(&self, texture: &Texture);
+    fn upload_to_texture(&self, texture: &Texture2D);
     /// Returns true if the resource should be updated continuously (i.e. movies or animations).
     fn should_always_upload(&self) -> bool;
 }
 
 impl Uploadable for ImageResource {
-    fn upload_to_texture(&self, texture: &Texture) {
+    fn upload_to_texture(&self, texture: &Texture2D) {
         match *self {
             NoImage => {}
             Image(surface) | Movie(surface,_) => {
@@ -52,9 +52,9 @@ impl BGARenderState {
     pub fn new(imgres: &[ImageResource]) -> BGARenderState {
         let state = initial_bga_state();
         let textures = do state.map |iref| {
-            let texture = match Texture::new(BGAW, BGAH) {
+            let texture = match Texture2D::new(BGAW, BGAH) {
                 Ok(texture) => texture,
-                Err(err) => die!("Texture::new failed: {}", err)
+                Err(err) => die!("Texture2D::new failed: {}", err)
             };
             for &iref in iref.as_image_ref().move_iter() {
                 imgres[**iref].upload_to_texture(&texture);

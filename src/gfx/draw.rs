@@ -9,7 +9,7 @@
 //! 2D drawing routines for OpenGL.
 
 use gfx::color::{Color, to_rgba};
-use gfx::gl::{Texture, Buffer};
+use gfx::gl::{Texture2D, VertexBuffer};
 use gfx::gl::{Shader, VertexShader, FragmentShader};
 use gfx::gl::{Program, UniformLoc, AttribLoc};
 use gl = opengles::gl2;
@@ -171,9 +171,9 @@ impl ShadedDrawing {
     }
 
     /// Draws specified primitives. The suitable program and scratch VBO should be supplied.
-    pub fn draw_prim(~self, program: &ProgramForShades, buffer: &Buffer) {
+    pub fn draw_prim(self, program: &ProgramForShades, vbuf: &VertexBuffer) {
         program.bind();
-        buffer.bind();
+        vbuf.bind();
 
         // TODO there is no `offsetof` or similar
         let rowsize = ::std::sys::size_of::<(f32,f32,u8,u8,u8,u8)>() as GLint;
@@ -181,8 +181,9 @@ impl ShadedDrawing {
         program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
         program.color.define_pointer_u8(4, true, rowsize, coloroffset);
 
-        buffer.upload(self.vertices, gl::DYNAMIC_DRAW);
-        gl::draw_arrays(self.prim, 0, self.vertices.len() as GLsizei);
+        let ShadedDrawing { prim, vertices } = self;
+        vbuf.upload(vertices, gl::DYNAMIC_DRAW);
+        gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }
 
@@ -283,7 +284,7 @@ pub struct TexturedDrawing {
 
 impl TexturedDrawing {
     /// Creates a new state. A texture is required for pixel specification.
-    pub fn new(prim: GLenum, texture: &Texture) -> TexturedDrawing {
+    pub fn new(prim: GLenum, texture: &Texture2D) -> TexturedDrawing {
         let width_recip = 1.0 / (texture.width as f32);
         let height_recip = 1.0 / (texture.height as f32);
         TexturedDrawing { width_recip: width_recip, height_recip: height_recip,
@@ -292,9 +293,9 @@ impl TexturedDrawing {
 
     /// Draws specified primitives with given texture. The suitable program and scratch VBO
     /// should be supplied.
-    pub fn draw_prim(~self, program: &ProgramForTextures, buffer: &Buffer, texture: &Texture) {
+    pub fn draw_prim(self, program: &ProgramForTextures, vbuf: &VertexBuffer, texture: &Texture2D) {
         program.bind();
-        buffer.bind();
+        vbuf.bind();
 
         // TODO there is no `offsetof` or similar
         let rowsize = ::std::sys::size_of::<(f32,f32,f32,f32,u8,u8,u8,u8)>() as GLint;
@@ -306,8 +307,9 @@ impl TexturedDrawing {
         program.sampler.set_1i(0);
         texture.bind(0);
 
-        buffer.upload(self.vertices, gl::DYNAMIC_DRAW);
-        gl::draw_arrays(self.prim, 0, self.vertices.len() as GLsizei);
+        let TexturedDrawing { prim, vertices, _ } = self;
+        vbuf.upload(vertices, gl::DYNAMIC_DRAW);
+        gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }
 

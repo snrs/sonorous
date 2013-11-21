@@ -339,8 +339,8 @@ impl PreparedSurface {
     }
 }
 
-/// OpenGL texture.
-pub struct Texture {
+/// OpenGL 2D texture.
+pub struct Texture2D {
     /// OpenGL reference to the texture.
     index: GLuint,
     /// Intrinsic width of the texture. Not affected by calls to `upload_surface`.
@@ -349,26 +349,26 @@ pub struct Texture {
     height: uint,
 }
 
-impl Drop for Texture {
+impl Drop for Texture2D {
     fn drop(&mut self) {
         gl::delete_textures(&[self.index]);
     }
 }
 
-impl Texture {
+impl Texture2D {
     /// Creates a new texture with given intrinsic dimension, which is only used for convenience
     /// in `*Drawing` interfaces.
-    pub fn new(width: uint, height: uint) -> Result<Texture,~str> {
+    pub fn new(width: uint, height: uint) -> Result<Texture2D,~str> {
         let texture = gl::gen_textures(1)[0];
-        Ok(Texture { index: texture, width: width, height: height })
+        Ok(Texture2D { index: texture, width: width, height: height })
     }
 
     /// Creates a new texture from a prepared SDL surface. `xwrap` and `ywrap` specifies whether
     /// the texture should wrap in horizontal or vertical directions or not.
     pub fn from_prepared_surface(prepared: &PreparedSurface,
-                                 xwrap: bool, ywrap: bool) -> Result<Texture,~str> {
+                                 xwrap: bool, ywrap: bool) -> Result<Texture2D,~str> {
         let (width, height) = prepared.get_size();
-        let texture = earlyexit!(Texture::new(width as uint, height as uint));
+        let texture = earlyexit!(Texture2D::new(width as uint, height as uint));
         texture.upload_surface(prepared, xwrap, ywrap);
         Ok(texture)
     }
@@ -377,9 +377,9 @@ impl Texture {
     /// `ywrap` specifies whether the texture should wrap in horizontal or vertical directions or
     /// not.
     pub fn from_owned_surface(surface: ~video::Surface,
-                              xwrap: bool, ywrap: bool) -> Result<Texture,~str> {
+                              xwrap: bool, ywrap: bool) -> Result<Texture2D,~str> {
         let (width, height) = surface.get_size();
-        let texture = earlyexit!(Texture::new(width as uint, height as uint));
+        let texture = earlyexit!(Texture2D::new(width as uint, height as uint));
         match PreparedSurface::from_owned_surface(surface) {
             Ok(prepared) => {
                 texture.upload_surface(&prepared, xwrap, ywrap);
@@ -411,22 +411,22 @@ impl Texture {
 }
 
 /// OpenGL vertex buffer object.
-pub struct Buffer {
+pub struct VertexBuffer {
     /// OpenGL reference to the VBO.
     index: GLuint,
 }
 
-impl Drop for Buffer {
+impl Drop for VertexBuffer {
     fn drop(&mut self) {
         gl::delete_buffers(&[self.index]);
     }
 }
 
-impl Buffer {
-    /// Creates a new vertex buffer object.
-    pub fn new() -> Buffer {
+impl VertexBuffer {
+    /// Creates a new vertex Vertexbuffer object.
+    pub fn new() -> VertexBuffer {
         let vbo = gl::gen_buffers(1)[0];
-        Buffer { index: vbo }
+        VertexBuffer { index: vbo }
     }
 
     /// Binds the VBO to the current OpenGL context.

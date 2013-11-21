@@ -9,7 +9,7 @@
 //! Abstracted graphical screen.
 
 use sdl::video;
-use gfx::gl::{Buffer, Texture};
+use gfx::gl::{VertexBuffer, Texture2D};
 use gfx::draw::{ProgramForShades, ProgramForTextures, ShadedDrawing, TexturedDrawing};
 use gfx::bmfont::{Font, FontDrawingUtils, ShadedFontDrawing};
 use gl = opengles::gl2;
@@ -131,7 +131,7 @@ pub struct Screen {
     /// OpenGL state if required.
     glstate: GLState,
     /// Shared vertex buffer object for drawing.
-    buffer: Buffer,
+    vbuf: VertexBuffer,
     /// OpenGL program for non-textured triangles.
     program_for_shades: ProgramForShades,
     /// OpenGL program for textured triangles.
@@ -192,7 +192,7 @@ impl Screen {
         program_for_textures.sampler.set_1i(0);
 
         Ok(Screen { width: width, height: height, sdl_surface: screen,
-                    glstate: glstate, buffer: Buffer::new(),
+                    glstate: glstate, vbuf: VertexBuffer::new(),
                     program_for_shades: program_for_shades,
                     program_for_textures: program_for_textures,
                     font: Font::new() })
@@ -219,16 +219,16 @@ impl Screen {
     /// Draws shaded primitives to the screen. The block receives a mutable reference to
     /// `util::gl::ShadedDrawing`, to which it should add points.
     pub fn draw_shaded_prim(&self, prim: gl::GLenum, f: &fn(&mut ShadedDrawing)) {
-        let mut drawing = ~ShadedDrawing::new(prim);
-        f(&mut *drawing);
-        drawing.draw_prim(&self.program_for_shades, &self.buffer);
+        let mut drawing = ShadedDrawing::new(prim);
+        f(&mut drawing);
+        drawing.draw_prim(&self.program_for_shades, &self.vbuf);
     }
 
     /// Same as `draw_shaded_prim` but with a default font.
     pub fn draw_shaded_prim_with_font(&self, prim: gl::GLenum, f: &fn(&mut ShadedFontDrawing)) {
-        let mut drawing = ~ShadedDrawing::new(prim);
+        let mut drawing = ShadedDrawing::new(prim);
         drawing.with_font(&self.font, f);
-        drawing.draw_prim(&self.program_for_shades, &self.buffer);
+        drawing.draw_prim(&self.program_for_shades, &self.vbuf);
     }
 
     /// Draws shaded triangles to the screen. The block receives a mutable reference to
@@ -244,16 +244,16 @@ impl Screen {
 
     /// Draws textured primitives to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
-    pub fn draw_textured_prim(&self, prim: gl::GLenum, texture: &Texture,
+    pub fn draw_textured_prim(&self, prim: gl::GLenum, texture: &Texture2D,
                               f: &fn(&mut TexturedDrawing)) {
         let mut drawing = ~TexturedDrawing::new(prim, texture);
         f(&mut *drawing);
-        drawing.draw_prim(&self.program_for_textures, &self.buffer, texture);
+        drawing.draw_prim(&self.program_for_textures, &self.vbuf, texture);
     }
 
     /// Draws textured triangles to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
-    pub fn draw_textured(&self, texture: &Texture, f: &fn(&mut TexturedDrawing)) {
+    pub fn draw_textured(&self, texture: &Texture2D, f: &fn(&mut TexturedDrawing)) {
         self.draw_textured_prim(gl::TRIANGLES, texture, f)
     }
 }

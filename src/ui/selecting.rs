@@ -17,7 +17,7 @@ use util::filesearch::SearchContext;
 use util::envelope::Envelope;
 use util::md5::{MD5, ToHex};
 use gfx::color::{Color, RGB};
-use gfx::gl::{PreparedSurface, Texture};
+use gfx::gl::{PreparedSurface, Texture2D};
 use gfx::draw::{ShadedDrawingTraits, TexturedDrawingTraits};
 use gfx::bmfont::{LeftAligned, RightAligned};
 use gfx::screen::Screen;
@@ -82,7 +82,7 @@ struct PreloadedData {
     /// the selection screen only.
     preproc: ~PreprocessedBms,
     /// A banner texture, if any.
-    banner: Option<Texture>,
+    banner: Option<Texture2D>,
     /// A tentatively calculated duration of the BMS file in seconds. This is tentative because
     /// we don't know lengths of key sounds and BGMs yet.
     duration: f64,
@@ -486,7 +486,7 @@ impl Scene for SelectingScene {
                     match self.preloaded {
                         Preloaded(ref mut data) if data.banner.is_none() => {
                             let prepared = prepared.unwrap();
-                            match Texture::from_prepared_surface(&prepared, false, false) {
+                            match Texture2D::from_prepared_surface(&prepared, false, false) {
                                 Ok(tex) => { data.banner = Some(tex); }
                                 Err(_err) => { warn!("failed to load image \\#BANNER ({})",
                                                      imgpath.to_str()); }

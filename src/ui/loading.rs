@@ -14,7 +14,7 @@ use format::bms::{Bms, Key};
 use util::filesearch::SearchContext;
 use util::console::{printerr, printerrln};
 use gfx::color::{Gradient, RGB, RGBA};
-use gfx::gl::Texture;
+use gfx::gl::Texture2D;
 use gfx::draw::{ShadedDrawingTraits, TexturedDrawingTraits};
 use gfx::bmfont::{LeftAligned, Centered, RightAligned};
 use gfx::screen::Screen;
@@ -63,7 +63,7 @@ pub struct LoadingContext {
     /// The resource directory associated to the BMS data.
     basedir: Path,
     /// A loaded OpenGL texture for #STAGEFILE image.
-    stagefile: Option<Texture>,
+    stagefile: Option<Texture2D>,
     /// A list of loaded sound resources. Initially populated with `NoSound`.
     sndres: ~[SoundResource],
     /// A list of loaded image resources. Initially populated with `NoImage`.
@@ -143,7 +143,7 @@ impl LoadingContext {
                     // channel or SDL_image fails to read them so we need to force STAGEFILEs to
                     // ignore alpha channels. (cf. http://bugzilla.libsdl.org/show_bug.cgi?id=1943)
                     do surface.display_format().and_then |surface| {
-                        Texture::from_owned_surface(surface, false, false)
+                        Texture2D::from_owned_surface(surface, false, false)
                     }
                 },
                 _ => Err(~"unexpected")
