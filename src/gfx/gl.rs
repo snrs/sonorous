@@ -396,17 +396,37 @@ impl Texture2D {
         gl::bind_texture(gl::TEXTURE_2D, self.index);
     }
 
-    /// Uploads a prepared SDL surface. `xwrap` and `ywrap` specifies whether the texture should
-    /// wrap in horizontal or vertical directions or not.
-    pub fn upload_surface(&self, prepared: &PreparedSurface, xwrap: bool, ywrap: bool) {
-        gl::bind_texture(gl::TEXTURE_2D, self.index);
-        prepared.tex_image_2d(gl::TEXTURE_2D, 0);
+    /// Sets whether the texture should wrap in horizontal (`xwrap`) or vertical (`ywrap`)
+    /// directions or not.
+    pub fn set_wrap(&self, xwrap: bool, ywrap: bool) {
         gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S,
                             if xwrap {gl::REPEAT} else {gl::CLAMP_TO_EDGE} as GLint);
         gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T,
                             if ywrap {gl::REPEAT} else {gl::CLAMP_TO_EDGE} as GLint);
-        gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
-        gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as GLint);
+    }
+
+    /// Sets minifying and magnifying filter functions for the texture.
+    pub fn set_filter(&self, minfilter: GLenum, magfilter: GLenum) {
+        gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, minfilter as GLint);
+        gl::tex_parameter_i(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, magfilter as GLint);
+    }
+
+    /// Uploads a prepared SDL surface. `xwrap` and `ywrap` are same as `set_wrap`.
+    pub fn upload_surface(&self, prepared: &PreparedSurface, xwrap: bool, ywrap: bool) {
+        gl::bind_texture(gl::TEXTURE_2D, self.index);
+        prepared.tex_image_2d(gl::TEXTURE_2D, 0);
+        self.set_wrap(xwrap, ywrap);
+        self.set_filter(gl::LINEAR, gl::LINEAR);
+    }
+
+    /// Creates a storage for the texture without initializing it.
+    /// `xwrap` and `ywrap` are same as `set_wrap`.
+    pub fn create_storage(&self, fmt: GLenum, ty: GLenum, xwrap: bool, ywrap: bool) {
+        gl::bind_texture(gl::TEXTURE_2D, self.index);
+        gl::tex_image_2d(gl::TEXTURE_2D, 0, fmt as GLint,
+                         self.width as GLsizei, self.height as GLsizei, 0, fmt, ty, None);
+        self.set_wrap(xwrap, ywrap);
+        self.set_filter(gl::LINEAR, gl::LINEAR);
     }
 }
 
@@ -423,7 +443,7 @@ impl Drop for VertexBuffer {
 }
 
 impl VertexBuffer {
-    /// Creates a new vertex Vertexbuffer object.
+    /// Creates a new vertex buffer object.
     pub fn new() -> VertexBuffer {
         let vbo = gl::gen_buffers(1)[0];
         VertexBuffer { index: vbo }
@@ -437,6 +457,143 @@ impl VertexBuffer {
     /// Uploads a data to the VBO.
     pub fn upload<T>(&self, data: &[T], usage: GLenum) {
         gl::buffer_data(gl::ARRAY_BUFFER, data, usage);
+    }
+}
+
+/// OpenGL render buffer object.
+pub struct RenderBuffer {
+    /// OpenGL reference to the RBO.
+    index: GLuint,
+    /// Intrinsic width of the render buffer.
+    width: uint,
+    /// Intrinsic height of the render buffer.
+    height: uint,
+}
+
+impl Drop for RenderBuffer {
+    fn drop(&mut self) {
+        gl::delete_render_buffers(&[self.index]);
+    }
+}
+
+// XXX should have been `gl::gen_renderbuffers`
+#[fixed_stack_segment]
+fn gen_renderbuffers(n: GLsizei) -> ~[GLuint] {
+    use std::vec;
+    unsafe {
+        let result = vec::from_elem(n as uint, 0 as GLuint);
+        gl::glGenRenderbuffers(n, vec::raw::to_ptr(result));
+        result
+    }
+}
+
+// XXX should have been `gl::bind_renderbuffer`
+#[fixed_stack_segment]
+fn bind_renderbuffer(target: GLenum, renderbuffer: GLuint) {
+    unsafe {
+        gl::glBindRenderbuffer(target, renderbuffer);
+    }
+}
+
+// XXX should have been `gl::renderbuffer_storage`
+#[fixed_stack_segment]
+fn renderbuffer_storage(target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei) {
+    unsafe {
+        gl::glRenderbufferStorage(target, internalformat, width, height);
+    }
+}
+
+// XXX should have been `gl::framebuffer_renderbuffer`
+#[fixed_stack_segment]
+fn framebuffer_renderbuffer(target: GLenum, attachment: GLenum,
+                            renderbuffertarget: GLenum, renderbuffer: GLuint) {
+    unsafe {
+        gl::glFramebufferRenderbuffer(target, attachment, renderbuffertarget, renderbuffer);
+    }
+}
+
+impl RenderBuffer {
+    /// Creates a new render buffer object.
+    pub fn new(width: uint, height: uint) -> RenderBuffer {
+        let rbo = /*gl::*/gen_renderbuffers(1)[0];
+        RenderBuffer { index: rbo, width: width, height: height }
+    }
+
+    /// Binds the RBO to the current OpenGL context.
+    pub fn bind(&self) {
+        /*gl::*/bind_renderbuffer(gl::RENDERBUFFER, self.index);
+    }
+
+    /// Creates a storage for the RBO. The prior storage if any is removed.
+    pub fn create_storage(&self, fmt: GLenum) {
+        /*gl::*/renderbuffer_storage(gl::RENDERBUFFER, fmt,
+                                     self.width as GLsizei, self.height as GLsizei);
+    }
+}
+
+/// OpenGL frame buffer object.
+pub struct FrameBuffer {
+    /// OpenGL reference to the FBO.
+    index: GLuint,
+    /// Intrinsic width of the frame buffer. Should be identical to the width of any attachments.
+    width: uint,
+    /// Intrinsic height of the frame buffer. Should be identical to the height of any attachments.
+    height: uint,
+}
+
+impl Drop for FrameBuffer {
+    fn drop(&mut self) {
+        gl::delete_frame_buffers(&[self.index]);
+    }
+}
+
+impl FrameBuffer {
+    /// Creates a new frame buffer object.
+    pub fn new(width: uint, height: uint) -> FrameBuffer {
+        let fbo = gl::gen_framebuffers(1)[0];
+        FrameBuffer { index: fbo, width: width, height: height }
+    }
+
+    /// Creates a new frame buffer object with given texture bound to the color attachment.
+    pub fn from_texture(texture: &Texture2D) -> FrameBuffer {
+        let framebuf = FrameBuffer::new(texture.width, texture.height);
+        framebuf.bind();
+        framebuf.attach_texture_2d(gl::COLOR_ATTACHMENT0, texture);
+        FrameBuffer::unbind(); // we don't want for the ctor to take the context over
+        framebuf
+    }
+
+    /// Binds the FBO to the current OpenGL context.
+    pub fn bind(&self) {
+        gl::bind_framebuffer(gl::FRAMEBUFFER, self.index);
+    }
+
+    /// Unbinds the currently bound FBO if any.
+    pub fn unbind() {
+        gl::bind_framebuffer(gl::FRAMEBUFFER, 0);
+    }
+
+    /// Returns the status of current framebuffer.
+    pub fn status(&self) -> GLenum {
+        gl::check_framebuffer_status(gl::FRAMEBUFFER)
+    }
+
+    /// Returns true if the framebuffer is complete and ready to be rendered to.
+    pub fn complete(&self) -> bool {
+        self.status() == gl::FRAMEBUFFER_COMPLETE
+    }
+
+    /// Attaches given texture to the specified attachment point.
+    pub fn attach_texture_2d(&self, attachment: GLenum, texture: &Texture2D) {
+        assert!(self.width == texture.width && self.height == texture.height);
+        gl::framebuffer_texture_2d(gl::FRAMEBUFFER, attachment, gl::TEXTURE_2D, texture.index, 0);
+    }
+
+    /// Attaches given render buffer to the specified attachment point.
+    pub fn attach_render_buffer(&self, attachment: GLenum, renderbuf: &RenderBuffer) {
+        assert!(self.width == renderbuf.width && self.height == renderbuf.height);
+        /*gl::*/framebuffer_renderbuffer(gl::FRAMEBUFFER, attachment,
+                                         gl::RENDERBUFFER, renderbuf.index);
     }
 }
 

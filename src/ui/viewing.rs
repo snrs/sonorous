@@ -4,10 +4,11 @@
 
 //! Viewer portion of the game play screen. Also shared by exclusive modes.
 
+use gl = opengles::gl2;
 use ext::sdl::mpeg;
 use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
 use format::obj::{ImageSlice, BlankBGA, ImageBGA, SlicedImageBGA};
-use gfx::gl::Texture2D;
+use gfx::gl::{Texture2D, FrameBuffer};
 use gfx::draw::TexturedDrawingTraits;
 use gfx::screen::Screen;
 use engine::resource::{BGAW, BGAH};
@@ -15,12 +16,6 @@ use engine::resource::{ImageResource, NoImage, Image, Movie};
 use engine::player::{BGAState, initial_bga_state, Player};
 use ui::common::{Ticker, update_line};
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene};
-
-/// Similar to `BGAState` but also has a set of textures used to render the BGA.
-struct BGARenderState {
-    state: BGAState,
-    textures: ~[Texture2D]
-}
 
 trait Uploadable {
     /// Uploads an associated surface to the texture if any.
@@ -47,10 +42,23 @@ impl Uploadable for ImageResource {
     }
 }
 
-impl BGARenderState {
-    /// Creates an initial state and textures.
-    pub fn new(imgres: &[ImageResource]) -> BGARenderState {
+/// The canvas to which the BGA is drawn.
+struct BGACanvas {
+    /// The current BGA states.
+    state: BGAState,
+    /// Per-layer textures.
+    textures: ~[Texture2D],
+    /// The internal canvas texture. This is what the caller should render.
+    canvas: Texture2D,
+    /// The frame buffer associated to the canvas.
+    framebuf: FrameBuffer,
+}
+
+impl BGACanvas {
+    /// Creates an initial canvas state and resources.
+    pub fn new(imgres: &[ImageResource]) -> BGACanvas {
         let state = initial_bga_state();
+
         let textures = do state.map |iref| {
             let texture = match Texture2D::new(BGAW, BGAH) {
                 Ok(texture) => texture,
@@ -61,7 +69,16 @@ impl BGARenderState {
             }
             texture
         };
-        BGARenderState { state: state, textures: textures }
+
+        let canvas = match Texture2D::new(BGAW, BGAH) {
+            Ok(texture) => texture,
+            Err(err) => die!("Texture2D::new failed: {}", err)
+        };
+        canvas.create_storage(gl::RGB, gl::UNSIGNED_BYTE, false, false);
+
+        let framebuf = FrameBuffer::from_texture(&canvas);
+
+        BGACanvas { state: state, textures: textures, canvas: canvas, framebuf: framebuf }
     }
 
     /// Updates the BGA state. This method prepares given image resources for the next rendering,
@@ -89,28 +106,30 @@ impl BGARenderState {
         }
     }
 
-    /// Renders the image resources for the specified layers to the specified region of `screen`.
-    pub fn render(&self, screen: &Screen, layers: &[BGALayer], x: f32, y: f32, w: f32, h: f32) {
-        do screen.scissor(x.floor() as int, y.floor() as int, w.ceil() as uint, h.ceil() as uint) {
-            // the BGA area should have been already filled to black.
+    /// Renders the image resources to the internal canvas texture.
+    pub fn render_to_texture(&self, screen: &Screen, layers: &[BGALayer]) {
+        do screen.render_to_framebuffer(&self.framebuf) |buf| {
+            buf.clear();
             for &layer in layers.iter() {
                 match self.state[layer as uint] {
                     BlankBGA => {}
                     ImageBGA(_) => {
-                        do screen.draw_textured(&self.textures[layer as uint]) |d| {
-                            d.rect(x, y, x + w, y + h);
+                        do buf.draw_textured(&self.textures[layer as uint]) |d| {
+                            d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
                         }
                     }
-                    SlicedImageBGA(_, ~ImageSlice { sx, sy, dx, dy, w: sw, h: sh }) => {
-                        let (dx, dy, dw, dh) = (x + dx, y + dy, sw / 256.0 * w, sh / 256.0 * h);
-                        do screen.draw_textured(&self.textures[layer as uint]) |d| {
-                            d.rect_area(dx, dy, dx + dw, dy + dh, sx, sy, sx + sw, sy + sh);
+                    SlicedImageBGA(_, ~ImageSlice { sx, sy, dx, dy, w, h }) => {
+                        do buf.draw_textured(&self.textures[layer as uint]) |d| {
+                            d.rect_area(dx, dy, dx + w, dy + h, sx, sy, sx + w, sy + h);
                         }
                     }
                 }
             }
         }
     }
+
+    /// Returns the internal canvas texture.
+    pub fn as_texture<'r>(&'r self) -> &'r Texture2D { &self.canvas }
 }
 
 /// Text-only viewing scene context. Used for the exclusive mode with BGA disabled.
@@ -166,17 +185,17 @@ pub struct ViewingScene {
     screen: @Screen,
     /// Image resources.
     imgres: ~[ImageResource],
-    /// Currently known state of BGAs.
-    lastbga: BGARenderState,
+    /// BGA canvas.
+    bgacanvas: BGACanvas,
 }
 
 impl ViewingScene {
     /// Creates a new BGA-only scene context from the pre-created screen (usually by `init_video`)
     /// and pre-loaded image resources.
     pub fn new(screen: @Screen, imgres: ~[ImageResource], player: Player) -> ~ViewingScene {
-        let bgastate = BGARenderState::new(imgres);
+        let bgacanvas = BGACanvas::new(imgres);
         ~ViewingScene { parent: TextualViewingScene::new(player),
-                        screen: screen, imgres: imgres, lastbga: bgastate }
+                        screen: screen, imgres: imgres, bgacanvas: bgacanvas }
     }
 }
 
@@ -187,7 +206,7 @@ impl Scene for ViewingScene {
 
     fn tick(&mut self) -> SceneCommand {
         let cmd = self.parent.tick();
-        self.lastbga.update(&self.parent.player.bga, self.imgres);
+        self.bgacanvas.update(&self.parent.player.bga, self.imgres);
         cmd
     }
 
@@ -195,7 +214,10 @@ impl Scene for ViewingScene {
         self.screen.clear();
 
         let layers = &[Layer1, Layer2, Layer3];
-        self.lastbga.render(&*self.screen, layers, 0.0, 0.0, BGAW as f32, BGAH as f32);
+        self.bgacanvas.render_to_texture(&*self.screen, layers);
+        do self.screen.draw_textured(self.bgacanvas.as_texture()) |d| {
+            d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
+        }
         self.screen.swap_buffers();
 
         self.parent.render();

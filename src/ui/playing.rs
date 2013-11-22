@@ -19,7 +19,7 @@ use engine::resource::ImageResource;
 use engine::player::{MISS, MAXGAUGE, Player};
 use ui::init::{SCREENW, SCREENH};
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, ReplaceScene};
-use ui::viewing::BGARenderState;
+use ui::viewing::BGACanvas;
 use ui::playresult::PlayResultScene;
 
 /// An appearance for each lane.
@@ -269,8 +269,8 @@ pub struct PlayingScene {
     /// If not `None`, indicates that the grading information should be displayed until
     /// this timestamp.
     gradelimit: Option<uint>,
-    /// Currently known state of BGAs.
-    lastbga: BGARenderState,
+    /// BGA canvas.
+    bgacanvas: BGACanvas,
 }
 
 impl PlayingScene {
@@ -287,12 +287,12 @@ impl PlayingScene {
         let bgax = leftmost + (centerwidth - BGAW) / 2;
         let bgay = (SCREENH - BGAH) / 2;
         let sprite = create_sprite(leftmost, rightmost, styles);
-        let bgastate = BGARenderState::new(imgres);
+        let bgacanvas = BGACanvas::new(imgres);
 
         Ok(~PlayingScene {
             player: player, sprite: sprite, screen: screen, imgres: imgres,
             leftmost: leftmost, rightmost: rightmost, lanestyles: styles, bgax: bgax, bgay: bgay,
-            poorlimit: None, gradelimit: None, lastbga: bgastate,
+            poorlimit: None, gradelimit: None, bgacanvas: bgacanvas,
         })
     }
 }
@@ -328,7 +328,7 @@ impl Scene for PlayingScene {
             }
             if poorlimit < Some(self.player.now) { poorlimit = None; }
             if gradelimit < Some(self.player.now) { gradelimit = None; }
-            self.lastbga.update(&self.player.bga, self.imgres);
+            self.bgacanvas.update(&self.player.bga, self.imgres);
             *&mut self.poorlimit = poorlimit;
             *&mut self.gradelimit = gradelimit;
 
@@ -357,8 +357,11 @@ impl Scene for PlayingScene {
         // render BGAs (should render before the lanes since lanes can overlap with BGAs)
         if self.player.opts.has_bga() {
             let layers = if self.poorlimit.is_some() {&[PoorBGA]} else {&[Layer1, Layer2, Layer3]};
-            self.lastbga.render(&*self.screen, layers, self.bgax as f32, self.bgay as f32,
-                                BGAW as f32, BGAH as f32);
+            self.bgacanvas.render_to_texture(&*self.screen, layers);
+            do self.screen.draw_textured(self.bgacanvas.as_texture()) |d| {
+                d.rect(self.bgax as f32, self.bgay as f32,
+                       (self.bgax + BGAW) as f32, (self.bgay + BGAH) as f32);
+            }
         }
 
         do self.screen.draw_shaded |d| {

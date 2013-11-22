@@ -171,9 +171,9 @@ impl ShadedDrawing {
     }
 
     /// Draws specified primitives. The suitable program and scratch VBO should be supplied.
-    pub fn draw_prim(self, program: &ProgramForShades, vbuf: &VertexBuffer) {
+    pub fn draw_prim(self, program: &ProgramForShades, vertexbuf: &VertexBuffer) {
         program.bind();
-        vbuf.bind();
+        vertexbuf.bind();
 
         // TODO there is no `offsetof` or similar
         let rowsize = ::std::sys::size_of::<(f32,f32,u8,u8,u8,u8)>() as GLint;
@@ -182,7 +182,7 @@ impl ShadedDrawing {
         program.color.define_pointer_u8(4, true, rowsize, coloroffset);
 
         let ShadedDrawing { prim, vertices } = self;
-        vbuf.upload(vertices, gl::DYNAMIC_DRAW);
+        vertexbuf.upload(vertices, gl::DYNAMIC_DRAW);
         gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }
@@ -293,9 +293,10 @@ impl TexturedDrawing {
 
     /// Draws specified primitives with given texture. The suitable program and scratch VBO
     /// should be supplied.
-    pub fn draw_prim(self, program: &ProgramForTextures, vbuf: &VertexBuffer, texture: &Texture2D) {
+    pub fn draw_prim(self, program: &ProgramForTextures,
+                     vertexbuf: &VertexBuffer, texture: &Texture2D) {
         program.bind();
-        vbuf.bind();
+        vertexbuf.bind();
 
         // TODO there is no `offsetof` or similar
         let rowsize = ::std::sys::size_of::<(f32,f32,f32,f32,u8,u8,u8,u8)>() as GLint;
@@ -308,7 +309,7 @@ impl TexturedDrawing {
         texture.bind(0);
 
         let TexturedDrawing { prim, vertices, _ } = self;
-        vbuf.upload(vertices, gl::DYNAMIC_DRAW);
+        vertexbuf.upload(vertices, gl::DYNAMIC_DRAW);
         gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }

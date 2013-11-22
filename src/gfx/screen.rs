@@ -9,11 +9,11 @@
 //! Abstracted graphical screen.
 
 use sdl::video;
-use gfx::gl::{VertexBuffer, Texture2D};
+use gfx::gl::{VertexBuffer, Texture2D, FrameBuffer};
 use gfx::draw::{ProgramForShades, ProgramForTextures, ShadedDrawing, TexturedDrawing};
 use gfx::bmfont::{Font, FontDrawingUtils, ShadedFontDrawing};
 use gl = opengles::gl2;
-use opengles::gl2::{GLint, GLsizei};
+use opengles::gl2::{GLint, GLfloat, GLsizei};
 
 #[cfg(target_os="win32")] use opengles::egl;
 #[cfg(target_os="win32")] use ext::sdl::syswm;
@@ -131,7 +131,7 @@ pub struct Screen {
     /// OpenGL state if required.
     glstate: GLState,
     /// Shared vertex buffer object for drawing.
-    vbuf: VertexBuffer,
+    vertexbuf: VertexBuffer,
     /// OpenGL program for non-textured triangles.
     program_for_shades: ProgramForShades,
     /// OpenGL program for textured triangles.
@@ -165,8 +165,38 @@ impl Screen {
         gl::blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         gl::clear_color(0.0, 0.0, 0.0, 1.0);
 
-        let (l, r) = (0.0, width as f32);
-        let (t, b) = (0.0, height as f32);
+        // initialize shaders
+        let program_for_shades = earlyexit!(ProgramForShades::new());
+        let program_for_textures = earlyexit!(ProgramForTextures::new());
+        program_for_textures.bind();
+        program_for_textures.sampler.set_1i(0);
+
+        let screen = Screen { width: width, height: height, sdl_surface: screen,
+                              glstate: glstate, vertexbuf: VertexBuffer::new(),
+                              program_for_shades: program_for_shades,
+                              program_for_textures: program_for_textures,
+                              font: Font::new() };
+        screen.set_local_transform([1.0, 0.0, 0.0,
+                                    0.0, 1.0, 0.0,
+                                    0.0, 0.0, 1.0]);
+        screen.set_viewport(0, 0, width as GLsizei, height as GLsizei);
+        Ok(screen)
+    }
+
+    /// Sets the local transform matrix. `matrix` should be a 3x3 row-major matrix.
+    pub fn set_local_transform(&self, matrix: &[GLfloat]) {
+        self.program_for_shades.bind();
+        self.program_for_shades.local_transform.set_matrix_3f(false, matrix);
+        self.program_for_textures.bind();
+        self.program_for_textures.local_transform.set_matrix_3f(false, matrix);
+    }
+
+    /// Sets the viewport and corresponding projection matrix.
+    pub fn set_viewport(&self, left: GLint, top: GLint, width: GLsizei, height: GLsizei) {
+        gl::viewport(left, top, width, height);
+
+        let (l, r) = (left as f32, left as f32 + width as f32);
+        let (t, b) = (top as f32, top as f32 + height as f32);
         let (f, n) = (1.0, -1.0);
         let projection = [
             2.0/(r-l),    0.0,          0.0,          0.0,
@@ -174,28 +204,11 @@ impl Screen {
             0.0,          0.0,          -2.0/(f-n),   0.0,
             -(r+l)/(r-l), -(t+b)/(t-b), -(f+n)/(f-n), 1.0,
         ];
-        let local_transform = [
-            1.0, 0.0, 0.0,
-            0.0, 1.0, 0.0,
-            0.0, 0.0, 1.0,
-        ];
 
-        // initialize shaders
-        let program_for_shades = earlyexit!(ProgramForShades::new());
-        let program_for_textures = earlyexit!(ProgramForTextures::new());
-        program_for_shades.bind();
-        program_for_shades.projection.set_matrix_4f(false, projection);
-        program_for_shades.local_transform.set_matrix_3f(false, local_transform);
-        program_for_textures.bind();
-        program_for_textures.projection.set_matrix_4f(false, projection);
-        program_for_textures.local_transform.set_matrix_3f(false, local_transform);
-        program_for_textures.sampler.set_1i(0);
-
-        Ok(Screen { width: width, height: height, sdl_surface: screen,
-                    glstate: glstate, vbuf: VertexBuffer::new(),
-                    program_for_shades: program_for_shades,
-                    program_for_textures: program_for_textures,
-                    font: Font::new() })
+        self.program_for_shades.bind();
+        self.program_for_shades.projection.set_matrix_4f(false, projection);
+        self.program_for_textures.bind();
+        self.program_for_textures.projection.set_matrix_4f(false, projection);
     }
 
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
@@ -221,14 +234,14 @@ impl Screen {
     pub fn draw_shaded_prim(&self, prim: gl::GLenum, f: &fn(&mut ShadedDrawing)) {
         let mut drawing = ShadedDrawing::new(prim);
         f(&mut drawing);
-        drawing.draw_prim(&self.program_for_shades, &self.vbuf);
+        drawing.draw_prim(&self.program_for_shades, &self.vertexbuf);
     }
 
     /// Same as `draw_shaded_prim` but with a default font.
     pub fn draw_shaded_prim_with_font(&self, prim: gl::GLenum, f: &fn(&mut ShadedFontDrawing)) {
         let mut drawing = ShadedDrawing::new(prim);
         drawing.with_font(&self.font, f);
-        drawing.draw_prim(&self.program_for_shades, &self.vbuf);
+        drawing.draw_prim(&self.program_for_shades, &self.vertexbuf);
     }
 
     /// Draws shaded triangles to the screen. The block receives a mutable reference to
@@ -246,15 +259,29 @@ impl Screen {
     /// `util::gl::TexturedDrawing`, to which it should add points.
     pub fn draw_textured_prim(&self, prim: gl::GLenum, texture: &Texture2D,
                               f: &fn(&mut TexturedDrawing)) {
-        let mut drawing = ~TexturedDrawing::new(prim, texture);
-        f(&mut *drawing);
-        drawing.draw_prim(&self.program_for_textures, &self.vbuf, texture);
+        let mut drawing = TexturedDrawing::new(prim, texture);
+        f(&mut drawing);
+        drawing.draw_prim(&self.program_for_textures, &self.vertexbuf, texture);
     }
 
     /// Draws textured triangles to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
     pub fn draw_textured(&self, texture: &Texture2D, f: &fn(&mut TexturedDrawing)) {
         self.draw_textured_prim(gl::TRIANGLES, texture, f)
+    }
+
+    /// Renders to given frame buffer. The frame buffer should be complete.
+    /// The viewport is temporarily reset to dimensions of the frame buffer in given block.
+    pub fn render_to_framebuffer(&self, framebuf: &FrameBuffer, f: &fn(&Screen)) {
+        assert!(framebuf.complete());
+        let mut xywh: [GLint, ..4] = [0, 0, 0, 0];
+        gl::get_integer_v(gl::VIEWPORT, xywh.mut_slice(0, 4));
+        framebuf.bind();
+        self.set_viewport(0, framebuf.height as GLint,
+                          framebuf.width as GLsizei, -(framebuf.height as GLsizei));
+        f(self);
+        FrameBuffer::unbind();
+        self.set_viewport(xywh[0], xywh[1], xywh[2] as GLsizei, xywh[3] as GLsizei);
     }
 }
 
