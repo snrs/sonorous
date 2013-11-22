@@ -63,7 +63,7 @@ pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
     let mut playlevel = 0;
     let mut difficulty = None;
     let mut rank = 2;
-    let /*mut*/ canvassize = (256.0, 256.0);
+    let /*mut*/ canvassize = (256, 256);
     let mut sndpath = vec::from_elem(MAXKEY as uint, None);
     let mut imgpath = vec::from_elem(MAXKEY as uint, None);
     let mut imgslices = vec::from_elem(MAXKEY as uint, None);
@@ -266,10 +266,10 @@ pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
     for slice in imgslices.mut_iter() {
         match slice {
             &Some((_, ref mut slice)) => {
-                slice.sx = cmp::max(slice.sx, 0.0);
-                slice.sy = cmp::max(slice.sy, 0.0);
-                slice.w = cmp::min(cmp::max(slice.w, 0.0), canvassize.n0());
-                slice.h = cmp::min(cmp::max(slice.h, 0.0), canvassize.n1());
+                slice.sx = cmp::max(slice.sx, 0);
+                slice.sy = cmp::max(slice.sy, 0);
+                slice.w = cmp::min(cmp::max(slice.w, 0), canvassize.n0());
+                slice.h = cmp::min(cmp::max(slice.h, 0), canvassize.n1());
             }
             &None => {}
         }

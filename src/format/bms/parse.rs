@@ -586,9 +586,7 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
             if lex!(line; PartialKey -> src, ws, int -> x1, ws, int -> y1, ws,
                     int -> x2, ws, int -> y2, ws, int -> dx, ws, int -> dy) {
                 let src = warn_on_partial_key!(src);
-                let slice = ImageSlice { sx: x1 as f32, sy: y1 as f32,
-                                         dx: dx as f32, dy: dy as f32,
-                                         w: (x2 - x1) as f32, h: (y2 - y1) as f32 };
+                let slice = ImageSlice { sx: x1, sy: y1, dx: dx, dy: dy, w: x2 - x1, h: y2 - y1 };
                 emit!(BmsBGA(dst, src, slice));
             }
         })
@@ -600,9 +598,7 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
             if lex!(line; PartialKey -> src, ws, int -> sx, ws, int -> sy, ws,
                     int -> w, ws, int -> h, ws, int -> dx, ws, int -> dy) {
                 let src = warn_on_partial_key!(src);
-                let slice = ImageSlice { sx: sx as f32, sy: sy as f32,
-                                         dx: dx as f32, dy: dy as f32,
-                                         w: w as f32, h: h as f32 };
+                let slice = ImageSlice { sx: sx, sy: sy, dx: dx, dy: dy, w: w, h: h };
                 emit!(BmsBGA(dst, src, slice));
             }
         })

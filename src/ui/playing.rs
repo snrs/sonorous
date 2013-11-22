@@ -8,8 +8,8 @@ use std::{cmp, num, iter};
 
 use format::obj::*;
 use gfx::color::{Color, Gradient, RGB, RGBA, Blend};
-use gfx::surface::{Surface, SurfaceAreaUtil, SurfacePixelsUtil, new_surface};
-use gfx::gl::Texture2D;
+use gfx::surface::{Surface, SurfaceAreaUtil, SurfacePixelsUtil};
+use gfx::gl::{Texture2D, PreparedSurface};
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
 use gfx::bmfont::{FontDrawingUtils, LeftAligned, Centered};
 use gfx::screen::Screen;
@@ -180,14 +180,14 @@ fn build_lane_styles(keyspec: &KeySpec) ->
 /// Creates a sprite.
 fn create_sprite(leftmost: uint, rightmost: Option<uint>,
                  styles: &[(Lane,LaneStyle)]) -> Texture2D {
-    let sprite = match new_surface(SCREENW + 400, SCREENH) {
+    let sprite = match PreparedSurface::new(SCREENW + 400, SCREENH, true) {
         Ok(surface) => surface,
-        Err(err) => die!("new_surface failed: {}", err)
+        Err(err) => die!("PreparedSurface::new failed: {}", err)
     };
 
     // render notes and lane backgrounds
     for &(_lane,style) in styles.iter() {
-        style.render_to_sprite(sprite);
+        style.render_to_sprite(*sprite);
     }
 
     // render panels
@@ -233,7 +233,7 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>,
         }
     }
 
-    match Texture2D::from_owned_surface(sprite, false, false) {
+    match Texture2D::from_owned_surface(*sprite, false, false) {
         Ok(tex) => tex,
         Err(err) => die!("Texture2D::from_owned_surface failed: {}", err)
     }

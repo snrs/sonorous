@@ -7,8 +7,11 @@
 use gl = opengles::gl2;
 use ext::sdl::mpeg;
 use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
-use format::obj::{ImageSlice, BlankBGA, ImageBGA, SlicedImageBGA};
-use gfx::gl::{Texture2D, FrameBuffer};
+use format::obj::{ImageSlice, BGARef, BlankBGA, ImageBGA, SlicedImageBGA};
+use format::bms::ImageRef;
+use gfx::color::RGBA;
+use gfx::surface::SurfaceAreaUtil;
+use gfx::gl::{Texture2D, PreparedSurface, FrameBuffer};
 use gfx::draw::TexturedDrawingTraits;
 use gfx::screen::Screen;
 use engine::resource::{BGAW, BGAH};
@@ -52,6 +55,31 @@ struct BGACanvas {
     canvas: Texture2D,
     /// The frame buffer associated to the canvas.
     framebuf: FrameBuffer,
+    /// The scratch surface for partial blitting.
+    scratch: PreparedSurface,
+}
+
+/// Uploads the image pointed by the BGA reference to the texture.
+/// It performs a necessary clipping for `SlicedImageBGA`.
+/// `force` should be set to true when the image has to be updated immediately.
+fn upload_bga_ref_to_texture(bgaref: &BGARef<ImageRef>, imgres: &[ImageResource],
+                             texture: &Texture2D, scratch: &PreparedSurface, force: bool) {
+    match *bgaref {
+        ImageBGA(ref iref) if force || imgres[***iref].should_always_upload() => {
+            imgres[***iref].upload_to_texture(texture);
+        }
+        SlicedImageBGA(ref iref, ~ImageSlice {sx,sy,dx,dy,w,h})
+                if force || imgres[***iref].should_always_upload() => {
+            scratch.fill(RGBA(0, 0, 0, 0));
+            for surface in imgres[***iref].surface().move_iter() {
+                // this requires SDL_SRCALPHA flags in `surface` (and not `scratch`).
+                // see `LoadedImageResource::new` for relevant codes.
+                scratch.blit_area(**surface, (sx, sy), (dx, dy), (w, h));
+            }
+            texture.upload_surface(scratch, false, false);
+        }
+        _ => {}
+    }
 }
 
 impl BGACanvas {
@@ -59,14 +87,17 @@ impl BGACanvas {
     pub fn new(imgres: &[ImageResource]) -> BGACanvas {
         let state = initial_bga_state();
 
+        let scratch = match PreparedSurface::new(BGAW, BGAH, true) {
+            Ok(surface) => surface,
+            Err(err) => die!("PreparedSurface::new failed: {}", err)
+        };
+
         let textures = do state.map |iref| {
             let texture = match Texture2D::new(BGAW, BGAH) {
                 Ok(texture) => texture,
                 Err(err) => die!("Texture2D::new failed: {}", err)
             };
-            for &iref in iref.as_image_ref().move_iter() {
-                imgres[**iref].upload_to_texture(&texture);
-            }
+            upload_bga_ref_to_texture(iref, imgres, &texture, &scratch, true);
             texture
         };
 
@@ -78,29 +109,30 @@ impl BGACanvas {
 
         let framebuf = FrameBuffer::from_texture(&canvas);
 
-        BGACanvas { state: state, textures: textures, canvas: canvas, framebuf: framebuf }
+        BGACanvas { state: state, textures: textures, canvas: canvas, framebuf: framebuf,
+                    scratch: scratch }
     }
 
     /// Updates the BGA state. This method prepares given image resources for the next rendering,
     /// notably by starting and stopping the movie playback and uploading textures as needed.
     pub fn update(&mut self, current: &BGAState, imgres: &[ImageResource]) {
         for layer in range(0, NLAYERS) {
-            // TODO this design can't handle the case that a BGA layer is updated to the same
-            // image reference, which should rewind the movie playback.
-            if self.state[layer].as_image_ref() != current[layer].as_image_ref() {
-                for &iref in self.state[layer].as_image_ref().move_iter() {
-                    imgres[**iref].stop_animating();
-                }
-                for &iref in current[layer].as_image_ref().move_iter() {
-                    imgres[**iref].start_animating();
-                    imgres[**iref].upload_to_texture(&self.textures[layer]);
-                }
-            } else {
-                for &iref in self.state[layer].as_image_ref().move_iter() {
-                    if imgres[**iref].should_always_upload() {
-                        imgres[**iref].upload_to_texture(&self.textures[layer]);
+            if self.state[layer] != current[layer] {
+                // TODO this design can't handle the case that a BGA layer is updated to the same
+                // image reference, which should rewind the movie playback.
+                if self.state[layer].as_image_ref() != current[layer].as_image_ref() {
+                    for &iref in self.state[layer].as_image_ref().move_iter() {
+                        imgres[**iref].stop_animating();
+                    }
+                    for &iref in current[layer].as_image_ref().move_iter() {
+                        imgres[**iref].start_animating();
                     }
                 }
+                upload_bga_ref_to_texture(&current[layer], imgres,
+                                          &self.textures[layer], &self.scratch, true);
+            } else {
+                upload_bga_ref_to_texture(&self.state[layer], imgres,
+                                          &self.textures[layer], &self.scratch, false);
             }
             self.state[layer] = current[layer].clone();
         }
@@ -113,14 +145,9 @@ impl BGACanvas {
             for &layer in layers.iter() {
                 match self.state[layer as uint] {
                     BlankBGA => {}
-                    ImageBGA(_) => {
+                    _ => {
                         do buf.draw_textured(&self.textures[layer as uint]) |d| {
                             d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
-                        }
-                    }
-                    SlicedImageBGA(_, ~ImageSlice { sx, sy, dx, dy, w, h }) => {
-                        do buf.draw_textured(&self.textures[layer as uint]) |d| {
-                            d.rect_area(dx, dy, dx + w, dy + h, sx, sy, sx + w, sy + h);
                         }
                     }
                 }

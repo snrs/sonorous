@@ -12,7 +12,6 @@ use gfx::color::{Color, Gradient, RGB, RGBA, Blend};
 
 pub use sdl::Rect;
 pub use sdl::video::Surface;
-use sdl::video::SWSurface;
 use sdl::video::ll::SDL_PixelFormat;
 
 /// A trait that can be translated to point coordinates (`x` and `y` fields in `sdl::Rect`,
@@ -212,12 +211,6 @@ impl SurfaceAreaUtil for Surface {
         let rect = rect_from_xywh(xy, wh);
         self.fill_rect(Some(rect), color)
     }
-}
-
-/// Creates a new RAM-backed surface. By design, Sonorous does not use a VRAM-backed surface
-/// except for the screen.
-pub fn new_surface(w: uint, h: uint) -> Result<~Surface,~str> {
-    Surface::new([SWSurface], w as int, h as int, 32, 0xff0000, 0xff00, 0xff, 0)
 }
 
 /// A proxy to `sdl::video::Surface` for the direct access to pixels. For now, it is for 32 bits

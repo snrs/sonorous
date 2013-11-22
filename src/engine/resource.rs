@@ -205,6 +205,10 @@ impl LoadedImageResource {
         } else {
             let surface = earlyexit!(img::load(path));
             let prepared = earlyexit!(to_display_format(surface));
+
+            // PreparedSurface may destroy SDL_SRCALPHA, which is still required for alpha blitting.
+            // for RGB images, it is effectively no-op as per-surface alpha is fully opaque.
+            prepared.set_alpha([video::SrcAlpha, video::RLEAccel], 255);
             Ok(LoadedImage(prepared))
         }
     }

@@ -81,7 +81,7 @@ pub enum Damage { GaugeDamage(f64), InstantDeath }
  */
 #[deriving(Eq,ToStr,Clone)]
 pub struct ImageSlice {
-    sx: f32, sy: f32, dx: f32, dy: f32, w: f32, h: f32,
+    sx: int, sy: int, dx: int, dy: int, w: int, h: int,
 }
 
 /// A reference to the BGA target, i.e. something that can be displayed in a single BGA layer.
