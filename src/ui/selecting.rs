@@ -133,7 +133,7 @@ enum PreloadingState {
 /// Song/pattern selection scene context. Used when the directory path is specified.
 pub struct SelectingScene {
     /// Display screen.
-    screen: @Screen,
+    screen: @mut Screen,
     /// Game play options.
     opts: @Options,
     /// The root path of the scanner.
@@ -196,7 +196,7 @@ static PRELOAD_DELAY: uint = 300;
 
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
-    pub fn new(screen: @Screen, root: &Path, opts: @Options) -> ~SelectingScene {
+    pub fn new(screen: @mut Screen, root: &Path, opts: @Options) -> ~SelectingScene {
         let root = os::make_absolute(root);
         let (port, chan) = comm::stream();
         let chan = comm::SharedChan::new(chan);

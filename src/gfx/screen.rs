@@ -8,6 +8,7 @@
 
 //! Abstracted graphical screen.
 
+use std::vec::MutableCloneableVector;
 use sdl::video;
 use gfx::gl::{VertexBuffer, Texture2D, FrameBuffer};
 use gfx::draw::{ProgramForShades, ProgramForTextures, ShadedDrawing, TexturedDrawing};
@@ -136,6 +137,12 @@ pub struct Screen {
     program_for_shades: ProgramForShades,
     /// OpenGL program for textured triangles.
     program_for_textures: ProgramForTextures,
+    /// The last viewport set via `set_viewport`.
+    last_viewport: (GLint, GLint, GLsizei, GLsizei),
+    /// The last projection matrix set via `set_projection_*`.
+    last_projection: [GLfloat, ..16],
+    /// The last local transform matrix set via `set_local_transform`.
+    last_local_transform: [GLfloat, ..9],
     /// Shared bitmap font.
     font: Font,
 }
@@ -171,44 +178,68 @@ impl Screen {
         program_for_textures.bind();
         program_for_textures.sampler.set_1i(0);
 
-        let screen = Screen { width: width, height: height, sdl_surface: screen,
-                              glstate: glstate, vertexbuf: VertexBuffer::new(),
-                              program_for_shades: program_for_shades,
-                              program_for_textures: program_for_textures,
-                              font: Font::new() };
+        let mut screen = Screen { width: width, height: height, sdl_surface: screen,
+                                  glstate: glstate, vertexbuf: VertexBuffer::new(),
+                                  program_for_shades: program_for_shades,
+                                  program_for_textures: program_for_textures,
+                                  last_viewport: (0, 0, 0, 0), last_projection: [0.0, ..16],
+                                  last_local_transform: [0.0, ..9], font: Font::new() };
         screen.set_local_transform([1.0, 0.0, 0.0,
                                     0.0, 1.0, 0.0,
                                     0.0, 0.0, 1.0]);
         screen.set_viewport(0, 0, width as GLsizei, height as GLsizei);
+        screen.set_projection_ortho(0.0, width as f32, 0.0, height as f32);
         Ok(screen)
     }
 
     /// Sets the local transform matrix. `matrix` should be a 3x3 row-major matrix.
-    pub fn set_local_transform(&self, matrix: &[GLfloat]) {
+    pub fn set_local_transform(&mut self, matrix: &[GLfloat]) {
+        assert!(matrix.len() == 9);
         self.program_for_shades.bind();
         self.program_for_shades.local_transform.set_matrix_3f(false, matrix);
         self.program_for_textures.bind();
         self.program_for_textures.local_transform.set_matrix_3f(false, matrix);
+        self.last_local_transform.mut_slice(0, 9).copy_from(matrix);
     }
 
-    /// Sets the viewport and corresponding projection matrix.
-    pub fn set_viewport(&self, left: GLint, top: GLint, width: GLsizei, height: GLsizei) {
+    /// Sets the viewport, which translates [-1,1]x[-1,1] coordinates into the window coordinates.
+    pub fn set_viewport(&mut self, left: GLint, top: GLint, width: GLsizei, height: GLsizei) {
         gl::viewport(left, top, width, height);
+        self.last_viewport = (left, top, width, height);
+    }
 
-        let (l, r) = (left as f32, left as f32 + width as f32);
-        let (t, b) = (top as f32, top as f32 + height as f32);
-        let (f, n) = (1.0, -1.0);
-        let projection = [
+    /// Sets the projection matrix. `matrix` should be a 4x4 row-major matrix.
+    pub fn set_projection(&mut self, matrix: &[GLfloat]) {
+        assert!(matrix.len() == 16);
+        self.program_for_shades.bind();
+        self.program_for_shades.projection.set_matrix_4f(false, matrix);
+        self.program_for_textures.bind();
+        self.program_for_textures.projection.set_matrix_4f(false, matrix);
+        self.last_projection.mut_slice(0, 16).copy_from(matrix);
+    }
+
+    /// Sets the orthographic projection matrix with given 2D bounds.
+    /// Far and near bounds (z-index) are implicitly set to [1,-1].
+    pub fn set_projection_ortho(&mut self, left: f32, right: f32, top: f32, bottom: f32) {
+        let (l, r, t, b, f, n) = (left, right, top, bottom, 1.0, -1.0);
+        self.set_projection([
             2.0/(r-l),    0.0,          0.0,          0.0,
             0.0,          2.0/(t-b),    0.0,          0.0,
             0.0,          0.0,          -2.0/(f-n),   0.0,
             -(r+l)/(r-l), -(t+b)/(t-b), -(f+n)/(f-n), 1.0,
-        ];
+        ]);
+    }
 
-        self.program_for_shades.bind();
-        self.program_for_shades.projection.set_matrix_4f(false, projection);
-        self.program_for_textures.bind();
-        self.program_for_textures.projection.set_matrix_4f(false, projection);
+    /// Temporarily saves the current viewport, projection and local transform matrixes
+    /// before the block, and restores them at the end of the block.
+    pub fn locally(&mut self, f: &fn(&mut Screen)) {
+        let (saved_vl, saved_vt, saved_vw, saved_vh) = self.last_viewport;
+        let saved_projection = self.last_projection;
+        let saved_local_transform = self.last_local_transform;
+        f(self);
+        self.set_viewport(saved_vl, saved_vt, saved_vw, saved_vh);
+        self.set_projection(saved_projection.as_slice());
+        self.set_local_transform(saved_local_transform.as_slice());
     }
 
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
@@ -272,16 +303,15 @@ impl Screen {
 
     /// Renders to given frame buffer. The frame buffer should be complete.
     /// The viewport is temporarily reset to dimensions of the frame buffer in given block.
-    pub fn render_to_framebuffer(&self, framebuf: &FrameBuffer, f: &fn(&Screen)) {
+    pub fn render_to_framebuffer(&mut self, framebuf: &FrameBuffer, f: &fn(&Screen)) {
         assert!(framebuf.complete());
-        let mut xywh: [GLint, ..4] = [0, 0, 0, 0];
-        gl::get_integer_v(gl::VIEWPORT, xywh.mut_slice(0, 4));
-        framebuf.bind();
-        self.set_viewport(0, framebuf.height as GLint,
-                          framebuf.width as GLsizei, -(framebuf.height as GLsizei));
-        f(self);
-        FrameBuffer::unbind();
-        self.set_viewport(xywh[0], xywh[1], xywh[2] as GLsizei, xywh[3] as GLsizei);
+        do self.locally |screen| {
+            framebuf.bind();
+            screen.set_viewport(0, 0, framebuf.width as GLsizei, framebuf.height as GLsizei);
+            screen.set_projection_ortho(0.0, framebuf.width as f32, framebuf.height as f32, 0.0);
+            f(screen);
+            FrameBuffer::unbind();
+        }
     }
 }
 

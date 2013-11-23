@@ -18,14 +18,14 @@ use ui::playing;
 /// Play result scene.
 pub struct PlayResultScene {
     /// Display screen.
-    screen: @Screen,
+    screen: @mut Screen,
     /// Game play state after playing.
     player: Player,
 }
 
 impl PlayResultScene {
     /// Creates a new play result scene from the game play state after `PlayingScene`.
-    pub fn new(screen: @Screen, player: Player) -> ~PlayResultScene {
+    pub fn new(screen: @mut Screen, player: Player) -> ~PlayResultScene {
         ~PlayResultScene { screen: screen, player: player }
     }
 }

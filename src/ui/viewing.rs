@@ -139,7 +139,7 @@ impl BGACanvas {
     }
 
     /// Renders the image resources to the internal canvas texture.
-    pub fn render_to_texture(&self, screen: &Screen, layers: &[BGALayer]) {
+    pub fn render_to_texture(&self, screen: &mut Screen, layers: &[BGALayer]) {
         do screen.render_to_framebuffer(&self.framebuf) |buf| {
             buf.clear();
             for &layer in layers.iter() {
@@ -209,7 +209,7 @@ pub struct ViewingScene {
     /// the on-screen display).
     parent: ~TextualViewingScene,
     /// Display screen.
-    screen: @Screen,
+    screen: @mut Screen,
     /// Image resources.
     imgres: ~[ImageResource],
     /// BGA canvas.
@@ -219,7 +219,7 @@ pub struct ViewingScene {
 impl ViewingScene {
     /// Creates a new BGA-only scene context from the pre-created screen (usually by `init_video`)
     /// and pre-loaded image resources.
-    pub fn new(screen: @Screen, imgres: ~[ImageResource], player: Player) -> ~ViewingScene {
+    pub fn new(screen: @mut Screen, imgres: ~[ImageResource], player: Player) -> ~ViewingScene {
         let bgacanvas = BGACanvas::new(imgres);
         ~ViewingScene { parent: TextualViewingScene::new(player),
                         screen: screen, imgres: imgres, bgacanvas: bgacanvas }
@@ -241,7 +241,7 @@ impl Scene for ViewingScene {
         self.screen.clear();
 
         let layers = &[Layer1, Layer2, Layer3];
-        self.bgacanvas.render_to_texture(&*self.screen, layers);
+        self.bgacanvas.render_to_texture(&mut *self.screen, layers);
         do self.screen.draw_textured(self.bgacanvas.as_texture()) |d| {
             d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
         }
