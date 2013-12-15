@@ -19,6 +19,8 @@ use std::to_str::ToStr;
 use std::to_bytes::{IterBytes, Cb};
 use std::fmt;
 
+use util::into_send::IntoSend;
+
 /// A string that can hold either `&'self str` or `~str`. This is an extension to
 /// `std::send_str::OptOwnedStr` (which itself is homomorphic to `OptOwnedStr<'static>`).
 pub enum OptOwnedStr<'self> {
@@ -50,15 +52,6 @@ impl<'self> OptOwnedStr<'self> {
             OptOwnedStrBorrowed(*) => true,
         }
     }
-
-    /// Returns a statically owned copy (that is, `Send`able) of the string.
-    #[inline]
-    pub fn into_send(self) -> OptOwnedStr<'static> {
-        match self {
-            OptOwnedStrOwned(s) => OptOwnedStrOwned(s),
-            OptOwnedStrBorrowed(s) => OptOwnedStrOwned(s.to_owned()),
-        }
-    }
 }
 
 impl<'self,T> OptOwnedVec<'self,T> {
@@ -77,6 +70,28 @@ impl<'self,T> OptOwnedVec<'self,T> {
         match *self {
             OptOwnedVecOwned(*) => false,
             OptOwnedVecBorrowed(*) => true,
+        }
+    }
+}
+
+// * `IntoSend` implementations
+
+impl<'self> IntoSend<OptOwnedStr<'static>> for OptOwnedStr<'self> {
+    #[inline]
+    fn into_send(self) -> OptOwnedStr<'static> {
+        match self {
+            OptOwnedStrOwned(s) => OptOwnedStrOwned(s),
+            OptOwnedStrBorrowed(s) => OptOwnedStrOwned(s.to_owned()),
+        }
+    }
+}
+
+impl<'self,T:Clone> IntoSend<OptOwnedVec<'static,T>> for OptOwnedVec<'self,T> {
+    #[inline]
+    fn into_send(self) -> OptOwnedVec<'static,T> {
+        match self {
+            OptOwnedVecOwned(v) => OptOwnedVecOwned(v),
+            OptOwnedVecBorrowed(v) => OptOwnedVecOwned(v.to_owned()),
         }
     }
 }

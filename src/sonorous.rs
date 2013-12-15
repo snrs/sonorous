@@ -55,6 +55,7 @@ use self::util::std::option::*;
     pub mod macros;
     pub mod lex;
     pub mod filesearch;
+    pub mod into_send;
     pub mod opt_owned;
     pub mod envelope;
     pub mod chardet;

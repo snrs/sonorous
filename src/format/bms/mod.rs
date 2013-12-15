@@ -42,6 +42,7 @@ pub use format::bms::types::{Key, MAXKEY};
 pub mod types;
 pub mod diag;
 pub mod encoding;
+pub mod preproc;
 pub mod parse;
 pub mod load;
 

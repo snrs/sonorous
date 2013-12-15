@@ -8,32 +8,19 @@ use std::{io, iter, f64, char};
 use std::rand::Rng;
 use encoding::Encoding;
 
+use util::into_send::IntoSend;
 use util::opt_owned::{OptOwnedStr, IntoOptOwnedStr};
 use format::obj::{BPM, Duration, Seconds, Measures, ImageSlice};
 use format::bms::types::{Key, PartialKey};
 use format::bms::diag::*;
+use format::bms::preproc::{BmsFlowCommand, Preprocessor};
+pub use format::bms::preproc::{BmsRandom, BmsSetRandom, BmsEndRandom};
+pub use format::bms::preproc::{BmsIf, BmsElseIf, BmsElse, BmsEndIf};
+pub use format::bms::preproc::{BmsSwitch, BmsSetSwitch, BmsEndSw, BmsCase, BmsSkip, BmsDef};
 use format::bms::encoding::{decode_stream, guess_decode_stream};
 
 /// A tuple of four `u8` values. Mainly used for BMS #ARGB command and its family.
 pub type ARGB = (u8,u8,u8,u8);
-
-/// Represents one line of BMS command that may affect the control flow.
-#[deriving(Clone)]
-pub enum BmsFlowCommand {
-    BmsRandom(int),                             // #RANDOM
-    BmsSetRandom(int),                          // #SETRANDOM
-    BmsEndRandom,                               // #ENDRANDOM
-    BmsIf(int),                                 // #IF
-    BmsElseIf(int),                             // #ELSEIF
-    BmsElse,                                    // #ELSE
-    BmsEndIf,                                   // #ENDIF
-    BmsSwitch(int),                             // #SWITCH
-    BmsSetSwitch(int),                          // #SETSWITCH
-    BmsEndSw,                                   // #ENDSW
-    BmsCase(int),                               // #CASE
-    BmsSkip,                                    // #SKIP
-    BmsDef,                                     // #DEF
-}
 
 /// Represents one line of BMS file.
 #[deriving(Clone)]
@@ -87,8 +74,8 @@ pub enum BmsCommand<'self> {
     BmsFlow(BmsFlowCommand),                    // flow commands (#RANDOM, #IF, #ENDIF etc.)
 }
 
-impl<'self> BmsCommand<'self> {
-    pub fn into_send(self) -> BmsCommand<'static> {
+impl<'self> IntoSend<BmsCommand<'static>> for BmsCommand<'self> {
+    fn into_send(self) -> BmsCommand<'static> {
         match self {
             BmsUnknown(s) => BmsUnknown(s.into_send()),
             BmsTitle(s) => BmsTitle(s.into_send()),
@@ -227,19 +214,7 @@ impl<'self> ToStr for BmsCommand<'self> {
             BmsShorten(measure, shorten) => format!("\\#{:03}02:{}", measure, shorten),
             BmsData(measure, chan, ref data) =>
                 format!("\\#{:03}{}:{}", measure, chan.to_str(), *data),
-            BmsFlow(BmsRandom(val)) => format!("\\#RANDOM {}", val),
-            BmsFlow(BmsSetRandom(val)) => format!("\\#SETRANDOM {}", val),
-            BmsFlow(BmsEndRandom) => ~"#ENDRANDOM",
-            BmsFlow(BmsIf(val)) => format!("\\#IF {}", val),
-            BmsFlow(BmsElseIf(val)) => format!("\\#ELSEIF {}", val),
-            BmsFlow(BmsElse) => ~"#ELSE",
-            BmsFlow(BmsEndIf) => ~"#ENDIF",
-            BmsFlow(BmsSwitch(val)) => format!("\\#SWITCH {}", val),
-            BmsFlow(BmsSetSwitch(val)) => format!("\\#SETSWITCH {}", val),
-            BmsFlow(BmsEndSw) => ~"#ENDSW",
-            BmsFlow(BmsCase(val)) => format!("\\#CASE {}", val),
-            BmsFlow(BmsSkip) => ~"#SKIP",
-            BmsFlow(BmsDef) => ~"#DEF",
+            BmsFlow(ref flowcmd) => flowcmd.to_str(),
         }
     }
 }
@@ -714,127 +689,34 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
     ret
 }
 
-/// The state of the block, for determining which lines should be processed.
-#[deriving(Eq)]
-enum BlockState {
-    /// Not contained in the #IF block.
-    Outside,
-    /// Active.
-    Process,
-    /// Inactive, but (for the purpose of #IF/#ELSEIF/#ELSE/#ENDIF structure) can move to
-    /// `Process` state when matching clause appears.
-    Ignore,
-    /// Inactive and won't be processed until the end of block.
-    NoFurther
-}
-
-impl BlockState {
-    /// Returns true if lines should be ignored in the current block given that the parent
-    /// block was active.
-    fn inactive(self) -> bool {
-        match self { Outside | Process => false, Ignore | NoFurther => true }
-    }
-}
-
-/**
- * Block information. The parser keeps a list of nested blocks and determines if
- * a particular line should be processed or not.
- *
- * Sonorous actually recognizes only one kind of blocks, starting with #RANDOM or
- * #SETRANDOM and ending with #ENDRANDOM or #END(IF) outside an #IF block. An #IF block is
- * a state within #RANDOM, so it follows that #RANDOM/#SETRANDOM blocks can nest but #IF
- * can't nest unless its direct parent is #RANDOM/#SETRANDOM.
- */
-#[deriving(Eq)]
-struct Block {
-    /// A generated value if any. It can be `None` if this block is the topmost one (which
-    /// is actually not a block but rather a sentinel) or the last `#RANDOM` or `#SETRANDOM`
-    /// command was invalid, and #IF in that case will always evaluates to false.
-    val: Option<int>,
-    /// The state of the block.
-    state: BlockState,
-    /// True if the parent block is already ignored so that this block should be ignored
-    /// no matter what `state` is.
-    skip: bool
-}
-
-impl Block {
-    /// Returns true if lines should be ignored in the current block.
-    fn inactive(&self) -> bool { self.skip || self.state.inactive() }
-}
-
 /// Iterates over the parsed BMS commands, with flow commands have been preprocessed.
 pub fn each_bms_command<R:Rng,Listener:BmsMessageListener>(
                                 f: @io::Reader, r: &mut R,
                                 opts: &BmsParserOptions, callback: &mut Listener,
                                 blk: &fn(uint,BmsCommand) -> bool) -> bool {
-    let mut blocks = ~[Block { val: None, state: Outside, skip: false }];
-
     // internal callback wrapper, both the caller and the callee have to use the callback
     let mut callback_ = |line, msg| callback.on_message(line, msg);
+    let mut pp = Preprocessor::new(r, &mut callback_);
 
     let mut ret = true;
-    do each_bms_command_with_flow(f, opts, &mut callback_) |lineno, cmd| {
-        assert!(!blocks.is_empty());
-        match (cmd, blocks.last().inactive()) {
-            (BmsFlow(ref flow), inactive) => match *flow {
-                BmsRandom(val) | BmsSetRandom(val) => {
-                    let val = if val <= 0 {None} else {Some(val)};
-                    let setrandom = match *flow { BmsSetRandom(*) => true, _ => false };
-
-                    // do not generate a random value if the entire block is skipped (but it
-                    // still marks the start of block)
-                    let generated = do val.and_then |val| {
-                        if setrandom {
-                            Some(val)
-                        } else if !inactive {
-                            Some(r.gen_integer_range(1, val + 1))
-                        } else {
-                            None
-                        }
-                    };
-                    blocks.push(Block { val: generated, state: Outside, skip: inactive });
-                }
-                BmsEndRandom => {
-                    if blocks.len() > 1 { blocks.pop(); }
-                }
-                BmsIf(val) | BmsElseIf(val) => {
-                    let val = if val <= 0 {None} else {Some(val)};
-                    let haspriorelse = match *flow { BmsElseIf(*) => true, _ => false };
-
-                    // Rust: `blocks.last_ref()` may be useful?
-                    let last = &mut blocks[blocks.len() - 1];
-                    last.state =
-                        if (!haspriorelse && !last.state.inactive()) || last.state == Ignore {
-                            if val.is_none() || val != last.val {Ignore} else {Process}
-                        } else {
-                            NoFurther
-                        };
-                }
-                BmsElse => {
-                    let last = &mut blocks[blocks.len() - 1];
-                    last.state = if last.state == Ignore {Process} else {NoFurther};
-                }
-                BmsEndIf => {
-                    let lastinside = blocks.iter().rposition(|&i| i.state != Outside); // XXX #3511
-                    for &idx in lastinside.iter() {
-                        if idx > 0 { blocks.truncate(idx + 1); }
-                    }
-
-                    let last = &mut blocks[blocks.len() - 1];
-                    last.state = Outside;
-                }
-                BmsSwitch(*) | BmsSetSwitch(*) | BmsEndSw | BmsCase(*) | BmsSkip | BmsDef => {
-                    if !callback.on_message(Some(lineno), BmsHasUnimplementedFlow) { ret = false; }
-                }
-            },
-            (cmd, false) => {
-                if !blk(lineno, cmd) { ret = false; }
-            }
-            (_cmd, true) => {}
+    do each_bms_command_with_flow(f, opts, callback) |lineno, cmd| {
+        let mut out = ~[]; // XXX can we avoid one allocation per iteration?
+        match cmd {
+            BmsFlow(ref flowcmd) => { pp.feed_flow(Some(lineno), flowcmd, &mut out); }
+            cmd => { pp.feed_other((lineno, cmd.into_send()), &mut out); }
+        }
+        for (lineno, cmd) in out.move_iter() {
+            if !blk(lineno, cmd) { ret = false; break; }
         }
         ret
     };
+    if ret {
+        let mut out = ~[];
+        pp.finish(&mut out);
+        for (lineno, cmd) in out.move_iter() {
+            if !blk(lineno, cmd) { ret = false; break; }
+        }
+    }
     ret
 }
 
