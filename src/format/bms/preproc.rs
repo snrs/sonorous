@@ -187,23 +187,28 @@ impl<'self,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'self,T,
 #[cfg(test)]
 mod tests {
     use std::rand::rng;
+    use format::bms::diag::BmsMessage;
     use super::Preprocessor;
 
-    use std::rand::IsaacRng;
-    use format::bms::diag::BmsMessage;
+    macro_rules! with_pp(
+        ($pp:ident $blk:expr) => ({
+            let mut r = rng();
+            let mut callback: &fn(Option<uint>, BmsMessage) = |_, _| fail!("unexpected");
+            let mut $pp = Preprocessor::new(&mut r, &mut callback);
+            $blk;
+        })
+    )
 
     #[test]
     fn test_no_flow() {
-        let mut r = rng();
-        let mut callback = |_, _| fail!("unexpected");
-        let mut pp: Preprocessor<uint,IsaacRng,&fn(Option<uint>,BmsMessage)> =
-            Preprocessor::new(&mut r, &mut callback); // XXX type inference somehow fails
-        let mut out = ~[];
-        pp.feed_other(42, &mut out);
-        assert_eq!(out.as_slice(), [42]);
-        out.clear();
-        pp.finish(&mut out);
-        assert_eq!(out.as_slice(), []);
+        with_pp!(pp {
+            let mut out = ~[];
+            pp.feed_other(42, &mut out);
+            assert_eq!(out.as_slice(), [42]);
+            out.clear();
+            pp.finish(&mut out);
+            assert_eq!(out.as_slice(), []);
+        })
     }
 
     // TODO add more tests

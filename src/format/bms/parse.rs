@@ -243,10 +243,11 @@ fn is_whitespace_or_similar(c: char) -> bool {
     char::is_whitespace(c) || c == '\u0085' || c == '\ufeff'
 }
 
-/// Iterates over the parsed BMS commands, including flow commands.
-pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
-                                f: @io::Reader, opts: &BmsParserOptions, callback: &mut Listener,
-                                blk: &fn(uint,BmsCommand) -> bool) -> bool {
+/// Same as `each_bms_command_with_flow` below.
+/// Virtualized arguments are used instead of generic parameters for the smaller binary.
+fn each_bms_command_with_flow_(f: @io::Reader, opts: &BmsParserOptions,
+                               callback: &mut BmsMessageListener,
+                               blk: &fn(uint,BmsCommand) -> bool) -> bool {
     use std::ascii::StrAsciiExt;
 
     let (file, encoding, confidence) = match opts.force_encoding {
@@ -689,17 +690,24 @@ pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
     ret
 }
 
-/// Iterates over the parsed BMS commands, with flow commands have been preprocessed.
-pub fn each_bms_command<R:Rng,Listener:BmsMessageListener>(
-                                f: @io::Reader, r: &mut R,
-                                opts: &BmsParserOptions, callback: &mut Listener,
+/// Iterates over the parsed BMS commands, including flow commands.
+pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
+                                f: @io::Reader, opts: &BmsParserOptions, callback: &mut Listener,
+                                blk: &fn(uint,BmsCommand) -> bool) -> bool {
+    each_bms_command_with_flow_(f, opts, callback as &mut BmsMessageListener, blk)
+}
+
+/// Same as `each_bms_command` below.
+/// Virtualized arguments are used instead of generic parameters for the smaller binary.
+pub fn each_bms_command_<R:Rng>(f: @io::Reader, r: &mut R,
+                                opts: &BmsParserOptions, callback: &mut BmsMessageListener,
                                 blk: &fn(uint,BmsCommand) -> bool) -> bool {
     // internal callback wrapper, both the caller and the callee have to use the callback
     let mut callback_ = |line, msg| callback.on_message(line, msg);
     let mut pp = Preprocessor::new(r, &mut callback_);
 
     let mut ret = true;
-    do each_bms_command_with_flow(f, opts, callback) |lineno, cmd| {
+    do each_bms_command_with_flow_(f, opts, callback) |lineno, cmd| {
         let mut out = ~[]; // XXX can we avoid one allocation per iteration?
         match cmd {
             BmsFlow(ref flowcmd) => { pp.feed_flow(Some(lineno), flowcmd, &mut out); }
@@ -718,5 +726,13 @@ pub fn each_bms_command<R:Rng,Listener:BmsMessageListener>(
         }
     }
     ret
+}
+
+/// Iterates over the parsed BMS commands, with flow commands have been preprocessed.
+pub fn each_bms_command<R:Rng,Listener:BmsMessageListener>(
+                                f: @io::Reader, r: &mut R,
+                                opts: &BmsParserOptions, callback: &mut Listener,
+                                blk: &fn(uint,BmsCommand) -> bool) -> bool {
+    each_bms_command_(f, r, opts, callback as &mut BmsMessageListener, blk)
 }
 

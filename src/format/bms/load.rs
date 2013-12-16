@@ -42,10 +42,10 @@ impl Ord for BmsLine {
     }
 }
 
-/// Reads the BMS file with given RNG from given reader. Diagnostic messages are sent via callback.
-pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
-                                f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
-                                callback: &mut Listener) -> Result<Bms,~str> {
+/// Same as `load_bms` below.
+/// Virtualized arguments are used instead of generic parameters for the smaller binary.
+fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
+                    callback: &mut BmsMessageListener) -> Result<Bms,~str> {
     use format::timeline::builder::{TimelineBuilder, Mark};
 
     let mut encoding = ("ascii", 0.0);
@@ -107,7 +107,8 @@ pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
     };
 
     let mut ret = true;
-    do parse::each_bms_command(f, r, &opts.parser, &mut callback_) |lineno, cmd| {
+    do parse::each_bms_command_(f, r, &opts.parser,
+                                &mut callback_ as &mut BmsMessageListener) |lineno, cmd| {
         macro_rules! diag(
             ($e:expr) => (
                 if !callback.on_message(None, $e) { ret = false; }
@@ -493,5 +494,12 @@ pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
                              playlevel: playlevel, difficulty: difficulty, rank: rank,
                              sndpath: sndpath, imgpath: imgpath },
              timeline: timeline })
+}
+
+/// Reads the BMS file with given RNG from given reader. Diagnostic messages are sent via callback.
+pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
+                                f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
+                                callback: &mut Listener) -> Result<Bms,~str> {
+    load_bms_(f, r, opts, callback as &mut BmsMessageListener)
 }
 
