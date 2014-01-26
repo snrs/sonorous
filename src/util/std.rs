@@ -13,7 +13,7 @@ pub mod str {
     use std::str::*;
 
     /// Extensions to `str`.
-    pub trait StrUtil<'self> {
+    pub trait StrUtil<'r> {
         /// Returns a slice of the given string starting from `begin` and up to the byte
         /// position `end`. `end` doesn't have to point to valid characters.
         ///
@@ -21,7 +21,7 @@ pub mod str {
         ///
         /// If `begin` does not point to valid characters or beyond the last character of
         /// the string, or `end` points beyond the last character of the string
-        fn slice_upto(&self, begin: uint, end: uint) -> &'self str;
+        fn slice_upto(&self, begin: uint, end: uint) -> &'r str;
 
         /// Counts the number of bytes in the complete UTF-8 sequences up to `limit` bytes
         /// in `s` starting from `start`.
@@ -43,11 +43,11 @@ pub mod str {
 
         /// Work with a null-terminated UTF-16 buffer of the string. Useful for calling
         /// Win32 API.
-        fn as_utf16_c_str<T>(&self, f: &fn(*u16) -> T) -> T;
+        fn as_utf16_c_str<T>(&self, f: |*u16| -> T) -> T;
     }
 
-    impl<'self> StrUtil<'self> for &'self str {
-        fn slice_upto(&self, begin: uint, end: uint) -> &'self str {
+    impl<'r> StrUtil<'r> for &'r str {
+        fn slice_upto(&self, begin: uint, end: uint) -> &'r str {
             self.slice(begin, begin + self.count_bytes_upto(begin, end))
         }
 
@@ -76,27 +76,27 @@ pub mod str {
 
         fn scan_int(&self) -> Option<uint> {
             if self.starts_with("-") || self.starts_with("+") {
-                self.slice_from(1u).scan_uint().map(|&pos| pos + 1u)
+                self.slice_from(1u).scan_uint().map(|pos| pos + 1u)
             } else {
                 self.scan_uint()
             }
         }
 
         fn scan_f64(&self) -> Option<uint> {
-            do self.scan_int().and_then |pos| {
+            self.scan_int().and_then(|pos| {
                 if self.len() > pos && self.char_at(pos) == '.' {
                     let pos2 = self.slice_from(pos + 1u).scan_uint();
-                    pos2.map(|&pos2| pos + pos2 + 1u)
+                    pos2.map(|pos2| pos + pos2 + 1u)
                 } else {
                     Some(pos)
                 }
-            }
+            })
         }
 
-        fn as_utf16_c_str<T>(&self, f: &fn(*u16) -> T) -> T {
+        fn as_utf16_c_str<T>(&self, f: |*u16| -> T) -> T {
             let mut s16 = self.to_utf16();
             s16.push(0u16);
-            do s16.as_imm_buf |buf, _| { f(buf) }
+            f(s16.as_ptr())
         }
     }
 
@@ -120,7 +120,7 @@ pub mod str {
         }
     }
 
-    impl<'self> ShiftablePrefix for &'self str {
+    impl<'r> ShiftablePrefix for &'r str {
         fn prefix_shifted<'r>(&self, s: &'r str) -> Option<&'r str> {
             if s.starts_with(*self) {
                 Some(s.slice_from(self.len()))
@@ -130,53 +130,5 @@ pub mod str {
         }
     }
 
-}
-
-/// Option utilities for Rust. Parallels to `std::option`.
-pub mod option {
-
-    /// Filters the value inside the option using the function. Returns `None` if the original
-    /// option didn't contain a value.
-    #[inline(always)]
-    pub fn filter<T:Clone>(opt: Option<T>, f: &fn(t: T) -> bool) -> Option<T> {
-        match opt {
-            Some(t) => if f(t.clone()) {Some(t)} else {None},
-            None => None
-        }
-    }
-
-    /// Merges two options. When one of options is `None` returns the other option. When both
-    /// options contain a value the function is called to get the merged value.
-    #[inline(always)]
-    pub fn merge<T:Clone>(lhs: Option<T>, rhs: Option<T>, f: &fn(T, T) -> T) -> Option<T> {
-        match (lhs, rhs) {
-            (None, None) => None,
-            (lhs,  None) => lhs,
-            (None, rhs ) => rhs,
-            (Some(ref lhs), Some(ref rhs)) => Some(f(lhs.clone(), rhs.clone()))
-        }
-    }
-
-    pub trait CopyableOptionUtil<T:Clone> {
-        /// Filters the value inside the option using the function. Returns `None` if
-        /// the original option didn't contain a value.
-        fn filter(self, f: &fn(x: T) -> bool) -> Option<T>;
-
-        /// Merges two options. When one of options is `None` returns the other option. When
-        /// both options contain a value the function is called to get the merged value.
-        fn merge(self, other: Option<T>, f: &fn(T, T) -> T) -> Option<T>;
-    }
-
-    impl<T:Clone> CopyableOptionUtil<T> for Option<T> {
-        #[inline(always)]
-        fn filter(self, f: &fn(x: T) -> bool) -> Option<T> {
-            filter(self, f)
-        }
-
-        #[inline(always)]
-        fn merge(self, other: Option<T>, f: &fn(T, T) -> T) -> Option<T> {
-            merge(self, other, f)
-        }
-    }
 }
 

@@ -57,9 +57,9 @@ pub trait CharClass {
     fn default_freq(&self, cc: uint) -> (f64,f64);
 
     /// Loops over character classes present in given string. Currently returns distinct classes.
-    fn each_class(&self, s: &str, blk: &fn(uint)) {
+    fn each_class(&self, s: &str, blk: |uint|) {
         let mut seen = vec::from_elem((self.num_classes() + 63) / 64, 0u64);
-        for c in s.iter() {
+        for c in s.chars() {
             match self.from_char(c) {
                 Some(cls) if (seen[cls/64] >> (cls%64)) & 1 == 0 => {
                     seen[cls/64] |= 1 << (cls%64);
@@ -187,10 +187,10 @@ impl<CC:CharClass> Trainer<CC> {
     pub fn train(&mut self, s: &str, positive: bool) {
         let posw = if positive {1.0} else {0.0};
         let negw = if positive {0.0} else {1.0};
-        do self.cc.each_class(s) |cls| {
+        self.cc.each_class(s, |cls| {
             let (pos, neg) = self.weights[cls];
             self.weights[cls] = (pos + posw, neg + negw);
-        }
+        });
     }
 
     /// Scales the frequencies with given factor.
@@ -214,10 +214,10 @@ impl<CC:CharClass> Trainer<CC> {
     /// Calculates the probabilities for the classifier. The original trainer is destroyed.
     pub fn into_classifier(self) -> Classifier<CC> {
         let Trainer { weights, cc } = self;
-        let logprobs: ~[i32] = do weights.move_iter().map |(pos, neg)| {
+        let logprobs: ~[i32] = weights.move_iter().map(|(pos, neg)| {
             let p = (pos + 1.0) / (pos + neg + 2.0);
             ((ln(1.0 - p) - ln(p)) * 65536.0).round() as i32
-        }.collect();
+        }).collect();
         Classifier::new(cc, logprobs)
     }
 }
@@ -250,9 +250,9 @@ impl<CC:CharClass> Classifier<CC> {
     /// Bigger the value, unlikely the string being encoded in given encoding.
     pub fn raw_confidence(&self, s: &str) -> i32 {
         let mut confidence = 0;
-        do self.cc.each_class(s) |cls| {
+        self.cc.each_class(s, |cls| {
             confidence += self.logprobs.as_slice()[cls];
-        }
+        });
         confidence
     }
 
@@ -316,7 +316,7 @@ pub fn chardet_train(args: &[~str]) -> int {
                 kotrainerko.train(w, true);
                 jatrainerko.train(WINDOWS_31J.decode(w_, Replace).unwrap(), false);
             }
-            Err(*) => {}
+            Err(..) => {}
         }
         match WINDOWS_31J.encode(w, Strict) {
             Ok(w_) => {
@@ -324,7 +324,7 @@ pub fn chardet_train(args: &[~str]) -> int {
                 jatrainerja.train(w, true);
                 kotrainerja.train(WINDOWS_949.decode(w_, Replace).unwrap(), false);
             }
-            Err(*) => {}
+            Err(..) => {}
         }
     }
 

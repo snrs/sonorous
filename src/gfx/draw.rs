@@ -8,6 +8,8 @@
 
 //! 2D drawing routines for OpenGL.
 
+use std::mem;
+
 use gfx::color::{Color, to_rgba};
 use gfx::gl::{Texture2D, VertexBuffer};
 use gfx::gl::{Shader, VertexShader, FragmentShader};
@@ -176,8 +178,8 @@ impl ShadedDrawing {
         vertexbuf.bind();
 
         // TODO there is no `offsetof` or similar
-        let rowsize = ::std::sys::size_of::<(f32,f32,u8,u8,u8,u8)>() as GLint;
-        let coloroffset = ::std::sys::size_of::<(f32,f32)>() as GLuint;
+        let rowsize = mem::size_of::<(f32,f32,u8,u8,u8,u8)>() as GLint;
+        let coloroffset = mem::size_of::<(f32,f32)>() as GLuint;
         program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
         program.color.define_pointer_u8(4, true, rowsize, coloroffset);
 
@@ -299,16 +301,16 @@ impl TexturedDrawing {
         vertexbuf.bind();
 
         // TODO there is no `offsetof` or similar
-        let rowsize = ::std::sys::size_of::<(f32,f32,f32,f32,u8,u8,u8,u8)>() as GLint;
-        let texoffset = ::std::sys::size_of::<(f32,f32)>() as GLuint;
-        let coloroffset = texoffset + ::std::sys::size_of::<(f32,f32)>() as GLuint;
+        let rowsize = mem::size_of::<(f32,f32,f32,f32,u8,u8,u8,u8)>() as GLint;
+        let texoffset = mem::size_of::<(f32,f32)>() as GLuint;
+        let coloroffset = texoffset + mem::size_of::<(f32,f32)>() as GLuint;
         program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
         program.texture_coord.define_pointer_f32(2, false, rowsize, texoffset);
         program.color.define_pointer_u8(4, true, rowsize, coloroffset);
         program.sampler.set_1i(0);
         texture.bind(0);
 
-        let TexturedDrawing { prim, vertices, _ } = self;
+        let TexturedDrawing { prim, vertices, .. } = self;
         vertexbuf.upload(vertices, gl::DYNAMIC_DRAW);
         gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }

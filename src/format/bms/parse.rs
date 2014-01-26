@@ -4,9 +4,9 @@
 
 //! BMS parser.
 
-use std::{io, iter, f64, char};
+use std::{iter, f64, char};
 use std::rand::Rng;
-use encoding::Encoding;
+use encoding::EncodingRef;
 
 use util::into_send::IntoSend;
 use util::opt_owned::{OptOwnedStr, IntoOptOwnedStr};
@@ -24,22 +24,22 @@ pub type ARGB = (u8,u8,u8,u8);
 
 /// Represents one line of BMS file.
 #[deriving(Clone)]
-pub enum BmsCommand<'self> {
-    BmsUnknown(OptOwnedStr<'self>),             // starting with `#` but unknown otherwise
-    BmsTitle(OptOwnedStr<'self>),               // #TITLE
-    BmsSubtitle(OptOwnedStr<'self>),            // #SUBTITLE
-    BmsGenre(OptOwnedStr<'self>),               // #GENRE
-    BmsArtist(OptOwnedStr<'self>),              // #ARTIST
-    BmsSubartist(OptOwnedStr<'self>),           // #SUBARTIST
-    BmsMaker(OptOwnedStr<'self>),               // #MAKER
-    BmsComment(OptOwnedStr<'self>),             // #COMMENT
-    BmsStageFile(OptOwnedStr<'self>),           // #STAGEFILE
-    BmsBanner(OptOwnedStr<'self>),              // #BANNER
-    BmsPathWAV(OptOwnedStr<'self>),             // #PATH_WAV
+pub enum BmsCommand<'r> {
+    BmsUnknown(OptOwnedStr<'r>),                // starting with `#` but unknown otherwise
+    BmsTitle(OptOwnedStr<'r>),                  // #TITLE
+    BmsSubtitle(OptOwnedStr<'r>),               // #SUBTITLE
+    BmsGenre(OptOwnedStr<'r>),                  // #GENRE
+    BmsArtist(OptOwnedStr<'r>),                 // #ARTIST
+    BmsSubartist(OptOwnedStr<'r>),              // #SUBARTIST
+    BmsMaker(OptOwnedStr<'r>),                  // #MAKER
+    BmsComment(OptOwnedStr<'r>),                // #COMMENT
+    BmsStageFile(OptOwnedStr<'r>),              // #STAGEFILE
+    BmsBanner(OptOwnedStr<'r>),                 // #BANNER
+    BmsPathWAV(OptOwnedStr<'r>),                // #PATH_WAV
     BmsBPM(BPM),                                // #BPM (without a following alphanumeric key)
     BmsExBPM(Key, BPM),                         // #EXBPM or #BPMxx
     BmsPlayer(int),                             // #PLAYER
-    BmsLanes(~[(Key, OptOwnedStr<'self>)]),     // #SNRS:LANES (experimental)
+    BmsLanes(~[(Key, OptOwnedStr<'r>)]),        // #SNRS:LANES (experimental)
     BmsPlayLevel(int),                          // #PLAYLEVEL
     BmsDifficulty(int),                         // #DIFFICULTY
     BmsRank(int),                               // #RANK
@@ -48,33 +48,33 @@ pub enum BmsCommand<'self> {
     BmsTotal(int),                              // #TOTAL
     BmsLNType(int),                             // #LNTYPE
     BmsLNObj(Key),                              // #LNOBJ
-    BmsWAV(Key, OptOwnedStr<'self>),            // #WAV
+    BmsWAV(Key, OptOwnedStr<'r>),               // #WAV
     BmsWAVCmd(int, Key, int),                   // #WAVCMD
-    BmsExWAV(Key, Option<int>, Option<int>, Option<int>, OptOwnedStr<'self>), // #EXWAV
+    BmsExWAV(Key, Option<int>, Option<int>, Option<int>, OptOwnedStr<'r>), // #EXWAV
     BmsVolWAV(int),                             // #VOLWAV
-    BmsMIDIFile(OptOwnedStr<'self>),            // #MIDIFILE
-    BmsBMP(Key, OptOwnedStr<'self>),            // #BMP
-    BmsExBMP(Key, ARGB, OptOwnedStr<'self>),    // #EXBMP
-    BmsBackBMP(OptOwnedStr<'self>),             // #BACKBMP
+    BmsMIDIFile(OptOwnedStr<'r>),               // #MIDIFILE
+    BmsBMP(Key, OptOwnedStr<'r>),               // #BMP
+    BmsExBMP(Key, ARGB, OptOwnedStr<'r>),       // #EXBMP
+    BmsBackBMP(OptOwnedStr<'r>),                // #BACKBMP
     BmsBGA(Key, Key, ImageSlice),               // #BGA or #@BGA
     BmsPoorBGA(int),                            // #POORBGA
-    BmsSwBGA(Key, int, int, Key, bool, ARGB, OptOwnedStr<'self>), // #SWBGA
+    BmsSwBGA(Key, int, int, Key, bool, ARGB, OptOwnedStr<'r>), // #SWBGA
     BmsARGB(Key, ARGB),                         // #ARGB
-    BmsCharFile(OptOwnedStr<'self>),            // #CHARFILE
-    BmsVideoFile(OptOwnedStr<'self>),           // #VIDEOFILE
-    BmsMovie(OptOwnedStr<'self>),               // #MOVIE
+    BmsCharFile(OptOwnedStr<'r>),               // #CHARFILE
+    BmsVideoFile(OptOwnedStr<'r>),              // #VIDEOFILE
+    BmsMovie(OptOwnedStr<'r>),                  // #MOVIE
     BmsCanvasSize(int, int),                    // #SNRS:CANVASSIZE (experimental)
     BmsStop(Key, Duration),                     // #STOP
     BmsStp(f64, Duration),                      // #STP
-    BmsText(Key, OptOwnedStr<'self>),           // #TEXT or #SONG
-    BmsOption(OptOwnedStr<'self>),              // #OPTION
-    BmsChangeOption(Key, OptOwnedStr<'self>),   // #CHANGEOPTION
+    BmsText(Key, OptOwnedStr<'r>),              // #TEXT or #SONG
+    BmsOption(OptOwnedStr<'r>),                 // #OPTION
+    BmsChangeOption(Key, OptOwnedStr<'r>),      // #CHANGEOPTION
     BmsShorten(uint, f64),                      // #xxx02
-    BmsData(uint, Key, OptOwnedStr<'self>),     // #xxxyy:...
+    BmsData(uint, Key, OptOwnedStr<'r>),        // #xxxyy:...
     BmsFlow(BmsFlowCommand),                    // flow commands (#RANDOM, #IF, #ENDIF etc.)
 }
 
-impl<'self> IntoSend<BmsCommand<'static>> for BmsCommand<'self> {
+impl<'r> IntoSend<BmsCommand<'static>> for BmsCommand<'r> {
     fn into_send(self) -> BmsCommand<'static> {
         match self {
             BmsUnknown(s) => BmsUnknown(s.into_send()),
@@ -130,7 +130,7 @@ impl<'self> IntoSend<BmsCommand<'static>> for BmsCommand<'self> {
     }
 }
 
-impl<'self> ToStr for BmsCommand<'self> {
+impl<'r> ToStr for BmsCommand<'r> {
     /// Returns a reconstructed line for given BMS command.
     fn to_str(&self) -> ~str {
         fn argb_to_str((a,r,g,b): ARGB) -> ~str { format!("{},{},{},{}", a, r, g, b) }
@@ -151,9 +151,9 @@ impl<'self> ToStr for BmsCommand<'self> {
             BmsExBPM(key, BPM(bpm)) => format!("\\#BPM{} {}", key.to_str(), bpm),
             BmsPlayer(v) => format!("\\#PLAYER {}", v),
             BmsLanes(ref lanes) => {
-                let specs: ~[~str] = do lanes.iter().map |&(lane,ref spec)| {
+                let specs: ~[~str] = lanes.iter().map(|&(lane,ref spec)| {
                     format!(" {} {}", lane.to_str(), *spec)
-                }.collect();
+                }).collect();
                 format!("\\#SNRS:LANES{}", specs.concat())
             },
             BmsPlayLevel(v) => format!("\\#PLAYLEVEL {}", v),
@@ -205,9 +205,9 @@ impl<'self> ToStr for BmsCommand<'self> {
             BmsCanvasSize(w, h) => format!("\\#SNRS:CANVASSIZE {} {}", w, h),
             BmsStop(key, Measures(dur)) =>
                 format!("\\#STOP{} {}", key.to_str(), (dur * 192.0) as int),
-            BmsStop(*) => fail!(~"unsupported"),
+            BmsStop(..) => fail!(~"unsupported"),
             BmsStp(pos, Seconds(dur)) => format!("\\#STP {:07.3} {}", pos, (dur * 1000.0) as int),
-            BmsStp(*) => fail!(~"unsupported"),
+            BmsStp(..) => fail!(~"unsupported"),
             BmsText(key, ref s) => format!("\\#TEXT{} {}", key.to_str(), *s),
             BmsOption(ref opt) => format!("\\#OPTION {}", *opt),
             BmsChangeOption(key, ref opt) => format!("\\#CHANGEOPTION{} {}", key.to_str(), *opt),
@@ -224,7 +224,7 @@ pub struct BmsParserOptions {
     /// Enables a parsing of several obviously mistyped commands. (Default: true)
     autofix_commands: bool,
     /// Disables an automatic encoding detection and forces the use of given encoding.
-    force_encoding: Option<&'static Encoding>,
+    force_encoding: Option<EncodingRef>,
 }
 
 impl BmsParserOptions {
@@ -245,13 +245,14 @@ fn is_whitespace_or_similar(c: char) -> bool {
 
 /// Same as `each_bms_command_with_flow` below.
 /// Virtualized arguments are used instead of generic parameters for the smaller binary.
-fn each_bms_command_with_flow_(f: @io::Reader, opts: &BmsParserOptions,
+fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                                callback: &mut BmsMessageListener,
-                               blk: &fn(uint,BmsCommand) -> bool) -> bool {
+                               blk: |uint,BmsCommand| -> bool) -> bool {
     use std::ascii::StrAsciiExt;
+    use util::std::str::{StrUtil, ShiftablePrefix};
 
     let (file, encoding, confidence) = match opts.force_encoding {
-        Some(enc) => (decode_stream(f, enc), enc, f64::infinity),
+        Some(enc) => (decode_stream(f, enc), enc, f64::INFINITY),
         None => guess_decode_stream(f),
     };
     if !callback.on_message(None, BmsUsesEncoding(encoding.name(), confidence)) {
@@ -260,7 +261,7 @@ fn each_bms_command_with_flow_(f: @io::Reader, opts: &BmsParserOptions,
 
     let mut lineno = 0;
     let mut ret = true;
-    'eachline: for line in file.split_iter('\u000a') {
+    'eachline: for line in file.split('\u000a') {
         lineno += 1;
 
         macro_rules! diag(
@@ -290,12 +291,12 @@ fn each_bms_command_with_flow_(f: @io::Reader, opts: &BmsParserOptions,
 
         // skip non-command lines
         let line = line.trim_left_chars(&is_whitespace_or_similar);
-        if line.is_empty() { loop; }
+        if line.is_empty() { continue; }
         let (ch, line) = line.slice_shift_char();
         if ch == '\uff03' {
             diag!(BmsHasFullWidthSharp at lineno);
         } else if ch != '#' {
-            loop;
+            continue;
         }
 
         let upperline = line.to_ascii_upper();
@@ -303,7 +304,7 @@ fn each_bms_command_with_flow_(f: @io::Reader, opts: &BmsParserOptions,
         // emits a `BmsCommand` and restarts the loop
         macro_rules! emit(
             ($e:expr) => ({
-                if blk(lineno, $e) { loop; } else { ret = false; break 'eachline; }
+                if blk(lineno, $e) { continue; } else { ret = false; break 'eachline; }
             })
         )
 
@@ -471,7 +472,7 @@ fn each_bms_command_with_flow_(f: @io::Reader, opts: &BmsParserOptions,
         })
 
         if_prefix!("SNRS:LANES" |line| { // #SNRS:LANES <key> <spec> <key> <spec> ...
-            let words: ~[&str] = line.word_iter().collect();
+            let words: ~[&str] = line.words().collect();
             if !words.is_empty() && words.len() % 2 == 0 {
                 let mut lanes = ~[];
                 let mut okay = true;
@@ -513,7 +514,7 @@ fn each_bms_command_with_flow_(f: @io::Reader, opts: &BmsParserOptions,
 
                     line = line.slice_from(sep);
                     let mut okay = true;
-                    for flag in flags.iter() {
+                    for flag in flags.chars() {
                         let mut value = 0;
                         if !lex!(line; ws, int -> value, str -> line) { okay = false; break; }
                         match flag {
@@ -692,22 +693,22 @@ fn each_bms_command_with_flow_(f: @io::Reader, opts: &BmsParserOptions,
 
 /// Iterates over the parsed BMS commands, including flow commands.
 pub fn each_bms_command_with_flow<Listener:BmsMessageListener>(
-                                f: @io::Reader, opts: &BmsParserOptions, callback: &mut Listener,
-                                blk: &fn(uint,BmsCommand) -> bool) -> bool {
+                                f: &mut Reader, opts: &BmsParserOptions,
+                                callback: &mut Listener, blk: |uint,BmsCommand| -> bool) -> bool {
     each_bms_command_with_flow_(f, opts, callback as &mut BmsMessageListener, blk)
 }
 
 /// Same as `each_bms_command` below.
 /// Virtualized arguments are used instead of generic parameters for the smaller binary.
-pub fn each_bms_command_<R:Rng>(f: @io::Reader, r: &mut R,
+pub fn each_bms_command_<R:Rng>(f: &mut Reader, r: &mut R,
                                 opts: &BmsParserOptions, callback: &mut BmsMessageListener,
-                                blk: &fn(uint,BmsCommand) -> bool) -> bool {
+                                blk: |uint,BmsCommand| -> bool) -> bool {
     // internal callback wrapper, both the caller and the callee have to use the callback
     let mut callback_ = |line, msg| callback.on_message(line, msg);
     let mut pp = Preprocessor::new(r, &mut callback_);
 
     let mut ret = true;
-    do each_bms_command_with_flow_(f, opts, callback) |lineno, cmd| {
+    each_bms_command_with_flow_(f, opts, callback, |lineno, cmd| {
         let mut out = ~[]; // XXX can we avoid one allocation per iteration?
         match cmd {
             BmsFlow(ref flowcmd) => { pp.feed_flow(Some(lineno), flowcmd, &mut out); }
@@ -717,7 +718,7 @@ pub fn each_bms_command_<R:Rng>(f: @io::Reader, r: &mut R,
             if !blk(lineno, cmd) { ret = false; break; }
         }
         ret
-    };
+    });
     if ret {
         let mut out = ~[];
         pp.finish(&mut out);
@@ -730,9 +731,9 @@ pub fn each_bms_command_<R:Rng>(f: @io::Reader, r: &mut R,
 
 /// Iterates over the parsed BMS commands, with flow commands have been preprocessed.
 pub fn each_bms_command<R:Rng,Listener:BmsMessageListener>(
-                                f: @io::Reader, r: &mut R,
+                                f: &mut Reader, r: &mut R,
                                 opts: &BmsParserOptions, callback: &mut Listener,
-                                blk: &fn(uint,BmsCommand) -> bool) -> bool {
+                                blk: |uint,BmsCommand| -> bool) -> bool {
     each_bms_command_(f, r, opts, callback as &mut BmsMessageListener, blk)
 }
 

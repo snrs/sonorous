@@ -5,6 +5,8 @@
 //! Game play screen. Renders the screen from `engine::player::Player` state.
 
 use std::{cmp, num, iter};
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use format::obj::*;
 use gfx::color::{Color, Gradient, RGB, RGBA, Blend};
@@ -37,9 +39,8 @@ struct LaneStyle {
 }
 
 impl LaneStyle {
-    /// Constructs a new `LaneStyle` object from given key kind and the left (`Left(pos)`) or
-    /// right (`Right(pos)`) position.
-    pub fn from_kind(kind: KeyKind, pos: Either<uint,uint>) -> LaneStyle {
+    /// Constructs a new `LaneStyle` object from given key kind and the left or right position.
+    pub fn from_kind(kind: KeyKind, pos: uint, right: bool) -> LaneStyle {
         let (spriteleft, spritebombleft, width, color) = match kind {
             WhiteKey    => ( 25,   0, 25, RGB(0x80,0x80,0x80)),
             WhiteKeyAlt => ( 50,   0, 25, RGB(0xf0,0xe0,0x80)),
@@ -52,7 +53,7 @@ impl LaneStyle {
             Scratch     => (320, 280, 40, RGB(0xff,0x80,0x80)),
             FootPedal   => (360, 280, 40, RGB(0x80,0xff,0x80)),
         };
-        let left = pos.either(|&left| left, |&right| right - width);
+        let left = if right {pos - width} else {pos};
         LaneStyle { left: left, spriteleft: spriteleft, spritebombleft: spritebombleft,
                     width: width, basecolor: color }
     }
@@ -130,10 +131,10 @@ fn build_lane_styles(keyspec: &KeySpec) ->
     let mut rightmost = SCREENW;
     let mut styles = ~[];
     for &lane in keyspec.left_lanes().iter() {
-        let kind = keyspec.kinds[*lane];
+        let kind = keyspec.kinds[lane.to_uint()];
         assert!(kind.is_some());
         let kind = kind.unwrap();
-        let style = LaneStyle::from_kind(kind, Left(leftmost));
+        let style = LaneStyle::from_kind(kind, leftmost, false);
         styles.push((lane, style));
         leftmost += style.width + 1;
         if leftmost > SCREENW - 20 {
@@ -141,10 +142,10 @@ fn build_lane_styles(keyspec: &KeySpec) ->
         }
     }
     for &lane in keyspec.right_lanes().rev_iter() {
-        let kind = keyspec.kinds[*lane];
+        let kind = keyspec.kinds[lane.to_uint()];
         assert!(kind.is_some());
         let kind = kind.unwrap();
-        let style = LaneStyle::from_kind(kind, Right(rightmost));
+        let style = LaneStyle::from_kind(kind, rightmost, true);
         styles.push((lane, style));
         if rightmost < leftmost + 40 {
             return Err(~"The screen can't hold that many lanes");
@@ -164,7 +165,7 @@ fn build_lane_styles(keyspec: &KeySpec) ->
         }
         leftmost = cutoff;
     }
-    if rightmost.map_default(false, |&x| x > SCREENW - cutoff) {
+    if rightmost.map_or(false, |x| x > SCREENW - cutoff) {
         for i in range(keyspec.split, styles.len()) {
             let (lane, style) = styles[i];
             let mut style = style;
@@ -181,17 +182,17 @@ fn build_lane_styles(keyspec: &KeySpec) ->
 fn create_sprite(leftmost: uint, rightmost: Option<uint>,
                  styles: &[(Lane,LaneStyle)]) -> Texture2D {
     let sprite = match PreparedSurface::new(SCREENW + 400, SCREENH, true) {
-        Ok(surface) => surface,
+        Ok(PreparedSurface(surface)) => surface,
         Err(err) => die!("PreparedSurface::new failed: {}", err)
     };
 
     // render notes and lane backgrounds
     for &(_lane,style) in styles.iter() {
-        style.render_to_sprite(*sprite);
+        style.render_to_sprite(sprite);
     }
 
     // render panels
-    do sprite.with_pixels |pixels| {
+    sprite.with_pixels(|pixels| {
         let topgrad = Gradient { zero: RGB(0x60,0x60,0x60), one: RGB(0xc0,0xc0,0xc0) };
         let botgrad = Gradient { zero: RGB(0x40,0x40,0x40), one: RGB(0xc0,0xc0,0xc0) };
         for j in range(-244, 556) {
@@ -207,17 +208,17 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>,
                                  botgrad.blend(850 - num::abs(c-1000), 700));
             }
         }
-    }
+    });
     sprite.fill_area((10, SCREENH-36), (leftmost, 1), RGB(0x40,0x40,0x40));
 
     // erase portions of panels left unused
     let leftgap = leftmost + 20;
-    let rightgap = rightmost.map_default(SCREENW, |x| x - 20);
+    let rightgap = rightmost.map_or(SCREENW, |x| x - 20);
     let gapwidth = rightgap - leftgap;
     let black = RGB(0,0,0);
     sprite.fill_area((leftgap, 0), (gapwidth, 30), black);
     sprite.fill_area((leftgap, SCREENH-80), (gapwidth, 80), black);
-    do sprite.with_pixels |pixels| {
+    sprite.with_pixels(|pixels| {
         for i in range(0u, 20) {
             // Rust: this cannot be `uint` since `-1u` underflows!
             for j in iter::range_step(20, 0, -1) {
@@ -231,9 +232,9 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>,
                 }
             }
         }
-    }
+    });
 
-    match Texture2D::from_owned_surface(*sprite, false, false) {
+    match Texture2D::from_owned_surface(sprite, false, false) {
         Ok(tex) => tex,
         Err(err) => die!("Texture2D::from_owned_surface failed: {}", err)
     }
@@ -246,7 +247,7 @@ pub struct PlayingScene {
     /// Sprite texture generated by `create_sprite`.
     sprite: Texture2D,
     /// Display screen.
-    screen: @mut Screen,
+    screen: Rc<RefCell<Screen>>,
     /// Image resources.
     imgres: ~[ImageResource],
 
@@ -277,7 +278,7 @@ impl PlayingScene {
     /// Creates a new game play scene from the player, pre-allocated (usually by `init_video`)
     /// screen and pre-loaded image resources. Other resources including pre-loaded sound resources
     /// are included in the `player`.
-    pub fn new(player: Player, screen: @mut Screen,
+    pub fn new(player: Player, screen: Rc<RefCell<Screen>>,
                imgres: ~[ImageResource]) -> Result<~PlayingScene,~str> {
         let (leftmost, rightmost, styles) = match build_lane_styles(player.keyspec) {
             Ok(styles) => styles,
@@ -321,10 +322,12 @@ impl Scene for PlayingScene {
             for &(grade,when) in self.player.lastgrade.iter() {
                 if grade == MISS {
                     // switches to the normal BGA after 600ms
-                    poorlimit = poorlimit.merge(Some(when + 600), cmp::max);
+                    let minlimit = when + 600;
+                    poorlimit.mutate_or_set(minlimit, |t| cmp::max(t, minlimit));
                 }
                 // grade disappears after 700ms
-                gradelimit = gradelimit.merge(Some(when + 700), cmp::max);
+                let minlimit = when + 700;
+                gradelimit.mutate_or_set(minlimit, |t| cmp::max(t, minlimit));
             }
             if poorlimit < Some(self.player.now) { poorlimit = None; }
             if gradelimit < Some(self.player.now) { gradelimit = None; }
@@ -334,7 +337,7 @@ impl Scene for PlayingScene {
 
             Continue
         } else {
-            if self.player.opts.is_autoplay() { return PopScene; }
+            if self.player.opts.borrow().is_autoplay() { return PopScene; }
 
             // check if the song reached the last gradable object (otherwise the game play was
             // terminated by the user)
@@ -347,24 +350,31 @@ impl Scene for PlayingScene {
     }
 
     fn render(&self) {
+        let screen__ = self.screen.borrow();
+        let mut screen_ = screen__.borrow_mut();
+        let screen = screen_.get();
+
         let W = SCREENW as f32;
         let H = SCREENH as f32;
 
         let beat = self.player.cur.loc.vpos * 4.0 % 1.0;
 
-        self.screen.clear();
+        screen.clear();
 
         // render BGAs (should render before the lanes since lanes can overlap with BGAs)
-        if self.player.opts.has_bga() {
-            let layers = if self.poorlimit.is_some() {&[PoorBGA]} else {&[Layer1, Layer2, Layer3]};
-            self.bgacanvas.render_to_texture(&mut *self.screen, layers);
-            do self.screen.draw_textured(self.bgacanvas.as_texture()) |d| {
+        if self.player.opts.borrow().has_bga() {
+            static POOR_LAYERS: [BGALayer, ..1] = [PoorBGA];
+            static NORM_LAYERS: [BGALayer, ..3] = [Layer1, Layer2, Layer3];
+            let layers = if self.poorlimit.is_some() {POOR_LAYERS.as_slice()}
+                         else {NORM_LAYERS.as_slice()};
+            self.bgacanvas.render_to_texture(screen, layers);
+            screen.draw_textured(self.bgacanvas.as_texture(), |d| {
                 d.rect(self.bgax as f32, self.bgay as f32,
                        (self.bgax + BGAW) as f32, (self.bgay + BGAH) as f32);
-            }
+            });
         }
 
-        do self.screen.draw_shaded |d| {
+        screen.draw_shaded(|d| {
             // fill the lanes to the border color
             d.rect(0.0, 30.0, self.leftmost as f32, H-80.0, RGB(0x40,0x40,0x40));
             for &rightmost in self.rightmost.iter() {
@@ -375,7 +385,7 @@ impl Scene for PlayingScene {
             for &(_lane,style) in self.lanestyles.iter() {
                 style.clear_back(d);
             }
-        }
+        });
 
         // basically, we use a window of 1.25 measures in the actual position, but then we will
         // hide the topmost and bottommost 5 pixels behind the panels (for avoiding vanishing notes)
@@ -389,21 +399,21 @@ impl Scene for PlayingScene {
             (H-80.0) - ((H-100.0)/1.25 * self.player.playspeed as f32 * offset as f32)
         };
 
-        do self.screen.draw_textured(&self.sprite) |d| {
+        screen.draw_textured(&self.sprite, |d| {
             // if we are in the reverse motion, do not draw objects before the motion start.
             let localbottom = match self.player.reverse {
-                Some(reverse) => reverse.clone(),
-                None => bottom
+                Some(ref reverse) => reverse.clone(),
+                None => bottom.clone(),
             };
 
             // render objects
             for &(lane,style) in self.lanestyles.iter() {
                 if self.player.key_pressed(lane) { style.render_pressed_back(d); }
 
-                let front = do localbottom.find_next_of_type |obj| {
+                let front = localbottom.find_next_of_type(|obj| {
                     obj.object_lane() == Some(lane) && obj.is_renderable()
-                };
-                if front.is_none() { loop; }
+                });
+                if front.is_none() { continue; }
                 let front = front.unwrap();
 
                 // LN starting before the bottom and ending after the top
@@ -451,9 +461,9 @@ impl Scene for PlayingScene {
                     }
                 }
             }
-        }
+        });
 
-        do self.screen.draw_shaded_with_font |d| {
+        screen.draw_shaded_with_font(|d| {
             // render non-note objects (currently, measure bars)
             for ptr in bottom.upto(&top) {
                 match ptr.data() {
@@ -488,19 +498,19 @@ impl Scene for PlayingScene {
                              format!("{} COMBO", self.player.lastcombo),
                              Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80)));
                 }
-                if self.player.opts.is_autoplay() {
+                if self.player.opts.borrow().is_autoplay() {
                     d.string(cx, cy + 2.0, 1.0, Centered, "(AUTO)",
                              Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x40,0x40,0x40)));
                 }
             }
-        }
+        });
 
-        do self.screen.draw_textured(&self.sprite) |d| {
+        screen.draw_textured(&self.sprite, |d| {
             // restore panel from the sprite
             d.rect_area(0.0, 0.0, W, 30.0, 0.0, 0.0, W, 30.0);
             d.rect_area(0.0, H-80.0, W, H, 0.0, H-80.0, W, H);
-        }
-        do self.screen.draw_shaded_with_font |d| {
+        });
+        screen.draw_shaded_with_font(|d| {
             let elapsed = (self.player.now - self.player.origintime) / 1000;
             let duration = self.player.duration as uint;
             let durationmsec = (self.player.duration * 1000.0) as uint;
@@ -516,13 +526,13 @@ impl Scene for PlayingScene {
             d.string(95.0, H-62.0, 1.0, LeftAligned,
                      format!("@{:9.4}", self.player.cur.loc.vpos), black);
             d.string(95.0, H-78.0, 1.0, LeftAligned,
-                     format!("BPM {:6.2}", *self.player.bpm), black);
+                     format!("BPM {:6.2}", self.player.bpm.to_f64()), black);
             let timetick = cmp::min(self.leftmost, (self.player.now - self.player.origintime) *
                                                    self.leftmost / durationmsec);
             d.glyph(6.0 + timetick as f32, H-52.0, 1.0, 95, RGB(0x40,0x40,0x40));
 
             // render gauge
-            if !self.player.opts.is_autoplay() {
+            if !self.player.opts.borrow().is_autoplay() {
                 // draw the gauge bar
                 let gray = RGB(0x40,0x40,0x40);
                 d.rect(0.0, H-16.0, 368.0, H, gray);
@@ -536,15 +546,16 @@ impl Scene for PlayingScene {
                             else {RGB(0xc0 - (beat * 160.0) as u8, 0, 0)};
                 d.rect(4.0, H-12.0, 4.0 + width as f32, H-4.0, color);
             }
-        }
+        });
 
-        self.screen.swap_buffers();
+        screen.swap_buffers();
     }
 
     fn deactivate(&mut self) {}
 
     fn consume(~self) -> ~Scene: {
-        PlayResultScene::new(self.screen, self.player) as ~Scene:
+        let PlayingScene { screen, player, .. } = *self;
+        PlayResultScene::new(screen, player) as ~Scene:
     }
 }
 

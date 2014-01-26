@@ -120,7 +120,7 @@ impl Font {
         fn decompress(dwords: &[u16], indices: &str) -> ~[u16] {
             let mut words = ~[0];
             for &delta in dwords.iter() {
-                let last = *words.last();
+                let last = *words.last().unwrap();
                 words.push(last + delta);
             }
 
@@ -240,9 +240,9 @@ impl Font {
 }
 
 /// Analogue to `ShadedDrawing` with font drawing interfaces.
-pub struct ShadedFontDrawing<'self> {
-    drawing: &'self mut ShadedDrawing,
-    font: &'self Font,
+pub struct ShadedFontDrawing<'r> {
+    drawing: &'r mut ShadedDrawing,
+    font: &'r Font,
 }
 
 /// Extensions to `ShadedDrawing` that can be used to render bitmap fonts.
@@ -262,7 +262,7 @@ pub trait FontDrawingUtils {
                             align: Alignment, s: &str, color: ColorT);
 
     /// Creates a proxy drawing with a given font.
-    fn with_font(&mut self, font: &Font, f: &fn(&mut ShadedFontDrawing));
+    fn with_font(&mut self, font: &Font, f: |&mut ShadedFontDrawing|);
 }
 
 impl FontDrawingUtils for ShadedDrawing {
@@ -352,19 +352,19 @@ impl FontDrawingUtils for ShadedDrawing {
             Centered     => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom) / 2.0,
             RightAligned => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom),
         };
-        for c in s.iter() {
+        for c in s.chars() {
             self.char(font, x, y, zoom, c, color.clone());
             x += NCOLUMNS as f32 * zoom;
         }
     }
 
-    fn with_font(&mut self, font: &Font, f: &fn(&mut ShadedFontDrawing)) {
+    fn with_font(&mut self, font: &Font, f: |&mut ShadedFontDrawing|) {
         let mut drawing = ShadedFontDrawing { drawing: self, font: font };
         f(&mut drawing)
     }
 }
 
-impl<'self> ShadedFontDrawing<'self> {
+impl<'r> ShadedFontDrawing<'r> {
     /// Draws a glyph with given position and color (possibly gradient). This method is
     /// distinct from `glyph` since the glyph #95 is used for the tick marker
     /// (character code -1 in C).
@@ -384,7 +384,7 @@ impl<'self> ShadedFontDrawing<'self> {
     }
 }
 
-impl<'self> ShadedDrawingTraits for ShadedFontDrawing<'self> {
+impl<'r> ShadedDrawingTraits for ShadedFontDrawing<'r> {
     fn point_rgba(&mut self, x: f32, y: f32, rgba: (u8,u8,u8,u8)) {
         self.drawing.point_rgba(x, y, rgba)
     }

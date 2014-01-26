@@ -1,13 +1,9 @@
 SRC = $(wildcard src/*.rs src/*/*.rs src/*/*/*.rs src/*/*/*/*.rs)
 CRATE = src/sonorous.rs
-ifneq (,$(findstring MINGW,$(shell uname -s)))
-EXE ?= .exe
-else
-EXE ?=
-endif
-BIN = sonorous$(EXE)
-RUSTC ?= rustc$(EXE)
-RUSTDOC ?= rustdoc$(EXE)
+BIN = sonorous
+RUSTC ?= rustc
+RUSTDOC ?= rustdoc
+RUSTPKG ?= rustpkg
 RUSTSDL ?= libs/rust-sdl
 RUSTOPENGLES ?= libs/rust-opengles
 RUSTENCODING ?= libs/rust-encoding
@@ -15,29 +11,41 @@ RUSTSQLITE ?= libs/rustsqlite
 DIRECTX_SDK_INCLUDES ?= libs/w32api-directx-standalone/include
 SQLITE3 ?= libs/sqlite3
 RUSTFLAGS ?= -O
-RUSTLIBFLAGS ?= -O
+RUSTPKGFLAGS ?= -O
 CFLAGS ?= -Os
 CXXFLAGS ?= -Os
+
+TRIPLE = $(shell rustc -v | grep host: | cut -b7-)
+LIBSDL = $(RUSTSDL)/build/$(TRIPLE)/sdl
+LIBSDLIMAGE = $(RUSTSDL)/build/$(TRIPLE)/sdl_image
+LIBSDLMIXER = $(RUSTSDL)/build/$(TRIPLE)/sdl_mixer
 
 
 .PHONY: all clean clean-sdl clean-opengles clean-encoding clean-sqlite
 
 all: $(BIN)
 
-$(BIN): $(SRC) $(RUSTSDL)/libsdl.dummy $(RUSTOPENGLES)/librustopengles.dummy $(RUSTENCODING)/libencoding.dummy $(RUSTSQLITE)/libsqlite.dummy
-	$(RUSTC) $(RUSTFLAGS) -L $(RUSTSDL) -L $(RUSTOPENGLES) -L $(RUSTENCODING) -L $(RUSTSQLITE) -L $(SQLITE3) $(CRATE) -o $(BIN)
+$(BIN): $(SRC) $(LIBSDL) $(LIBSDLIMAGE) $(LIBSDLMIXER) $(RUSTOPENGLES)/libopengles.dummy $(RUSTENCODING)/libencoding.dummy $(RUSTSQLITE)/libsqlite3.dummy
+	$(RUSTC) $(RUSTFLAGS) -L $(LIBSDL) -L $(LIBSDLIMAGE) -L $(LIBSDLMIXER) -L $(RUSTOPENGLES) -L $(RUSTENCODING) -L $(RUSTSQLITE) -L $(SQLITE3) $(CRATE) -o $(BIN)
 
-$(RUSTSDL)/libsdl.dummy:
-	cd $(RUSTSDL) && ./configure && $(MAKE) RUSTFLAGS="--cfg image --cfg mixer $(RUSTLIBFLAGS)"
+$(LIBSDL):
+	cd $(RUSTSDL) && $(RUSTPKG) build $(RUSTPKGFLAGS) sdl
 
-$(RUSTOPENGLES)/librustopengles.dummy:
-	cd $(RUSTOPENGLES) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTLIBFLAGS)" DIRECTX_SDK_INCLUDES=$(realpath $(DIRECTX_SDK_INCLUDES))
+$(LIBSDLIMAGE):
+	cd $(RUSTSDL) && $(RUSTPKG) build $(RUSTPKGFLAGS) sdl_image
+
+$(LIBSDLMIXER):
+	cd $(RUSTSDL) && $(RUSTPKG) build $(RUSTPKGFLAGS) sdl_mixer
+
+$(RUSTOPENGLES)/libopengles.dummy:
+	cd $(RUSTOPENGLES) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS)" DIRECTX_SDK_INCLUDES=$(realpath $(DIRECTX_SDK_INCLUDES))
 
 $(RUSTENCODING)/libencoding.dummy:
-	cd $(RUSTENCODING) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTLIBFLAGS)"
+	cd $(RUSTENCODING) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS)"
 
-$(RUSTSQLITE)/libsqlite.dummy: $(SQLITE3)/libsqlite3.a
-	$(RUSTC) $(RUSTLIBFLAGS) -L $(SQLITE3) $(RUSTSQLITE)/lib.rs -o $@
+$(RUSTSQLITE)/libsqlite3.dummy: $(SQLITE3)/libsqlite3.a
+	# yes, "rustpkg build sqlite3" does not work at all. *sigh*
+	$(RUSTC) $(RUSTPKGFLAGS) -L $(SQLITE3) $(RUSTSQLITE)/src/sqlite3/lib.rs -o $@
 	touch $@
 
 $(SQLITE3)/libsqlite3.a:
@@ -47,10 +55,10 @@ clean: clean-sdl clean-opengles clean-encoding clean-sqlite
 	rm -rf $(BIN)
 
 clean-sdl:
-	cd $(RUSTSDL) && $(MAKE) clean
+	rm -rf $(RUSTSDL)/bin $(RUSTSDL)/lib $(RUSTSDL)/build $(RUSTSDL)/.rust
 
 clean-opengles:
-	cd $(RUSTOPENGLES) && $(MAKE) clean
+	rm -rf $(RUSTOPENGLES)/bin $(RUSTOPENGLES)/lib $(RUSTOPENGLES)/build $(RUSTOPENGLES)/.rust
 
 clean-encoding:
 	cd $(RUSTENCODING) && $(MAKE) clean

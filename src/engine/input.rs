@@ -176,14 +176,14 @@ static KEYSETS: &'static [KeySet] = &[
 pub type KeyMap = ::std::hashmap::HashMap<Input,VirtualInput>;
 
 /// Reads an input mapping from the environment variables.
-pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Result<KeyMap,~str> {
+pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<KeyMap,~str> {
     use std::ascii::StrAsciiExt;
 
     /// Finds an SDL virtual key with the given name. Matching is done case-insensitively.
     fn sdl_key_from_name(name: &str) -> Option<event::Key> {
         let name = name.to_ascii_lower();
         unsafe {
-            let firstkey = 0;
+            let firstkey = 0u16;
             let lastkey = ::std::cast::transmute(event::LastKey);
             for keyidx in range(firstkey, lastkey) {
                 let key = ::std::cast::transmute(keyidx);
@@ -196,6 +196,8 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
 
     /// Parses an `Input` value from the string. E.g. `"backspace"`, `"button 2"` or `"axis 0"`.
     fn parse_input(s: &str) -> Option<Input> {
+        use util::std::str::{StrUtil, ShiftablePrefix};
+
         let mut idx = 0;
         let s = s.trim();
         if lex!(s; "button", ws, uint -> idx) {
@@ -203,13 +205,13 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
         } else if lex!(s; "axis", ws, uint -> idx) {
             Some(JoyAxisInput(idx))
         } else {
-            sdl_key_from_name(s).map(|&key| KeyInput(key))
+            sdl_key_from_name(s).map(|key| KeyInput(key))
         }
     }
 
     let mut map = ::std::hashmap::HashMap::new();
     let add_mapping = |kind: Option<KeyKind>, input: Input, vinput: VirtualInput| {
-        if kind.map_default(true, |&kind| vinput.active_in_key_spec(kind, keyspec)) {
+        if kind.map_or(true, |kind| vinput.active_in_key_spec(kind, keyspec)) {
             map.insert(input, vinput);
         }
     };
@@ -220,9 +222,9 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
         let spec = spec.unwrap_or(/*keyset.*/default.to_owned());
 
         let mut i = 0;
-        for part in spec.split_iter('|') {
+        for part in spec.split('|') {
             let (kind, vinputs) = /*keyset.*/mapping[i];
-            for s in part.split_iter('%') {
+            for s in part.split('%') {
                 match parse_input(s) {
                     Some(input) => {
                         for &vinput in vinputs.iter() {
@@ -242,8 +244,8 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: &fn(&str) -> Option<~str>) -> Resu
     }
 
     for &lane in keyspec.order.iter() {
-        let key = Key(36 + *lane as int);
-        let kind = keyspec.kinds[*lane].unwrap();
+        let key = Key(36 + lane.to_uint() as int);
+        let kind = keyspec.kinds[lane.to_uint()].unwrap();
         let envvar = format!("SNRS_{}{}_KEY", key.to_str(), kind.to_char());
         let envvar2 = format!("ANGOLMOIS_{}{}_KEY", key.to_str(), kind.to_char());
         let val = getenv(envvar).or(getenv(envvar2)); // XXX #3511

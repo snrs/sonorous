@@ -10,32 +10,31 @@
 
 use std::local_data;
 use std::io::{stdout, stderr};
-use encoding::{Encoding, Encoder, EncoderTrap, ByteWriter};
+use encoding::{Encoding, EncodingRef, Encoder, EncoderTrap, ByteWriter};
 
-local_data_key!(console_encoding_key: &'static Encoding)
+local_data_key!(console_encoding_key: EncodingRef)
 
 /// Returns an encoding usable for console I/O.
 #[cfg(target_os = "win32")]
-fn get_console_encoding() -> &'static Encoding {
-    #[fixed_stack_segment]; #[inline(never)];
+fn get_console_encoding() -> EncodingRef {
     use ext::win32::ll::GetACP;
     use encoding::all::ASCII;
     use encoding::label::encoding_from_windows_code_page;
     let cp = unsafe { GetACP() } as uint;
-    encoding_from_windows_code_page(cp).unwrap_or(ASCII as &'static Encoding)
+    encoding_from_windows_code_page(cp).unwrap_or(ASCII as EncodingRef)
 }
 
 /// Returns an encoding usable for console I/O.
 #[cfg(not(target_os = "win32"))]
-fn get_console_encoding() -> &'static Encoding {
+fn get_console_encoding() -> EncodingRef {
     use encoding::all::UTF_8;
-    UTF_8 as &'static Encoding // TODO
+    UTF_8 as EncodingRef // TODO
 }
 
 /// Returns an encoding usable for console I/O.
 /// The result is cached to the task-local storage.
-pub fn console_encoding() -> &'static Encoding {
-    match local_data::get(console_encoding_key, |e| e.map_move(|&e| e)) {
+pub fn console_encoding() -> EncodingRef {
+    match local_data::get(console_encoding_key, |e| e.map(|&e| e)) {
         Some(encoding) => encoding,
         None => {
             let encoding = get_console_encoding();
@@ -48,7 +47,7 @@ pub fn console_encoding() -> &'static Encoding {
 /// An encoder trap function used for `to_console_encoding`.
 fn hex_ncr_escape(_encoder: &Encoder, input: &str, output: &mut ByteWriter) -> bool {
     let mut escapes = ~"";
-    for ch in input.iter() { escapes.push_str(format!("&\\#x{:X};", ch as int)); }
+    for ch in input.chars() { escapes.push_str(format!("&\\#x{:X};", ch as int)); }
     output.write_bytes(escapes.as_bytes());
     true
 }
@@ -65,7 +64,7 @@ pub fn printout(s: &str) {
 
 /// Same as `std::io::println` but converts to the current console encoding if possible.
 pub fn printoutln(s: &str) {
-    let out = stdout();
+    let mut out = stdout();
     out.write(to_console_encoding(s));
     out.write(['\n' as u8]);
 }
@@ -77,7 +76,7 @@ pub fn printerr(s: &str) {
 
 /// Same as `std::io::stderr().write_line` but converts to the current console encoding if possible.
 pub fn printerrln(s: &str) {
-    let err = stderr();
+    let mut err = stderr();
     err.write(to_console_encoding(s));
     err.write(['\n' as u8]);
 }

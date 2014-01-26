@@ -31,8 +31,6 @@
  * command memo](http://hitkey.nekokan.dyndns.info/cmds.htm).
  */
 
-use std::rand::*;
-
 use format::obj::*;
 use format::timeline::Timeline;
 use format::pointer::Pointer;
@@ -54,12 +52,40 @@ pub struct SoundRef(Key);
 #[deriving(Eq,Clone)]
 pub struct ImageRef(Key);
 
+impl SoundRef {
+    /// Returns a `Key` representation of the sound reference.
+    pub fn as_key<'a>(&'a self) -> &'a Key {
+        let SoundRef(ref key) = *self;
+        key
+    }
+
+    /// Returns a numeric index to the sound reference.
+    pub fn to_uint(&self) -> uint {
+        let SoundRef(Key(v)) = *self;
+        v as uint
+    }
+}
+
+impl ImageRef {
+    /// Returns a `Key` representation of the image reference.
+    pub fn as_key<'a>(&'a self) -> &'a Key {
+        let ImageRef(ref key) = *self;
+        key
+    }
+
+    /// Returns a numeric index to the image reference.
+    pub fn to_uint(&self) -> uint {
+        let ImageRef(Key(v)) = *self;
+        v as uint
+    }
+}
+
 impl ToStr for SoundRef {
-    fn to_str(&self) -> ~str { (**self).to_str() }
+    fn to_str(&self) -> ~str { self.as_key().to_str() }
 }
 
 impl ToStr for ImageRef {
-    fn to_str(&self) -> ~str { (**self).to_str() }
+    fn to_str(&self) -> ~str { self.as_key().to_str() }
 }
 
 /// Default BPM. This value comes from the original BMS specification.
@@ -98,12 +124,12 @@ impl Difficulty {
     pub fn name(&self) -> Option<&'static str> {
         // this set of strings is designed to be unique in the first character and compatible to
         // existing subtitle detection rules in other implementations.
-        match **self {
-            1 => Some("BEGINNER"),
-            2 => Some("NORMAL"),
-            3 => Some("HARD"),
-            4 => Some("EXTRA"),
-            5 => Some("INSANE"),
+        match *self {
+            Difficulty(1) => Some("BEGINNER"),
+            Difficulty(2) => Some("NORMAL"),
+            Difficulty(3) => Some("HARD"),
+            Difficulty(4) => Some("EXTRA"),
+            Difficulty(5) => Some("INSANE"),
             _ => None,
         }
     }
@@ -180,8 +206,8 @@ impl Bms {
             let mut meta = meta;
             if meta.basepath.is_none() {
                 let basepath = bmspath.dir_path();
-                // Rust: `Path("")` is not same as `Path(".")` but `Path::dir_path` may produce it!
-                let basepath = if basepath == Path("") {Path(".")} else {basepath};
+                // Rust: `""` is not same as `"."` but `Path::dir_path` may produce it!
+                let basepath = if basepath == Path::new("") {Path::new(".")} else {basepath};
                 meta.basepath = Some(basepath);
             }
             Bms { bmspath: Some(bmspath), meta: meta, timeline: timeline }

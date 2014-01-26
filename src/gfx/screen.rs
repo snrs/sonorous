@@ -32,7 +32,6 @@ pub struct GLState {
 impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
     pub fn new() -> Result<GLState,~str> {
-        #[fixed_stack_segment]; #[inline(never)];
         use ext::win32::ll::*;
 
         macro_rules! return_on_err(
@@ -45,9 +44,9 @@ impl GLState {
         )
 
         // we need to preload this before initializing EGL
-        do "d3dcompiler_43.dll".to_c_str().with_ref |dllname| {
+        "d3dcompiler_43.dll".to_c_str().with_ref(|dllname| {
             unsafe { LoadLibraryA(dllname); }
-        }
+        });
 
         let hwnd = match syswm::get_wm_info() {
             Some(wminfo) => wminfo.window,
@@ -232,7 +231,7 @@ impl Screen {
 
     /// Temporarily saves the current viewport, projection and local transform matrixes
     /// before the block, and restores them at the end of the block.
-    pub fn locally(&mut self, f: &fn(&mut Screen)) {
+    pub fn locally(&mut self, f: |&mut Screen|) {
         let (saved_vl, saved_vt, saved_vw, saved_vh) = self.last_viewport;
         let saved_projection = self.last_projection;
         let saved_local_transform = self.last_local_transform;
@@ -252,7 +251,7 @@ impl Screen {
 
     /// Sets the scissor box within given block.
     /// Any draw operations inside the block will be clipped according to given scissor box.
-    pub fn scissor(&self, x: int, y: int, w: uint, h: uint, f: &fn()) {
+    pub fn scissor(&self, x: int, y: int, w: uint, h: uint, f: ||) {
         assert!(!gl::is_enabled(gl::SCISSOR_TEST));
         gl::enable(gl::SCISSOR_TEST);
         gl::scissor(x as GLint, y as GLint, w as GLsizei, h as GLsizei);
@@ -262,14 +261,14 @@ impl Screen {
 
     /// Draws shaded primitives to the screen. The block receives a mutable reference to
     /// `util::gl::ShadedDrawing`, to which it should add points.
-    pub fn draw_shaded_prim(&self, prim: gl::GLenum, f: &fn(&mut ShadedDrawing)) {
+    pub fn draw_shaded_prim(&self, prim: gl::GLenum, f: |&mut ShadedDrawing|) {
         let mut drawing = ShadedDrawing::new(prim);
         f(&mut drawing);
         drawing.draw_prim(&self.program_for_shades, &self.vertexbuf);
     }
 
     /// Same as `draw_shaded_prim` but with a default font.
-    pub fn draw_shaded_prim_with_font(&self, prim: gl::GLenum, f: &fn(&mut ShadedFontDrawing)) {
+    pub fn draw_shaded_prim_with_font(&self, prim: gl::GLenum, f: |&mut ShadedFontDrawing|) {
         let mut drawing = ShadedDrawing::new(prim);
         drawing.with_font(&self.font, f);
         drawing.draw_prim(&self.program_for_shades, &self.vertexbuf);
@@ -277,19 +276,19 @@ impl Screen {
 
     /// Draws shaded triangles to the screen. The block receives a mutable reference to
     /// `util::gl::ShadedDrawing`, to which it should add points.
-    pub fn draw_shaded(&self, f: &fn(&mut ShadedDrawing)) {
+    pub fn draw_shaded(&self, f: |&mut ShadedDrawing|) {
         self.draw_shaded_prim(gl::TRIANGLES, f)
     }
 
     /// Same as `draw_shaded` but with a default font.
-    pub fn draw_shaded_with_font(&self, f: &fn(&mut ShadedFontDrawing)) {
+    pub fn draw_shaded_with_font(&self, f: |&mut ShadedFontDrawing|) {
         self.draw_shaded_prim_with_font(gl::TRIANGLES, f)
     }
 
     /// Draws textured primitives to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
     pub fn draw_textured_prim(&self, prim: gl::GLenum, texture: &Texture2D,
-                              f: &fn(&mut TexturedDrawing)) {
+                              f: |&mut TexturedDrawing|) {
         let mut drawing = TexturedDrawing::new(prim, texture);
         f(&mut drawing);
         drawing.draw_prim(&self.program_for_textures, &self.vertexbuf, texture);
@@ -297,21 +296,21 @@ impl Screen {
 
     /// Draws textured triangles to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
-    pub fn draw_textured(&self, texture: &Texture2D, f: &fn(&mut TexturedDrawing)) {
+    pub fn draw_textured(&self, texture: &Texture2D, f: |&mut TexturedDrawing|) {
         self.draw_textured_prim(gl::TRIANGLES, texture, f)
     }
 
     /// Renders to given frame buffer. The frame buffer should be complete.
     /// The viewport is temporarily reset to dimensions of the frame buffer in given block.
-    pub fn render_to_framebuffer(&mut self, framebuf: &FrameBuffer, f: &fn(&Screen)) {
+    pub fn render_to_framebuffer(&mut self, framebuf: &FrameBuffer, f: |&Screen|) {
         assert!(framebuf.complete());
-        do self.locally |screen| {
+        self.locally(|screen| {
             framebuf.bind();
             screen.set_viewport(0, 0, framebuf.width as GLsizei, framebuf.height as GLsizei);
             screen.set_projection_ortho(0.0, framebuf.width as f32, framebuf.height as f32, 0.0);
             f(screen);
             FrameBuffer::unbind();
-        }
+        })
     }
 }
 

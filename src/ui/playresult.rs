@@ -4,6 +4,9 @@
 
 //! Play result screen. Only used when the graphical `PlayingScene` finishes.
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use sdl::event;
 use gfx::color::{Color, RGB};
 use gfx::draw::ShadedDrawingTraits;
@@ -18,14 +21,14 @@ use ui::playing;
 /// Play result scene.
 pub struct PlayResultScene {
     /// Display screen.
-    screen: @mut Screen,
+    screen: Rc<RefCell<Screen>>,
     /// Game play state after playing.
     player: Player,
 }
 
 impl PlayResultScene {
     /// Creates a new play result scene from the game play state after `PlayingScene`.
-    pub fn new(screen: @mut Screen, player: Player) -> ~PlayResultScene {
+    pub fn new(screen: Rc<RefCell<Screen>>, player: Player) -> ~PlayResultScene {
         ~PlayResultScene { screen: screen, player: player }
     }
 }
@@ -49,9 +52,13 @@ impl Scene for PlayResultScene {
     }
 
     fn render(&self) {
-        self.screen.clear();
+        let screen__ = self.screen.borrow();
+        let mut screen_ = screen__.borrow_mut();
+        let screen = screen_.get();
 
-        do self.screen.draw_shaded_with_font |d| {
+        screen.clear();
+
+        screen.draw_shaded_with_font(|d| {
             static WHITE: Color = RGB(0xff,0xff,0xff);
             static GRAY:  Color = RGB(0x80,0x80,0x80);
 
@@ -86,9 +93,9 @@ impl Scene for PlayResultScene {
 
             d.string(SCREENW as f32 / 2.0, SCREENH as f32 - 40.0, 1.0, Centered,
                      "Press Return key to continue.", WHITE);
-        }
+        });
 
-        self.screen.swap_buffers();
+        screen.swap_buffers();
     }
 
     fn deactivate(&mut self) {}

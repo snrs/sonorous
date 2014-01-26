@@ -4,8 +4,11 @@
 
 //! Viewer portion of the game play screen. Also shared by exclusive modes.
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use gl = opengles::gl2;
-use ext::sdl::mpeg;
+use ext::smpeg::SMPEG_PLAYING;
 use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
 use format::obj::{ImageSlice, BGARef, BlankBGA, ImageBGA, SlicedImageBGA};
 use format::bms::ImageRef;
@@ -31,7 +34,7 @@ impl Uploadable for ImageResource {
     fn upload_to_texture(&self, texture: &Texture2D) {
         match *self {
             NoImage => {}
-            Image(surface) | Movie(surface,_) => {
+            Image(ref surface) | Movie(ref surface,_) => {
                 texture.upload_surface(surface, false, false);
             }
         }
@@ -40,13 +43,13 @@ impl Uploadable for ImageResource {
     fn should_always_upload(&self) -> bool {
         match *self {
             NoImage | Image(_) => false,
-            Movie(_,mpeg) => mpeg.status() == mpeg::SMPEG_PLAYING
+            Movie(_,ref mpeg) => mpeg.status() == SMPEG_PLAYING
         }
     }
 }
 
 /// The canvas to which the BGA is drawn.
-struct BGACanvas {
+pub struct BGACanvas {
     /// The current BGA states.
     state: BGAState,
     /// Per-layer textures.
@@ -65,16 +68,16 @@ struct BGACanvas {
 fn upload_bga_ref_to_texture(bgaref: &BGARef<ImageRef>, imgres: &[ImageResource],
                              texture: &Texture2D, scratch: &PreparedSurface, force: bool) {
     match *bgaref {
-        ImageBGA(ref iref) if force || imgres[***iref].should_always_upload() => {
-            imgres[***iref].upload_to_texture(texture);
+        ImageBGA(ref iref) if force || imgres[iref.to_uint()].should_always_upload() => {
+            imgres[iref.to_uint()].upload_to_texture(texture);
         }
         SlicedImageBGA(ref iref, ~ImageSlice {sx,sy,dx,dy,w,h})
-                if force || imgres[***iref].should_always_upload() => {
-            scratch.fill(RGBA(0, 0, 0, 0));
-            for surface in imgres[***iref].surface().move_iter() {
+                if force || imgres[iref.to_uint()].should_always_upload() => {
+            scratch.as_surface().fill(RGBA(0, 0, 0, 0));
+            for surface in imgres[iref.to_uint()].surface().move_iter() {
                 // this requires SDL_SRCALPHA flags in `surface` (and not `scratch`).
                 // see `LoadedImageResource::new` for relevant codes.
-                scratch.blit_area(**surface, (sx, sy), (dx, dy), (w, h));
+                scratch.as_surface().blit_area(surface.as_surface(), (sx, sy), (dx, dy), (w, h));
             }
             texture.upload_surface(scratch, false, false);
         }
@@ -92,14 +95,14 @@ impl BGACanvas {
             Err(err) => die!("PreparedSurface::new failed: {}", err)
         };
 
-        let textures = do state.map |iref| {
+        let textures = state.map(|iref| {
             let texture = match Texture2D::new(BGAW, BGAH) {
                 Ok(texture) => texture,
                 Err(err) => die!("Texture2D::new failed: {}", err)
             };
             upload_bga_ref_to_texture(iref, imgres, &texture, &scratch, true);
             texture
-        };
+        });
 
         let canvas = match Texture2D::new(BGAW, BGAH) {
             Ok(texture) => texture,
@@ -122,10 +125,10 @@ impl BGACanvas {
                 // image reference, which should rewind the movie playback.
                 if self.state[layer].as_image_ref() != current[layer].as_image_ref() {
                     for &iref in self.state[layer].as_image_ref().move_iter() {
-                        imgres[**iref].stop_animating();
+                        imgres[iref.to_uint()].stop_animating();
                     }
                     for &iref in current[layer].as_image_ref().move_iter() {
-                        imgres[**iref].start_animating();
+                        imgres[iref.to_uint()].start_animating();
                     }
                 }
                 upload_bga_ref_to_texture(&current[layer], imgres,
@@ -140,19 +143,19 @@ impl BGACanvas {
 
     /// Renders the image resources to the internal canvas texture.
     pub fn render_to_texture(&self, screen: &mut Screen, layers: &[BGALayer]) {
-        do screen.render_to_framebuffer(&self.framebuf) |buf| {
+        screen.render_to_framebuffer(&self.framebuf, |buf| {
             buf.clear();
             for &layer in layers.iter() {
                 match self.state[layer as uint] {
                     BlankBGA => {}
                     _ => {
-                        do buf.draw_textured(&self.textures[layer as uint]) |d| {
+                        buf.draw_textured(&self.textures[layer as uint], |d| {
                             d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
-                        }
+                        });
                     }
                 }
             }
-        }
+        });
     }
 
     /// Returns the internal canvas texture.
@@ -184,7 +187,7 @@ impl Scene for TextualViewingScene {
     }
 
     fn render(&self) {
-        if !self.player.opts.showinfo { return; }
+        if !self.player.opts.borrow().showinfo { return; }
 
         let elapsed = (self.player.now - self.player.origintime) / 100;
         let duration = (self.player.duration * 10.0) as uint;
@@ -192,7 +195,7 @@ impl Scene for TextualViewingScene {
                              BPM {bpm:6.2} | {lastcombo} / {nnotes} notes",
                             elapsed/600, elapsed/10%60, elapsed%10,
                             duration/600, duration/10%60, duration%10,
-                            pos = self.player.cur.loc.vpos, bpm = *self.player.bpm,
+                            pos = self.player.cur.loc.vpos, bpm = self.player.bpm.to_f64(),
                             lastcombo = self.player.lastcombo, nnotes = self.player.infos.nnotes));
     }
 
@@ -209,7 +212,7 @@ pub struct ViewingScene {
     /// the on-screen display).
     parent: ~TextualViewingScene,
     /// Display screen.
-    screen: @mut Screen,
+    screen: Rc<RefCell<Screen>>,
     /// Image resources.
     imgres: ~[ImageResource],
     /// BGA canvas.
@@ -219,7 +222,8 @@ pub struct ViewingScene {
 impl ViewingScene {
     /// Creates a new BGA-only scene context from the pre-created screen (usually by `init_video`)
     /// and pre-loaded image resources.
-    pub fn new(screen: @mut Screen, imgres: ~[ImageResource], player: Player) -> ~ViewingScene {
+    pub fn new(screen: Rc<RefCell<Screen>>, imgres: ~[ImageResource],
+               player: Player) -> ~ViewingScene {
         let bgacanvas = BGACanvas::new(imgres);
         ~ViewingScene { parent: TextualViewingScene::new(player),
                         screen: screen, imgres: imgres, bgacanvas: bgacanvas }
@@ -238,14 +242,18 @@ impl Scene for ViewingScene {
     }
 
     fn render(&self) {
-        self.screen.clear();
+        let screen__ = self.screen.borrow();
+        let mut screen_ = screen__.borrow_mut();
+        let screen = screen_.get();
+
+        screen.clear();
 
         let layers = &[Layer1, Layer2, Layer3];
-        self.bgacanvas.render_to_texture(&mut *self.screen, layers);
-        do self.screen.draw_textured(self.bgacanvas.as_texture()) |d| {
+        self.bgacanvas.render_to_texture(screen, layers);
+        screen.draw_textured(self.bgacanvas.as_texture(), |d| {
             d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
-        }
-        self.screen.swap_buffers();
+        });
+        screen.swap_buffers();
 
         self.parent.render();
     }

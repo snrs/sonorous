@@ -4,7 +4,7 @@
 
 //! BMS loader. Uses a BMS parser (`format::bms::parse`) to produce `format::bms::Bms` structure.
 
-use std::{vec, iter, io, cmp};
+use std::{vec, iter, cmp};
 use std::rand::Rng;
 
 use format::obj::*;
@@ -36,15 +36,9 @@ struct BmsLine {
     lineno: uint,
 }
 
-impl Ord for BmsLine {
-    fn lt(&self, other: &BmsLine) -> bool {
-        (self.measure, self.chan) < (other.measure, other.chan)
-    }
-}
-
 /// Same as `load_bms` below.
 /// Virtualized arguments are used instead of generic parameters for the smaller binary.
-fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
+fn load_bms_<R:Rng>(f: &mut Reader, r: &mut R, opts: &BmsLoaderOptions,
                     callback: &mut BmsMessageListener) -> Result<Bms,~str> {
     use format::timeline::builder::{TimelineBuilder, Mark};
 
@@ -107,8 +101,8 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
     };
 
     let mut ret = true;
-    do parse::each_bms_command_(f, r, &opts.parser,
-                                &mut callback_ as &mut BmsMessageListener) |lineno, cmd| {
+    parse::each_bms_command_(f, r, &opts.parser, &mut callback_ as &mut BmsMessageListener,
+                             |lineno, cmd| {
         macro_rules! diag(
             ($e:expr) => (
                 if !callback.on_message(None, $e) { ret = false; }
@@ -159,16 +153,16 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
             }
 
             parse::BmsBPM(bpm) => {
-                if *bpm < 0.0 {
+                if bpm.to_f64() < 0.0 {
                     diag!(BmsHasNegativeInitBPM at lineno);
-                } else if *bpm == 0.0 {
+                } else if bpm.to_f64() == 0.0 {
                     diag!(BmsHasZeroInitBPM at lineno);
                 } else {
                     builder.set_initbpm(bpm);
                 }
             }
             parse::BmsExBPM(Key(i), bpm) => {
-                if *bpm <= 0.0 {
+                if bpm.to_f64() <= 0.0 {
                     diag!(BmsHasNonpositiveBPM at lineno);
                 }
                 bpmtab[i] = bpm;
@@ -198,7 +192,7 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
 
             parse::BmsLNObj(key) => {
                 if lnobj.is_some() { diag!(BmsHasMultipleLNOBJs at lineno); }
-                if *key == 0 {
+                if key == Key(0) {
                     diag!(BmsHasZeroLNOBJ at lineno);
                 } else {
                     lnobj = Some(key);
@@ -230,7 +224,7 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
                 // TODO this logic assumes that #PATH_WAV is always interpreted as a native path,
                 // which the C version doesn't assume. this difference barely makes the practical
                 // issue though (#PATH_WAV is not expected to be used in the wild).
-                basepath = Some(Path(s.as_slice()));
+                basepath = Some(Path::new(s.as_slice()));
             }
 
             parse::BmsShorten(measure, factor) => {
@@ -247,7 +241,7 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
             _ => {}
         }
         ret
-    };
+    });
     if !ret { return Err(~"aborted"); }
 
     macro_rules! diag(
@@ -297,7 +291,7 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
     // Replaces the reference to #BGA/#@BGA keys into a pair of the reference to #BMP keys
     // and corresponding `ImageSlice`, if possible.
     let imgref_to_bgaref = |iref: ImageRef| -> BGARef<ImageRef> {
-        match imgslices[**iref] {
+        match imgslices[iref.to_uint()] {
             Some((iref, ref slice)) => SlicedImageBGA(iref.clone(), ~slice.clone()),
             None => ImageBGA(iref),
         }
@@ -308,12 +302,12 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
     // an alphanumeric key designates an area rather than a point.
     let handle_key = |chan: Key, t: f64, t2: f64, v: Key, _lineno: uint| -> bool {
         let /*mut*/ ret = true;
-        match *chan {
+        match chan {
             // channel #01: BGM
-            1 => { builder.add(t, BGM(SoundRef(v))); }
+            Key(1) => { builder.add(t, BGM(SoundRef(v))); }
 
             // channel #03: BPM as an hexadecimal key
-            3 => {
+            Key(3) => {
                 let v = v.to_hex(); // XXX #3511
                 for &v in v.iter() {
                     builder.add(t, SetBPM(BPM(v as f64)))
@@ -321,69 +315,69 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
             }
 
             // channel #04: BGA layer 1
-            4 => { builder.add(t, SetBGA(Layer1, imgref_to_bgaref(ImageRef(v)))); }
+            Key(4) => { builder.add(t, SetBGA(Layer1, imgref_to_bgaref(ImageRef(v)))); }
 
             // channel #06: POOR BGA
-            6 => {
+            Key(6) => {
                 builder.add(t, SetBGA(PoorBGA, imgref_to_bgaref(ImageRef(v))));
                 poorbgafix = false; // we don't add artificial BGA
             }
 
             // channel #07: BGA layer 2
-            7 => { builder.add(t, SetBGA(Layer2, imgref_to_bgaref(ImageRef(v)))); }
+            Key(7) => { builder.add(t, SetBGA(Layer2, imgref_to_bgaref(ImageRef(v)))); }
 
             // channel #08: BPM defined by #BPMxx
-            8 => { builder.add(t, SetBPM(bpmtab[*v])); }
+            Key(8) => { builder.add(t, SetBPM(bpmtab[v.to_int() as uint])); }
 
             // channel #09: scroll stopper defined by #STOPxx
-            9 => { builder.add(t, Stop(stoptab[*v])); }
+            Key(9) => { builder.add(t, Stop(stoptab[v.to_int() as uint])); }
 
             // channel #0A: BGA layer 3
-            10 => { builder.add(t, SetBGA(Layer3, imgref_to_bgaref(ImageRef(v)))); }
+            Key(10) => { builder.add(t, SetBGA(Layer3, imgref_to_bgaref(ImageRef(v)))); }
 
             // channels #1x/2x: visible object, possibly LNs when #LNOBJ is in active
-            36/*1*36*/..107/*3*36-1*/ => {
+            Key(36/*1*36*/..107/*3*36-1*/) => {
                 let lane = chan.to_lane();
                 if lnobj.is_some() && lnobj == Some(v) {
                     // change the last inserted visible object to the start of LN if any.
-                    let lastvispos = lastvis[*lane];
+                    let lastvispos = lastvis[lane.to_uint()];
                     for &mark in lastvispos.iter() {
-                        do builder.mutate(mark) |pos, data| {
+                        builder.mutate(mark, |pos, data| {
                             assert!(data.is_visible());
                             (pos, data.to_lnstart())
-                        }
+                        });
                         builder.add(t, LNDone(lane, Some(SoundRef(v))));
-                        lastvis[*lane] = None;
+                        lastvis[lane.to_uint()] = None;
                     }
                 } else {
                     let mark = builder.add_and_mark(t, Visible(lane, Some(SoundRef(v))));
-                    lastvis[*lane] = Some(mark);
+                    lastvis[lane.to_uint()] = Some(mark);
                 }
             }
 
             // channels #3x/4x: invisible object
-            108/*3*36*/..179/*5*36-1*/ => {
+            Key(108/*3*36*/..179/*5*36-1*/) => {
                 let lane = chan.to_lane();
                 builder.add(t, Invisible(lane, Some(SoundRef(v))));
             }
 
             // channels #5x/6x, #LNTYPE 1: LN endpoints
-            180/*5*36*/..251/*7*36-1*/ if !consecutiveln => {
+            Key(180/*5*36*/..251/*7*36-1*/) if !consecutiveln => {
                 let lane = chan.to_lane();
 
                 // a pair of non-00 alphanumeric keys designate one LN. if there are an odd
                 // number of them, the last LN is implicitly closed later.
-                if lastln[*lane].is_some() {
-                    lastln[*lane] = None;
+                if lastln[lane.to_uint()].is_some() {
+                    lastln[lane.to_uint()] = None;
                     builder.add(t, LNDone(lane, Some(SoundRef(v))));
                 } else {
                     let mark = builder.add_and_mark(t, LNStart(lane, Some(SoundRef(v))));
-                    lastln[*lane] = Some(mark); // TODO unused for now
+                    lastln[lane.to_uint()] = Some(mark); // TODO unused for now
                 }
             }
 
             // channels #5x/6x, #LNTYPE 2: LN areas
-            180/*5*36*/..251/*7*36-1*/ if consecutiveln => {
+            Key(180/*5*36*/..251/*7*36-1*/) if consecutiveln => {
                 let lane = chan.to_lane();
 
                 // one non-00 alphanumeric key, in the absence of other information, inserts one
@@ -393,32 +387,32 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
                 // `t2`, unless there is already an end of LN at `t` in which case the end of LN
                 // is simply moved from `t` to `t2` (effectively increasing the length of
                 // previous LN).
-                match lastln[*lane] {
+                match lastln[lane.to_uint()] {
                     Some(mark) => {
-                        do builder.mutate(mark) |pos, data| {
+                        builder.mutate(mark, |pos, data| {
                             if pos == t {
                                 assert!(data.is_lndone());
                                 (t2, data)
                             } else {
                                 (pos, data)
                             }
-                        }
+                        });
                     }
                     _ => {
                         builder.add(t, LNStart(lane, Some(SoundRef(v))));
                         let mark = builder.add_and_mark(t2, LNDone(lane, Some(SoundRef(v))));
-                        lastln[*lane] = Some(mark);
+                        lastln[lane.to_uint()] = Some(mark);
                     }
                 }
             }
 
             // channels #Dx/Ex: bombs, base-36 damage value (unit of 0.5% of the full gauge) or
             // instant death (ZZ)
-            468/*0xD*36*/..539/*0xF*36-1*/ => {
+            Key(468/*0xD*36*/..539/*0xF*36-1*/) => {
                 let lane = chan.to_lane();
-                let damage = match *v {
-                    1..200 => Some(GaugeDamage(*v as f64 / 200.0)),
-                    1295 => Some(InstantDeath), // XXX 1295=MAXKEY-1
+                let damage = match v {
+                    Key(v @ 1..200) => Some(GaugeDamage(v as f64 / 200.0)),
+                    Key(1295) => Some(InstantDeath), // XXX 1295=MAXKEY-1
                     _ => None
                 };
                 for &damage in damage.iter() {
@@ -435,10 +429,10 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
     };
 
     // loop over the sorted bmslines
-    ::extra::sort::tim_sort(bmsline);
+    bmsline.sort_by(|a, b| (a.measure, b.chan).cmp(&(a.measure, b.chan)));
     for line in bmsline.iter() {
         let measure = line.measure as f64;
-        let data: ~[char] = line.data.iter().collect();
+        let data: ~[char] = line.data.chars().collect();
         let max = data.len() / 2 * 2;
         let count = max as f64;
         for i in iter::range_step(0, max, 2) {
@@ -461,7 +455,7 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
     }
 
     // fix the unterminated longnote
-    let nmeasures = bmsline.last_opt().map_default(0, |l| l.measure) + 1;
+    let nmeasures = bmsline.last().map_or(0, |l| l.measure) + 1;
     let endt = nmeasures as f64;
     for i in range(0, NLANES) {
         if lastvis[i].is_some() || (!consecutiveln && lastln[i].is_some()) {
@@ -498,7 +492,7 @@ fn load_bms_<R:Rng>(f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
 
 /// Reads the BMS file with given RNG from given reader. Diagnostic messages are sent via callback.
 pub fn load_bms<R:Rng,Listener:BmsMessageListener>(
-                                f: @io::Reader, r: &mut R, opts: &BmsLoaderOptions,
+                                f: &mut Reader, r: &mut R, opts: &BmsLoaderOptions,
                                 callback: &mut Listener) -> Result<Bms,~str> {
     load_bms_(f, r, opts, callback as &mut BmsMessageListener)
 }

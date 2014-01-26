@@ -12,6 +12,14 @@ pub struct Lane(uint);
 /// The maximum number of lanes.
 pub static NLANES: uint = 72;
 
+impl Lane {
+    /// Returns an index to the lane.
+    pub fn to_uint(&self) -> uint {
+        let Lane(v) = *self;
+        v
+    }
+}
+
 /// BGA layers.
 #[deriving(Eq,ToStr,Clone)]
 pub enum BGALayer {
@@ -37,11 +45,17 @@ pub static NLAYERS: uint = 4;
 pub enum BPM { BPM(f64) }
 
 impl BPM {
+    /// Returns a number of beats per minute.
+    pub fn to_f64(&self) -> f64 {
+        let BPM(v) = *self;
+        v
+    }
+
     /// Converts a measure to a second.
-    pub fn measure_to_sec(self, measure: f64) -> f64 { measure * 240.0 / *self }
+    pub fn measure_to_sec(self, measure: f64) -> f64 { measure * 240.0 / self.to_f64() }
 
     /// Converts a second to a measure.
-    pub fn sec_to_measure(self, sec: f64) -> f64 { sec * *self / 240.0 }
+    pub fn sec_to_measure(self, sec: f64) -> f64 { sec * self.to_f64() / 240.0 }
 }
 
 /// A duration from the particular point. It may be specified in measures or seconds. Used in
@@ -163,7 +177,8 @@ pub enum ObjData<SoundRef,ImageRef> {
 impl<S:ToStr,I:ToStr> ToStr for ObjData<S,I> {
     fn to_str(&self) -> ~str {
         fn lane_to_str(lane: Lane) -> ~str {
-            format!("{}:{:02}", *lane / 36 + 1, *lane % 36)
+            let lane = lane.to_uint();
+            format!("{}:{:02}", lane / 36 + 1, lane % 36)
         }
         fn to_str_or_default<T:ToStr>(v: &Option<T>, default: &str) -> ~str {
             match *v { Some(ref v) => v.to_str(), None => default.to_owned() }
@@ -306,71 +321,71 @@ impl<S:Clone,I:Clone,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
     }
 
     fn is_visible(&self) -> bool {
-        match self.to_obj_data() { Visible(*) => true, _ => false }
+        match self.to_obj_data() { Visible(..) => true, _ => false }
     }
 
     fn is_invisible(&self) -> bool {
-        match self.to_obj_data() { Invisible(*) => true, _ => false }
+        match self.to_obj_data() { Invisible(..) => true, _ => false }
     }
 
     fn is_lnstart(&self) -> bool {
-        match self.to_obj_data() { LNStart(*) => true, _ => false }
+        match self.to_obj_data() { LNStart(..) => true, _ => false }
     }
 
     fn is_lndone(&self) -> bool {
-        match self.to_obj_data() { LNDone(*) => true, _ => false }
+        match self.to_obj_data() { LNDone(..) => true, _ => false }
     }
 
     fn is_ln(&self) -> bool {
-        match self.to_obj_data() { LNStart(*) | LNDone(*) => true, _ => false }
+        match self.to_obj_data() { LNStart(..) | LNDone(..) => true, _ => false }
     }
 
     fn is_bomb(&self) -> bool {
-        match self.to_obj_data() { Bomb(*) => true, _ => false }
+        match self.to_obj_data() { Bomb(..) => true, _ => false }
     }
 
     fn is_soundable(&self) -> bool {
         match self.to_obj_data() {
-            Visible(*) | Invisible(*) | LNStart(*) | LNDone(*) => true,
+            Visible(..) | Invisible(..) | LNStart(..) | LNDone(..) => true,
             _ => false
         }
     }
 
     fn is_gradable(&self) -> bool {
         match self.to_obj_data() {
-            Visible(*) | LNStart(*) | LNDone(*) => true,
+            Visible(..) | LNStart(..) | LNDone(..) => true,
             _ => false
         }
     }
 
     fn is_renderable(&self) -> bool {
         match self.to_obj_data() {
-            Visible(*) | LNStart(*) | LNDone(*) | Bomb(*) => true,
+            Visible(..) | LNStart(..) | LNDone(..) | Bomb(..) => true,
             _ => false
         }
     }
 
     fn is_object(&self) -> bool {
         match self.to_obj_data() {
-            Visible(*) | Invisible(*) | LNStart(*) | LNDone(*) | Bomb(*) => true,
+            Visible(..) | Invisible(..) | LNStart(..) | LNDone(..) | Bomb(..) => true,
             _ => false
         }
     }
 
     fn is_bgm(&self) -> bool {
-        match self.to_obj_data() { BGM(*) => true, _ => false }
+        match self.to_obj_data() { BGM(..) => true, _ => false }
     }
 
     fn is_setbga(&self) -> bool {
-        match self.to_obj_data() { SetBGA(*) => true, _ => false }
+        match self.to_obj_data() { SetBGA(..) => true, _ => false }
     }
 
     fn is_setbpm(&self) -> bool {
-        match self.to_obj_data() { SetBPM(*) => true, _ => false }
+        match self.to_obj_data() { SetBPM(..) => true, _ => false }
     }
 
     fn is_stop(&self) -> bool {
-        match self.to_obj_data() { Stop(*) => true, _ => false }
+        match self.to_obj_data() { Stop(..) => true, _ => false }
     }
 
     fn is_stopend(&self) -> bool {
@@ -378,7 +393,7 @@ impl<S:Clone,I:Clone,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
     }
 
     fn is_setmeasurefactor(&self) -> bool {
-        match self.to_obj_data() { SetMeasureFactor(*) => true, _ => false }
+        match self.to_obj_data() { SetMeasureFactor(..) => true, _ => false }
     }
 
     fn is_measurebar(&self) -> bool {

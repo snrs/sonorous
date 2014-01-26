@@ -15,7 +15,7 @@ pub trait ShadedFontDrawingAdditions {
                                               color: ColorT, zerocolor: ZeroColorT);
 }
 
-impl<'self> ShadedFontDrawingAdditions for ShadedFontDrawing<'self> {
+impl<'r> ShadedFontDrawingAdditions for ShadedFontDrawing<'r> {
     fn numeral<ColorT:Blend,ZeroColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32,
                                               align: Alignment, s: &str,
                                               color: ColorT, zerocolor: ZeroColorT) {

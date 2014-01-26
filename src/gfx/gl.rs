@@ -8,7 +8,7 @@
 
 //! OpenGL helpers.
 
-use std::cast;
+use std::{io, cast};
 
 use sdl::video;
 use gl = opengles::gl2;
@@ -37,14 +37,20 @@ pub struct Shader {
 pub struct AttribLoc(GLint);
 
 impl AttribLoc {
+    /// Returns the index to the attribute.
+    pub fn to_GLint(&self) -> GLint {
+        let AttribLoc(loc) = *self;
+        loc
+    }
+
     /// Enables the use of vertex attribute array.
     pub fn enable_array(&self) {
-        gl::enable_vertex_attrib_array(**self as GLuint);
+        gl::enable_vertex_attrib_array(self.to_GLint() as GLuint);
     }
 
     /// Disables the use of vertex attribute array.
     pub fn disable_array(&self) {
-        gl::disable_vertex_attrib_array(**self as GLuint);
+        gl::disable_vertex_attrib_array(self.to_GLint() as GLuint);
     }
 
     /// Specifies that the vertex attribute is an array of `size` f32 values, which start at
@@ -52,25 +58,25 @@ impl AttribLoc {
     /// the size of each value when given 0.)
     pub fn define_pointer_f32(&self, size: GLint, normalized: bool,
                               stride: GLsizei, offset: GLuint) {
-        gl::vertex_attrib_pointer_f32(**self as GLuint, size, normalized, stride, offset);
+        gl::vertex_attrib_pointer_f32(self.to_GLint() as GLuint, size, normalized, stride, offset);
     }
 
     /// Same as `define_pointer_f32` but the array consists of `size` i8 values instead.
     pub fn define_pointer_i8(&self, size: GLint, normalized: bool,
                              stride: GLsizei, offset: GLuint) {
-        gl::vertex_attrib_pointer_i8(**self as GLuint, size, normalized, stride, offset);
+        gl::vertex_attrib_pointer_i8(self.to_GLint() as GLuint, size, normalized, stride, offset);
     }
 
     /// Same as `define_pointer_f32` but the array consists of `size` i32 values instead.
     pub fn define_pointer_i32(&self, size: GLint, normalized: bool,
                               stride: GLsizei, offset: GLuint) {
-        gl::vertex_attrib_pointer_i32(**self as GLuint, size, normalized, stride, offset);
+        gl::vertex_attrib_pointer_i32(self.to_GLint() as GLuint, size, normalized, stride, offset);
     }
 
     /// Same as `define_pointer_f32` but the array consists of `size` u8 values instead.
     pub fn define_pointer_u8(&self, size: GLint, normalized: bool,
                              stride: GLsizei, offset: GLuint) {
-        gl::vertex_attrib_pointer_u8(**self as GLuint, size, normalized, stride, offset);
+        gl::vertex_attrib_pointer_u8(self.to_GLint() as GLuint, size, normalized, stride, offset);
     }
 }
 
@@ -78,42 +84,50 @@ impl AttribLoc {
 pub struct UniformLoc(GLint);
 
 impl UniformLoc {
+    /// Returns the index to the uniform variable.
+    pub fn to_GLint(&self) -> GLint {
+        let UniformLoc(loc) = *self;
+        loc
+    }
+
     /// Sets a uniform variable to a float.
-    pub fn set_1f(&self, x: GLfloat) { gl::uniform_1f(**self, x); }
+    pub fn set_1f(&self, x: GLfloat) { gl::uniform_1f(self.to_GLint(), x); }
     /// Sets a uniform variable to a 2D vector of floats. (e.g. coordinates)
-    pub fn set_2f(&self, x: GLfloat, y: GLfloat) { gl::uniform_2f(**self, x, y); }
+    pub fn set_2f(&self, x: GLfloat, y: GLfloat) { gl::uniform_2f(self.to_GLint(), x, y); }
     /// Sets a uniform variable to a 3D vector of floats. (e.g. RGB colors)
-    pub fn set_3f(&self, x: GLfloat, y: GLfloat, z: GLfloat) { gl::uniform_3f(**self, x, y, z); }
+    pub fn set_3f(&self, x: GLfloat, y: GLfloat, z: GLfloat) {
+        gl::uniform_3f(self.to_GLint(), x, y, z);
+    }
     /// Sets a uniform variable to a 4D vector of floats. (e.g. RGBA colors)
     pub fn set_4f(&self, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat) {
-        gl::uniform_4f(**self, x, y, z, w);
+        gl::uniform_4f(self.to_GLint(), x, y, z, w);
     }
 
     /// Sets a uniform variable to an integer. (e.g. samplers)
-    pub fn set_1i(&self, x: GLint) { gl::uniform_1i(**self, x); }
+    pub fn set_1i(&self, x: GLint) { gl::uniform_1i(self.to_GLint(), x); }
     /// Sets a uniform variable to a 2D vector of integers.
-    pub fn set_2i(&self, x: GLint, y: GLint) { gl::uniform_2i(**self, x, y); }
+    pub fn set_2i(&self, x: GLint, y: GLint) { gl::uniform_2i(self.to_GLint(), x, y); }
     /// Sets a uniform variable to a 3D vector of integers.
-    pub fn set_3i(&self, x: GLint, y: GLint, z: GLint) { gl::uniform_3i(**self, x, y, z); }
+    pub fn set_3i(&self, x: GLint, y: GLint, z: GLint) { gl::uniform_3i(self.to_GLint(), x, y, z); }
     /// Sets a uniform variable to a 4D vector of integers.
     pub fn set_4i(&self, x: GLint, y: GLint, z: GLint, w: GLint) {
-        gl::uniform_4i(**self, x, y, z, w);
+        gl::uniform_4i(self.to_GLint(), x, y, z, w);
     }
 
     /// Sets a uniform variable to a 2x2 matrix of floats. If `transpose` is set the matrix is row
     /// major, otherwise it's column major.
     pub fn set_matrix_2f(&self, transpose: bool, value: &[GLfloat]) {
-        gl::uniform_matrix_2fv(**self, transpose, value);
+        gl::uniform_matrix_2fv(self.to_GLint(), transpose, value);
     }
     /// Sets a uniform variable to a 3x3 matrix of floats. If `transpose` is set the matrix is row
     /// major, otherwise it's column major.
     pub fn set_matrix_3f(&self, transpose: bool, value: &[GLfloat]) {
-        gl::uniform_matrix_3fv(**self, transpose, value);
+        gl::uniform_matrix_3fv(self.to_GLint(), transpose, value);
     }
     /// Sets a uniform variable to a 4x4 matrix of floats. If `transpose` is set the matrix is row
     /// major, otherwise it's column major.
     pub fn set_matrix_4f(&self, transpose: bool, value: &[GLfloat]) {
-        gl::uniform_matrix_4fv(**self, transpose, value);
+        gl::uniform_matrix_4fv(self.to_GLint(), transpose, value);
     }
 }
 
@@ -139,8 +153,9 @@ impl Shader {
 
     /// Creates a shader from given file path.
     pub fn from_file(shader_type: ShaderType, path: &Path) -> Result<Shader,~str> {
-        do ::std::io::file_reader(path).and_then |f| {
-            Shader::from_str(shader_type, f.read_c_str())
+        match io::File::open(path) {
+            Some(mut f) => Shader::from_str(shader_type, f.read_to_str()),
+            None => Err(~"File::open failed"),
         }
     }
 }
@@ -269,15 +284,15 @@ fn prepare_surface_for_texture(surface: &video::Surface) -> Result<~video::Surfa
 /// Calls `f` with the OpenGL-compatible parameters of the prepared surface.
 fn with_prepared_surface<R>(
         surface: &video::Surface,
-        f: &fn(w: GLsizei, h: GLsizei, fmt: GLenum, ty: GLenum, data: &[u8]) -> R) -> R {
+        f: |w: GLsizei, h: GLsizei, fmt: GLenum, ty: GLenum, data: &[u8]| -> R) -> R {
     assert!(is_surface_prepared_for_texture(surface));
     let bpp = unsafe { (*(*surface.raw).format).BitsPerPixel };
     let glpixfmt = if bpp == 24 {gl::RGB} else {gl::RGBA};
     let (width, height) = surface.get_size();
-    do surface.with_lock |pixels| {
+    surface.with_lock(|pixels| {
         f(width as GLsizei, height as GLsizei, glpixfmt, gl::UNSIGNED_BYTE,
           unsafe {cast::transmute(pixels)})
-    }
+    })
 }
 
 /// An SDL surface prepared for uploading to OpenGL.
@@ -319,23 +334,29 @@ impl PreparedSurface {
         }
     }
 
+    /// Returns a reference to the underlying surface.
+    pub fn as_surface<'r>(&'r self) -> &'r video::Surface {
+        let PreparedSurface(~ref surface) = *self;
+        surface
+    }
+
     /// Checks if the associated surface is suitable for uploading to OpenGL.
     pub fn valid(&self) -> bool {
-        is_surface_prepared_for_texture(**self)
+        is_surface_prepared_for_texture(self.as_surface())
     }
 
     /// Calls `glTexImage2D` with the associated surface.
     pub fn tex_image_2d(&self, target: GLenum, level: GLint) {
-        do with_prepared_surface(**self) |w, h, fmt, ty, data| {
+        with_prepared_surface(self.as_surface(), |w, h, fmt, ty, data| {
             gl::tex_image_2d(target, level, fmt as GLint, w, h, 0, fmt, ty, Some(data))
-        }
+        })
     }
 
     /// Calls `glTexSubImage2D` with the associated surface.
     pub fn tex_sub_image_2d(&self, target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint) {
-        do with_prepared_surface(**self) |w, h, fmt, ty, data| {
+        with_prepared_surface(self.as_surface(), |w, h, fmt, ty, data| {
             gl::tex_sub_image_2d(target, level, xoffset, yoffset, w, h, fmt, ty, Some(data))
-        }
+        })
     }
 }
 
@@ -367,7 +388,7 @@ impl Texture2D {
     /// the texture should wrap in horizontal or vertical directions or not.
     pub fn from_prepared_surface(prepared: &PreparedSurface,
                                  xwrap: bool, ywrap: bool) -> Result<Texture2D,~str> {
-        let (width, height) = prepared.get_size();
+        let (width, height) = prepared.as_surface().get_size();
         let texture = earlyexit!(Texture2D::new(width as uint, height as uint));
         texture.upload_surface(prepared, xwrap, ywrap);
         Ok(texture)
@@ -477,18 +498,16 @@ impl Drop for RenderBuffer {
 }
 
 // XXX should have been `gl::gen_renderbuffers`
-#[fixed_stack_segment]
 fn gen_renderbuffers(n: GLsizei) -> ~[GLuint] {
     use std::vec;
     unsafe {
         let result = vec::from_elem(n as uint, 0 as GLuint);
-        gl::glGenRenderbuffers(n, vec::raw::to_ptr(result));
+        gl::glGenRenderbuffers(n, result.as_ptr());
         result
     }
 }
 
 // XXX should have been `gl::bind_renderbuffer`
-#[fixed_stack_segment]
 fn bind_renderbuffer(target: GLenum, renderbuffer: GLuint) {
     unsafe {
         gl::glBindRenderbuffer(target, renderbuffer);
@@ -496,7 +515,6 @@ fn bind_renderbuffer(target: GLenum, renderbuffer: GLuint) {
 }
 
 // XXX should have been `gl::renderbuffer_storage`
-#[fixed_stack_segment]
 fn renderbuffer_storage(target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei) {
     unsafe {
         gl::glRenderbufferStorage(target, internalformat, width, height);
@@ -504,7 +522,6 @@ fn renderbuffer_storage(target: GLenum, internalformat: GLenum, width: GLsizei, 
 }
 
 // XXX should have been `gl::framebuffer_renderbuffer`
-#[fixed_stack_segment]
 fn framebuffer_renderbuffer(target: GLenum, attachment: GLenum,
                             renderbuffertarget: GLenum, renderbuffer: GLuint) {
     unsafe {

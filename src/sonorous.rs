@@ -28,23 +28,22 @@
  *       issue. can be worked around by wrapping a reference to the closure to another closure.
  */
 
-#[link(name = "sonorous",
-       vers = "0.1.0",
-       uuid = "6DD4E626-EE80-4D82-AB67-846634B74A19",
-       url = "https://github.com/snrs/sonorous/")];
+#[crate_id = "https://github.com/snrs/sonorous/#sonorous:0.1.0"];
+#[crate_type = "bin"];
+
+#[feature(macro_rules, globs)];
 
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
 
 extern mod extra;
+
 extern mod sdl;
+extern mod sdl_image;
+extern mod sdl_mixer;
 extern mod opengles;
 extern mod encoding;
-extern mod sqlite;
-
-// see below for specifics.
-use self::util::std::str::*;
-use self::util::std::option::*;
+extern mod sqlite3;
 
 #[macro_escape] pub mod util {
     /*!
@@ -65,6 +64,8 @@ use self::util::std::option::*;
 pub mod ext {
     //! Bindings to external libraries or APIs.
     pub mod sdl;
+    pub mod sdl_mixer;
+    pub mod smpeg;
     pub mod win32;
 }
 pub mod gfx {
@@ -122,36 +123,40 @@ pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
     use format::bms::parse::{BmsCommand, BmsUnknown};
     use format::bms::parse::{each_bms_command_with_flow, each_bms_command};
 
-    let f = match io::file_reader(bmspath) {
-        Ok(f) => f,
-        Err(err) => die!("Couldn't load BMS file: {}", err)
+    let mut f = match io::File::open(bmspath) {
+        Some(f) => f,
+        None => die!("Couldn't load BMS file: {}", bmspath.display())
     };
     let blk = |_lineno: uint, cmd: BmsCommand| {
         match cmd {
-            BmsUnknown(*) => {}
+            BmsUnknown(..) => {}
             cmd => { util::console::printoutln(cmd.to_str()); }
         }
         true
     };
     if full {
-        each_bms_command_with_flow(f, parseropts, callback, blk);
+        each_bms_command_with_flow(&mut f, parseropts, callback, blk);
     } else {
         let mut r = rand::rng();
-        each_bms_command(f, &mut r, parseropts, callback, blk);
+        each_bms_command(&mut f, &mut r, parseropts, callback, blk);
     }
 }
 
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop.
-pub fn play(bmspath: &Path, opts: @ui::options::Options) {
-    use std::{rand, io, os};
+pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
+    use std::{rand, io};
+    use std::rc::Rc;
+
     use ui::init::{init_audio, init_video, init_joystick};
     use ui::scene::{Scene, run_scene};
     use ui::selecting::{preprocess_bms, PreprocessedBms, print_diag, SelectingScene};
     use ui::loading::{LoadingScene, TextualLoadingScene};
 
+    fn wrap_opts(opts: ~ui::options::Options) -> Rc<ui::options::Options> { Rc::new(*opts) }
+
     let scene;
-    if os::path_is_dir(bmspath) {
+    if bmspath.is_dir() {
         if opts.is_exclusive() {
             die!("Exclusive mode is not usable with the directory path.");
         }
@@ -159,7 +164,7 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
         init_audio();
         for &joyidx in opts.joystick.iter() { init_joystick(joyidx); }
         let screen = init_video(false, opts.fullscreen);
-        scene = SelectingScene::new(screen, bmspath, opts) as ~Scene:
+        scene = SelectingScene::new(screen, bmspath, wrap_opts(opts)) as ~Scene:
     } else {
         let mut callback = |line, msg| print_diag(line, msg);
 
@@ -171,8 +176,10 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
 
         // parses the file and sanitizes it
         let mut r = rand::rng();
-        let preproc = do io::file_reader(bmspath).and_then |f| {
-            preprocess_bms(bmspath, f, opts, &mut r, &opts.loader_options(), &mut callback)
+        let preproc = match io::File::open(bmspath) {
+            Some(mut f) => preprocess_bms(bmspath, &mut f, opts,
+                                          &mut r, &opts.loader_options(), &mut callback),
+            None => Err(~"File::open failed"),
         };
         let PreprocessedBms { bms, infos, keyspec } = match preproc {
             Ok(preproc) => *preproc,
@@ -180,7 +187,7 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
         };
 
         if opts.debug_dumptimeline {
-            bms.timeline.dump(std::io::stdout());
+            bms.timeline.dump(&mut std::io::stdout());
             ui::common::exit(0);
         }
 
@@ -205,9 +212,11 @@ pub fn play(bmspath: &Path, opts: @ui::options::Options) {
         }
 
         scene = if opts.is_exclusive() {
-            TextualLoadingScene::new(screen, bms, infos, keyspec, keymap, opts) as ~Scene:
+            TextualLoadingScene::new(screen, bms, infos,
+                                     keyspec, keymap, wrap_opts(opts)) as ~Scene:
         } else {
-            LoadingScene::new(screen.unwrap(), bms, infos, keyspec, keymap, opts) as ~Scene:
+            LoadingScene::new(screen.unwrap(), bms, infos,
+                              keyspec, keymap, wrap_opts(opts)) as ~Scene:
         };
     }
 
@@ -307,9 +316,9 @@ pub fn main() {
         subprogram(args.slice(1, args.len()));
     }
     match parse_opts(args, ui::common::get_path_from_dialog) {
-        ShowVersion => { println(version()); }
+        ShowVersion => { println!("{}", version()); }
         ShowUsage => { usage(); }
-        PathAndOptions(bmspath, opts) => { play(&bmspath, @*opts); }
+        PathAndOptions(bmspath, opts) => { play(&bmspath, opts); }
         Error(err) => { die!("{}", err); }
     }
 }

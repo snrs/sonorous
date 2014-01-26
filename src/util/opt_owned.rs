@@ -21,26 +21,26 @@ use std::fmt;
 
 use util::into_send::IntoSend;
 
-/// A string that can hold either `&'self str` or `~str`. This is an extension to
+/// A string that can hold either `&'r str` or `~str`. This is an extension to
 /// `std::send_str::OptOwnedStr` (which itself is homomorphic to `OptOwnedStr<'static>`).
-pub enum OptOwnedStr<'self> {
+pub enum OptOwnedStr<'r> {
     OptOwnedStrOwned(~str),
-    OptOwnedStrBorrowed(&'self str),
+    OptOwnedStrBorrowed(&'r str),
 }
 
-/// A vector that can hold either `&'self [T]` or `~[T]`.
-pub enum OptOwnedVec<'self,T> {
+/// A vector that can hold either `&'r [T]` or `~[T]`.
+pub enum OptOwnedVec<'r,T> {
     OptOwnedVecOwned(~[T]),
-    OptOwnedVecBorrowed(&'self [T]),
+    OptOwnedVecBorrowed(&'r [T]),
 }
 
-impl<'self> OptOwnedStr<'self> {
+impl<'r> OptOwnedStr<'r> {
     /// Returns `true` if the string is owned.
     #[inline]
     pub fn is_owned(&self) -> bool {
         match *self {
-            OptOwnedStrOwned(*) => true,
-            OptOwnedStrBorrowed(*) => false,
+            OptOwnedStrOwned(..) => true,
+            OptOwnedStrBorrowed(..) => false,
         }
     }
 
@@ -48,19 +48,19 @@ impl<'self> OptOwnedStr<'self> {
     #[inline]
     pub fn is_borrowed(&self) -> bool {
         match *self {
-            OptOwnedStrOwned(*) => false,
-            OptOwnedStrBorrowed(*) => true,
+            OptOwnedStrOwned(..) => false,
+            OptOwnedStrBorrowed(..) => true,
         }
     }
 }
 
-impl<'self,T> OptOwnedVec<'self,T> {
+impl<'r,T> OptOwnedVec<'r,T> {
     /// Returns `true` if the vector is owned.
     #[inline]
     pub fn is_owned(&self) -> bool {
         match *self {
-            OptOwnedVecOwned(*) => true,
-            OptOwnedVecBorrowed(*) => false,
+            OptOwnedVecOwned(..) => true,
+            OptOwnedVecBorrowed(..) => false,
         }
     }
 
@@ -68,15 +68,15 @@ impl<'self,T> OptOwnedVec<'self,T> {
     #[inline]
     pub fn is_borrowed(&self) -> bool {
         match *self {
-            OptOwnedVecOwned(*) => false,
-            OptOwnedVecBorrowed(*) => true,
+            OptOwnedVecOwned(..) => false,
+            OptOwnedVecBorrowed(..) => true,
         }
     }
 }
 
 // * `IntoSend` implementations
 
-impl<'self> IntoSend<OptOwnedStr<'static>> for OptOwnedStr<'self> {
+impl<'r> IntoSend<OptOwnedStr<'static>> for OptOwnedStr<'r> {
     #[inline]
     fn into_send(self) -> OptOwnedStr<'static> {
         match self {
@@ -86,7 +86,7 @@ impl<'self> IntoSend<OptOwnedStr<'static>> for OptOwnedStr<'self> {
     }
 }
 
-impl<'self,T:Clone> IntoSend<OptOwnedVec<'static,T>> for OptOwnedVec<'self,T> {
+impl<'r,T:Clone> IntoSend<OptOwnedVec<'static,T>> for OptOwnedVec<'r,T> {
     #[inline]
     fn into_send(self) -> OptOwnedVec<'static,T> {
         match self {
@@ -99,15 +99,15 @@ impl<'self,T:Clone> IntoSend<OptOwnedVec<'static,T>> for OptOwnedVec<'self,T> {
 // * `IntoOptOwned{Str,Vec}` traits
 
 /// A trait for moving into an `OptOwnedStr`.
-pub trait IntoOptOwnedStr<'self> {
+pub trait IntoOptOwnedStr<'r> {
     /// Moves `self` into an `OptOwnedStr`.
-    fn into_opt_owned_str(self) -> OptOwnedStr<'self>;
+    fn into_opt_owned_str(self) -> OptOwnedStr<'r>;
 }
 
 /// A trait for moving into an `OptOwnedVec`.
-pub trait IntoOptOwnedVec<'self,T> {
+pub trait IntoOptOwnedVec<'r,T> {
     /// Moves `self` into an `OptOwnedVec`.
-    fn into_opt_owned_vec(self) -> OptOwnedVec<'self,T>;
+    fn into_opt_owned_vec(self) -> OptOwnedVec<'r,T>;
 }
 
 impl IntoOptOwnedStr<'static> for ~str {
@@ -115,9 +115,9 @@ impl IntoOptOwnedStr<'static> for ~str {
     fn into_opt_owned_str(self) -> OptOwnedStr<'static> { OptOwnedStrOwned(self) }
 }
 
-impl<'self> IntoOptOwnedStr<'self> for &'self str {
+impl<'r> IntoOptOwnedStr<'r> for &'r str {
     #[inline]
-    fn into_opt_owned_str(self) -> OptOwnedStr<'self> { OptOwnedStrBorrowed(self) }
+    fn into_opt_owned_str(self) -> OptOwnedStr<'r> { OptOwnedStrBorrowed(self) }
 }
 
 impl<T> IntoOptOwnedVec<'static,T> for ~[T] {
@@ -125,14 +125,14 @@ impl<T> IntoOptOwnedVec<'static,T> for ~[T] {
     fn into_opt_owned_vec(self) -> OptOwnedVec<'static,T> { OptOwnedVecOwned(self) }
 }
 
-impl<'self,T> IntoOptOwnedVec<'self,T> for &'self [T] {
+impl<'r,T> IntoOptOwnedVec<'r,T> for &'r [T] {
     #[inline]
-    fn into_opt_owned_vec(self) -> OptOwnedVec<'self,T> { OptOwnedVecBorrowed(self) }
+    fn into_opt_owned_vec(self) -> OptOwnedVec<'r,T> { OptOwnedVecBorrowed(self) }
 }
 
 // * `Str` implementation
 
-impl<'self> Str for OptOwnedStr<'self> {
+impl<'r> Str for OptOwnedStr<'r> {
     #[inline]
     fn as_slice<'r>(&'r self) -> &'r str {
         match *self {
@@ -152,7 +152,7 @@ impl<'self> Str for OptOwnedStr<'self> {
 
 // * `Vector` implementation
 
-impl<'self,T> Vector<T> for OptOwnedVec<'self,T> {
+impl<'r,T> Vector<T> for OptOwnedVec<'r,T> {
     #[inline]
     fn as_slice<'r>(&'r self) -> &'r [T] {
         match *self {
@@ -164,58 +164,58 @@ impl<'self,T> Vector<T> for OptOwnedVec<'self,T> {
 
 // * `ToStr` implementations
 
-impl<'self> ToStr for OptOwnedStr<'self> {
+impl<'r> ToStr for OptOwnedStr<'r> {
     #[inline]
     fn to_str(&self) -> ~str { self.as_slice().to_owned() }
 }
 
-impl<'self,T:ToStr> ToStr for OptOwnedVec<'self,T> {
+impl<'r,T:ToStr> ToStr for OptOwnedVec<'r,T> {
     #[inline]
     fn to_str(&self) -> ~str { self.as_slice().to_str() }
 }
 
 // * `Eq` implementations
 
-impl<'self> Eq for OptOwnedStr<'self> {
+impl<'r> Eq for OptOwnedStr<'r> {
     #[inline]
-    fn eq(&self, other: &OptOwnedStr<'self>) -> bool {
+    fn eq(&self, other: &OptOwnedStr<'r>) -> bool {
         self.as_slice().eq(&other.as_slice())
     }
 }
 
-impl<'self,T:Eq> Eq for OptOwnedVec<'self,T> {
+impl<'r,T:Eq> Eq for OptOwnedVec<'r,T> {
     #[inline]
-    fn eq(&self, other: &OptOwnedVec<'self,T>) -> bool {
+    fn eq(&self, other: &OptOwnedVec<'r,T>) -> bool {
         self.as_slice().eq(&other.as_slice())
     }
 }
 
 // * `TotalEq` implementations
 
-impl<'self> TotalEq for OptOwnedStr<'self> {
+impl<'r> TotalEq for OptOwnedStr<'r> {
     #[inline]
-    fn equals(&self, other: &OptOwnedStr<'self>) -> bool {
+    fn equals(&self, other: &OptOwnedStr<'r>) -> bool {
         self.as_slice().equals(&other.as_slice())
     }
 }
 
-impl<'self,T:TotalEq> TotalEq for OptOwnedVec<'self,T> {
+impl<'r,T:TotalEq> TotalEq for OptOwnedVec<'r,T> {
     #[inline]
-    fn equals(&self, other: &OptOwnedVec<'self,T>) -> bool {
+    fn equals(&self, other: &OptOwnedVec<'r,T>) -> bool {
         self.as_slice().equals(&other.as_slice())
     }
 }
 
 // * `Equiv` implementations
 
-impl<'self,S:Str> Equiv<S> for OptOwnedStr<'self> {
+impl<'r,S:Str> Equiv<S> for OptOwnedStr<'r> {
     #[inline]
     fn equiv(&self, other: &S) -> bool {
         self.as_slice().eq(&other.as_slice())
     }
 }
 
-impl<'self,T:Eq,V:Vector<T>> Equiv<V> for OptOwnedVec<'self,T> {
+impl<'r,T:Eq,V:Vector<T>> Equiv<V> for OptOwnedVec<'r,T> {
     #[inline]
     fn equiv(&self, other: &V) -> bool {
         self.as_slice().eq(&other.as_slice())
@@ -224,83 +224,83 @@ impl<'self,T:Eq,V:Vector<T>> Equiv<V> for OptOwnedVec<'self,T> {
 
 // * `Ord` implementations
 
-impl<'self> Ord for OptOwnedStr<'self> {
+impl<'r> Ord for OptOwnedStr<'r> {
     #[inline]
-    fn lt(&self, other: &OptOwnedStr<'self>) -> bool {
+    fn lt(&self, other: &OptOwnedStr<'r>) -> bool {
         self.as_slice().lt(&other.as_slice())
     }
 
     #[inline]
-    fn le(&self, other: &OptOwnedStr<'self>) -> bool {
+    fn le(&self, other: &OptOwnedStr<'r>) -> bool {
         self.as_slice().le(&other.as_slice())
     }
 
     #[inline]
-    fn gt(&self, other: &OptOwnedStr<'self>) -> bool {
+    fn gt(&self, other: &OptOwnedStr<'r>) -> bool {
         self.as_slice().gt(&other.as_slice())
     }
 
     #[inline]
-    fn ge(&self, other: &OptOwnedStr<'self>) -> bool {
+    fn ge(&self, other: &OptOwnedStr<'r>) -> bool {
         self.as_slice().ge(&other.as_slice())
     }
 }
 
-impl<'self,T:Eq+Ord> Ord for OptOwnedVec<'self,T> {
+impl<'r,T:Eq+Ord> Ord for OptOwnedVec<'r,T> {
     #[inline]
-    fn lt(&self, other: &OptOwnedVec<'self,T>) -> bool {
+    fn lt(&self, other: &OptOwnedVec<'r,T>) -> bool {
         self.as_slice().lt(&other.as_slice())
     }
 
     #[inline]
-    fn le(&self, other: &OptOwnedVec<'self,T>) -> bool {
+    fn le(&self, other: &OptOwnedVec<'r,T>) -> bool {
         self.as_slice().le(&other.as_slice())
     }
 
     #[inline]
-    fn gt(&self, other: &OptOwnedVec<'self,T>) -> bool {
+    fn gt(&self, other: &OptOwnedVec<'r,T>) -> bool {
         self.as_slice().gt(&other.as_slice())
     }
 
     #[inline]
-    fn ge(&self, other: &OptOwnedVec<'self,T>) -> bool {
+    fn ge(&self, other: &OptOwnedVec<'r,T>) -> bool {
         self.as_slice().ge(&other.as_slice())
     }
 }
 
 // * `TotalOrd` implementations
 
-impl<'self> TotalOrd for OptOwnedStr<'self> {
+impl<'r> TotalOrd for OptOwnedStr<'r> {
     #[inline]
-    fn cmp(&self, other: &OptOwnedStr<'self>) -> Ordering {
+    fn cmp(&self, other: &OptOwnedStr<'r>) -> Ordering {
         self.as_slice().cmp(&other.as_slice())
     }
 }
 
-impl<'self,T:TotalOrd> TotalOrd for OptOwnedVec<'self,T> {
+impl<'r,T:TotalOrd> TotalOrd for OptOwnedVec<'r,T> {
     #[inline]
-    fn cmp(&self, other: &OptOwnedVec<'self,T>) -> Ordering {
+    fn cmp(&self, other: &OptOwnedVec<'r,T>) -> Ordering {
         self.as_slice().cmp(&other.as_slice())
     }
 }
 
 // * `Container` implementations
 
-impl<'self> Container for OptOwnedStr<'self> {
+impl<'r> Container for OptOwnedStr<'r> {
     #[inline]
     fn len(&self) -> uint { self.as_slice().len() }
 }
 
-impl<'self,T> Container for OptOwnedVec<'self,T> {
+impl<'r,T> Container for OptOwnedVec<'r,T> {
     #[inline]
     fn len(&self) -> uint { self.as_slice().len() }
 }
 
 // * `Clone` implementations
 
-impl<'self> Clone for OptOwnedStr<'self> {
+impl<'r> Clone for OptOwnedStr<'r> {
     #[inline]
-    fn clone(&self) -> OptOwnedStr<'self> {
+    fn clone(&self) -> OptOwnedStr<'r> {
         match *self {
             OptOwnedStrOwned(ref s) => OptOwnedStrOwned(s.clone()),
             OptOwnedStrBorrowed(s) => OptOwnedStrBorrowed(s),
@@ -308,9 +308,9 @@ impl<'self> Clone for OptOwnedStr<'self> {
     }
 }
 
-impl<'self,T:Clone> Clone for OptOwnedVec<'self,T> {
+impl<'r,T:Clone> Clone for OptOwnedVec<'r,T> {
     #[inline]
-    fn clone(&self) -> OptOwnedVec<'self,T> {
+    fn clone(&self) -> OptOwnedVec<'r,T> {
         match *self {
             OptOwnedVecOwned(ref v) => OptOwnedVecOwned(v.clone()),
             OptOwnedVecBorrowed(v) => OptOwnedVecBorrowed(v),
@@ -320,9 +320,9 @@ impl<'self,T:Clone> Clone for OptOwnedVec<'self,T> {
 
 // * `DeepClone` implementations
 
-impl<'self> DeepClone for OptOwnedStr<'self> {
+impl<'r> DeepClone for OptOwnedStr<'r> {
     #[inline]
-    fn deep_clone(&self) -> OptOwnedStr<'self> {
+    fn deep_clone(&self) -> OptOwnedStr<'r> {
         match *self {
             OptOwnedStrOwned(ref s) => OptOwnedStrOwned(s.deep_clone()),
             OptOwnedStrBorrowed(s) => OptOwnedStrBorrowed(s),
@@ -330,9 +330,9 @@ impl<'self> DeepClone for OptOwnedStr<'self> {
     }
 }
 
-impl<'self,T:DeepClone> DeepClone for OptOwnedVec<'self,T> {
+impl<'r,T:DeepClone> DeepClone for OptOwnedVec<'r,T> {
     #[inline]
-    fn deep_clone(&self) -> OptOwnedVec<'self,T> {
+    fn deep_clone(&self) -> OptOwnedVec<'r,T> {
         match *self {
             OptOwnedVecOwned(ref v) => OptOwnedVecOwned(v.deep_clone()),
             OptOwnedVecBorrowed(v) => OptOwnedVecBorrowed(v),
@@ -342,9 +342,9 @@ impl<'self,T:DeepClone> DeepClone for OptOwnedVec<'self,T> {
 
 // * `Default` implementations
 
-impl<'self> Default for OptOwnedStr<'self> {
+impl<'r> Default for OptOwnedStr<'r> {
     #[inline]
-    fn default() -> OptOwnedStr<'self> { OptOwnedStrBorrowed("") }
+    fn default() -> OptOwnedStr<'r> { OptOwnedStrBorrowed("") }
 }
 
 impl<T> Default for OptOwnedVec<'static,T> {
@@ -354,21 +354,21 @@ impl<T> Default for OptOwnedVec<'static,T> {
 
 // * `IterBytes` implementations
 
-impl<'self> IterBytes for OptOwnedStr<'self> {
+impl<'r> IterBytes for OptOwnedStr<'r> {
     #[inline]
     fn iter_bytes(&self, lsb0: bool, f: Cb) -> bool { self.as_slice().iter_bytes(lsb0, f) }
 }
 
-impl<'self,T:IterBytes> IterBytes for OptOwnedVec<'self,T> {
+impl<'r,T:IterBytes> IterBytes for OptOwnedVec<'r,T> {
     #[inline]
     fn iter_bytes(&self, lsb0: bool, f: Cb) -> bool { self.as_slice().iter_bytes(lsb0, f) }
 }
 
 // * `fmt::Default` implementation
 
-impl<'self> fmt::Default for OptOwnedStr<'self> {
+impl<'r> fmt::Default for OptOwnedStr<'r> {
     #[inline]
-    fn fmt(s: &OptOwnedStr<'self>, formatter: &mut fmt::Formatter) {
+    fn fmt(s: &OptOwnedStr<'r>, formatter: &mut fmt::Formatter) {
         fmt::Default::fmt(&s.as_slice(), formatter)
     }
 }

@@ -8,12 +8,13 @@
 
 //! Utilities for searching files.
 
-use std::{at_vec, os, hashmap};
+use std::{str, io, hashmap};
+use std::rc::Rc;
 
 /// Context for searching files.
 pub struct SearchContext {
     /// Cached return values of `get_entries`.
-    get_entries_cache: hashmap::HashMap<~str,(@[~str],@[~str])>,
+    get_entries_cache: hashmap::HashMap<Path,(Rc<~[Path]>,Rc<~[Path]>)>,
 }
 
 impl SearchContext {
@@ -25,17 +26,18 @@ impl SearchContext {
     /// Returns a list of immediate subdirectories (i.e. without `.` and `..`) and files
     /// in given directory. Returns a pair of empty lists if `dir` is not a directory.
     /// The results may be cached by the context.
-    pub fn get_entries(&mut self, dir: &Path) -> (@[~str], @[~str]) {
+    pub fn get_entries<'r>(&'r mut self, dir: &Path) -> (&'r [Path], &'r [Path]) {
         // the original plan is to implement an LRU cache for `get_entries`, but for now we don't
         // invalidate any cache items since it turned out that `os::list_dir` is very, very slow.
         // for example, it is not rare for `list_dir` to take more than 100ms in Windows.
-        let ret = do self.get_entries_cache.find_or_insert_with(dir.to_str()) |_| {
-            let mut entries = os::list_dir(dir);
-            entries.retain(|e| !(".".equiv(e) || "..".equiv(e)));
-            let (dirs, files) = entries.partition(|e| os::path_is_dir(&dir.push(*e)));
-            (at_vec::to_managed_move(dirs), at_vec::to_managed_move(files))
-        };
-        *ret
+        let &(ref dirs, ref files) = self.get_entries_cache.find_or_insert_with(dir.clone(), |_| {
+            let entries = io::fs::readdir(dir);
+            let (dirs, files) = entries.partition(|path| path.is_dir());
+            (Rc::new(dirs), Rc::new(files))
+        });
+        let dirs: &[Path] = *dirs.borrow();
+        let files: &[Path] = *files.borrow();
+        (dirs, files)
     }
 
     /**
@@ -57,21 +59,22 @@ impl SearchContext {
         use std::ascii::StrAsciiExt;
 
         let mut parts = ~[];
-        for part in path.split_iter(|c: char| c == '/' || c == '\\') {
-            if part.is_empty() { loop; }
+        for part in path.split(|c: char| c == '/' || c == '\\') {
+            if part.is_empty() { continue; }
             parts.push(part);
         }
         if parts.is_empty() { return None; }
 
         let mut cur = basedir.clone();
-        let lastpart = parts.pop();
+        let lastpart = parts.pop().unwrap();
         for part in parts.iter() {
             let (dirs, _files) = self.get_entries(&cur);
             let part = part.to_ascii_upper();
             let mut found = false;
             for next in dirs.iter() {
-                if next.to_ascii_upper() == part {
-                    cur = cur.push(*next);
+                let name = next.filename().and_then(str::from_utf8).map(|v| v.to_ascii_upper());
+                if name.as_ref().map_or(false, |name| *name == part) {
+                    cur = next.clone();
                     found = true;
                     break;
                 }
@@ -82,12 +85,13 @@ impl SearchContext {
         let (_dirs, files) = self.get_entries(&cur);
         let lastpart = lastpart.to_ascii_upper();
         for next in files.iter() {
-            let next_ = next.to_ascii_upper();
-            let mut found = (next_ == lastpart);
-            if !found {
-                match next_.rfind('.') {
+            let name = next.filename().and_then(str::from_utf8).map(|v| v.to_ascii_upper());
+            let mut found = name.as_ref().map_or(false, |name| *name == lastpart);
+            if !found && name.is_some() {
+                let name = name.unwrap();
+                match name.rfind('.') {
                     Some(idx) => {
-                        let nextnoext = next_.slice_to(idx).to_owned();
+                        let nextnoext = name.slice_to(idx).to_owned();
                         for ext in exts.iter() {
                             if nextnoext + ext.to_owned() == lastpart {
                                 found = true;
@@ -99,7 +103,7 @@ impl SearchContext {
                 }
             }
             if found {
-                return Some(cur.push(*next));
+                return Some(next.clone());
             }
         }
 

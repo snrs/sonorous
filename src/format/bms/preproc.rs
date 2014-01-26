@@ -92,25 +92,25 @@ struct Block {
 }
 
 /// A generic BMS preprocessor. `T` is normally a BMS command, but there is no restriction.
-pub struct Preprocessor<'self,T,R,Listener> {
+pub struct Preprocessor<'r,T,R,Listener> {
     /// The current block informations.
     blocks: ~[Block],
     /// Random number generator.
-    r: &'self mut R,
+    r: &'r mut R,
     /// Message callback.
-    callback: &'self mut Listener,
+    callback: &'r mut Listener,
 }
 
-impl<'self,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'self,T,R,Listener> {
+impl<'r,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'r,T,R,Listener> {
     /// Creates a new preprocessor with given RNG and message callback.
-    pub fn new(r: &'self mut R, callback: &'self mut Listener) -> Preprocessor<'self,T,R,Listener> {
+    pub fn new(r: &'r mut R, callback: &'r mut Listener) -> Preprocessor<'r,T,R,Listener> {
         let blocks = ~[Block { val: None, state: Outside, skip: false }];
         Preprocessor { blocks: blocks, r: r, callback: callback }
     }
 
     /// Returns true if any command which appears at this position should be ignored.
     pub fn inactive(&self) -> bool {
-        let last = self.blocks.last();
+        let last = self.blocks.last().unwrap();
         last.skip || last.state.inactive()
     }
 
@@ -129,19 +129,19 @@ impl<'self,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'self,T,
         match *flow {
             BmsRandom(val) | BmsSetRandom(val) => {
                 let val = if val <= 0 {None} else {Some(val)};
-                let setrandom = match *flow { BmsSetRandom(*) => true, _ => false };
+                let setrandom = match *flow { BmsSetRandom(..) => true, _ => false };
 
                 // do not generate a random value if the entire block is skipped (but it
                 // still marks the start of block)
-                let generated = do val.and_then |val| {
+                let generated = val.and_then(|val| {
                     if setrandom {
                         Some(val)
                     } else if !inactive {
-                        Some(self.r.gen_integer_range(1, val + 1))
+                        Some(self.r.gen_range(1, val + 1))
                     } else {
                         None
                     }
-                };
+                });
                 self.blocks.push(Block { val: generated, state: Outside, skip: inactive });
             }
             BmsEndRandom => {
@@ -149,7 +149,7 @@ impl<'self,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'self,T,
             }
             BmsIf(val) | BmsElseIf(val) => {
                 let val = if val <= 0 {None} else {Some(val)};
-                let haspriorelse = match *flow { BmsElseIf(*) => true, _ => false };
+                let haspriorelse = match *flow { BmsElseIf(..) => true, _ => false };
 
                 let last = &mut self.blocks[self.blocks.len() - 1];
                 last.state =
@@ -172,7 +172,7 @@ impl<'self,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'self,T,
                 let last = &mut self.blocks[self.blocks.len() - 1];
                 last.state = Outside;
             }
-            BmsSwitch(*) | BmsSetSwitch(*) | BmsEndSw | BmsCase(*) | BmsSkip | BmsDef => {
+            BmsSwitch(..) | BmsSetSwitch(..) | BmsEndSw | BmsCase(..) | BmsSkip | BmsDef => {
                 self.callback.on_message(lineno, BmsHasUnimplementedFlow);
             }
         }
@@ -193,7 +193,7 @@ mod tests {
     macro_rules! with_pp(
         ($pp:ident $blk:expr) => ({
             let mut r = rng();
-            let mut callback: &fn(Option<uint>, BmsMessage) = |_, _| fail!("unexpected");
+            let mut callback: |Option<uint>, BmsMessage| = |_, _| fail!("unexpected");
             let mut $pp = Preprocessor::new(&mut r, &mut callback);
             $blk;
         })

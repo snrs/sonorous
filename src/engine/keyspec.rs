@@ -4,6 +4,8 @@
 
 //! Key kinds and specification.
 
+use std::str;
+
 use format::obj::{Lane, NLANES, ObjQueryOps};
 use format::timeline::Timeline;
 use format::timeline::modf::filter_lanes;
@@ -57,8 +59,9 @@ impl KeyKind {
     //
     // Rust: can this method be generated on the fly?
     pub fn all() -> &'static [KeyKind] {
-        &[WhiteKey, WhiteKeyAlt, BlackKey, Scratch, FootPedal,
-          Button1, Button2, Button3, Button4, Button5]
+        static ALL: [KeyKind, ..10] = [WhiteKey, WhiteKeyAlt, BlackKey, Scratch, FootPedal,
+                                       Button1, Button2, Button3, Button4, Button5];
+        ALL.as_slice()
     }
 
     /// Converts a mnemonic character to an appropriate key kind. Used for parsing a key
@@ -162,8 +165,8 @@ pub fn parse_key_spec(s: &str) -> Option<~[(Lane, KeyKind)]> {
             return None;
         }
         match (chan, KeyKind::from_char(kind)) {
-            (Key(36/*1*36*/..107/*3*36-1*/), Some(kind)) => {
-                specs.push((Lane(*chan as uint - 1*36), kind));
+            (Key(chan @ 36/*1*36*/..107/*3*36-1*/), Some(kind)) => {
+                specs.push((Lane(chan as uint - 1*36), kind));
             }
             (_, _) => { return None; }
         }
@@ -244,9 +247,9 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
 
     let (leftkeys, rightkeys) =
         if leftkeys.is_none() && rightkeys.is_none() {
-            let filetype = bms.bmspath.and_then_ref(|p| p.filetype().map(|e| e.to_ascii_lower()));
-            let preset =
-                if preset.is_none() && filetype == Some(~".pms") {Some(~"pms")} else {preset};
+            let ext = bms.bmspath.as_ref().and_then(|p| p.extension())
+                                          .and_then(str::from_utf8).map(|e| e.to_ascii_lower());
+            let preset = if preset.is_none() && ext == Some(~".pms") {Some(~"pms")} else {preset};
             match preset_to_key_spec(bms, preset.clone()) {
                 Some(leftright) => leftright,
                 None => {
@@ -264,9 +267,9 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
             Some(left) => {
                 let mut err = false;
                 for &(lane,kind) in left.iter() {
-                    if keyspec.kinds[*lane].is_some() { err = true; break; }
+                    if keyspec.kinds[lane.to_uint()].is_some() { err = true; break; }
                     keyspec.order.push(lane);
-                    keyspec.kinds[*lane] = Some(kind);
+                    keyspec.kinds[lane.to_uint()] = Some(kind);
                 }
                 if err {None} else {Some(left.len())}
             }

@@ -51,7 +51,7 @@ impl XyOpt for Rect {
     fn xy_opt(&self) -> Option<(i16,i16)> { Some((self.x, self.y)) }
 }
 
-impl<'self,T:XyOpt> XyOpt for &'self T {
+impl<'r,T:XyOpt> XyOpt for &'r T {
     #[inline(always)]
     fn xy_opt(&self) -> Option<(i16,i16)> { (*self).xy_opt() }
 }
@@ -61,7 +61,7 @@ impl Xy for Rect {
     fn xy(&self) -> (i16,i16) { (self.x, self.y) }
 }
 
-impl<'self,T:Xy> Xy for &'self T {
+impl<'r,T:Xy> Xy for &'r T {
     #[inline(always)]
     fn xy(&self) -> (i16,i16) { (*self).xy() }
 }
@@ -81,7 +81,7 @@ impl WhOpt for Surface {
     fn wh_opt(&self) -> Option<(u16,u16)> { Some(self.get_size()) }
 }
 
-impl<'self,T:WhOpt> WhOpt for &'self T {
+impl<'r,T:WhOpt> WhOpt for &'r T {
     #[inline(always)]
     fn wh_opt(&self) -> Option<(u16,u16)> { (*self).wh_opt() }
 }
@@ -96,7 +96,7 @@ impl Wh for Surface {
     fn wh(&self) -> (u16,u16) { self.get_size() }
 }
 
-impl<'self,T:Wh> Wh for &'self T {
+impl<'r,T:Wh> Wh for &'r T {
     #[inline(always)]
     fn wh(&self) -> (u16,u16) { (*self).wh() }
 }
@@ -202,7 +202,7 @@ impl SurfaceAreaUtil for Surface {
     fn blit_area<SrcXY:Xy,DstXY:XyOpt,WH:WhOpt>(&self, src: &Surface,
                                                 srcxy: SrcXY, dstxy: DstXY, wh: WH) -> bool {
         let srcrect = rect_from_xywh(srcxy, wh);
-        let dstrect = dstxy.xy_opt().map(|&xy| rect_from_xywh(xy, &srcrect));
+        let dstrect = dstxy.xy_opt().map(|xy| rect_from_xywh(xy, &srcrect));
         self.blit_rect(src, Some(srcrect), dstrect)
     }
 
@@ -215,24 +215,24 @@ impl SurfaceAreaUtil for Surface {
 
 /// A proxy to `sdl::video::Surface` for the direct access to pixels. For now, it is for 32 bits
 /// per pixel only.
-pub struct SurfacePixels<'self> {
+pub struct SurfacePixels<'r> {
     fmt: *SDL_PixelFormat,
     width: uint,
     height: uint,
     pitch: uint,
-    pixels: &'self mut [u32]
+    pixels: &'r mut [u32]
 }
 
 /// A trait for the direct access to pixels.
 pub trait SurfacePixelsUtil {
     /// Grants the direct access to pixels. Also locks the surface as needed, so you can't blit
     /// during working with pixels.
-    fn with_pixels<R>(&self, f: &fn(pixels: &mut SurfacePixels) -> R) -> R;
+    fn with_pixels<R>(&self, f: |pixels: &mut SurfacePixels| -> R) -> R;
 }
 
 impl SurfacePixelsUtil for Surface {
-    fn with_pixels<R>(&self, f: &fn(pixels: &mut SurfacePixels) -> R) -> R {
-        do self.with_lock |pixels| {
+    fn with_pixels<R>(&self, f: |pixels: &mut SurfacePixels| -> R) -> R {
+        self.with_lock(|pixels| {
             let fmt = unsafe {(*self.raw).format};
             let pitch = unsafe {((*self.raw).pitch / 4) as uint};
             let pixels = unsafe {::std::cast::transmute(pixels)};
@@ -240,11 +240,11 @@ impl SurfacePixelsUtil for Surface {
                                             height: self.get_height() as uint,
                                             pitch: pitch, pixels: pixels };
             f(&mut proxy)
-        }
+        })
     }
 }
 
-impl<'self> SurfacePixels<'self> {
+impl<'r> SurfacePixels<'r> {
     /// Returns a pixel at given position. (C: `getpixel`)
     pub fn get_pixel(&self, x: uint, y: uint) -> Color {
         Color::from_mapped(self.pixels[x + y * self.pitch], self.fmt)
@@ -258,7 +258,7 @@ impl<'self> SurfacePixels<'self> {
     /// Sets or blends (if `c` is `RGBA`) a pixel to given position. (C: `putblendedpixel`)
     pub fn put_blended_pixel(&mut self, x: uint, y: uint, c: Color) {
         match c {
-            RGB(*) => self.put_pixel(x, y, c),
+            RGB(..) => self.put_pixel(x, y, c),
             RGBA(r,g,b,a) => match self.get_pixel(x, y) {
                 RGB(r2,g2,b2) | RGBA(r2,g2,b2,_) => {
                     let grad = Gradient { zero: RGB(r,g,b), one: RGB(r2,g2,b2) };

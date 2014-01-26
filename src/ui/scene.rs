@@ -4,7 +4,7 @@
 
 //! Scene management.
 
-use std::rt::io::timer::sleep;
+use std::io::timer::sleep;
 use sdl::get_ticks;
 use ui::common::Ticker;
 
@@ -90,14 +90,14 @@ pub fn run_scene(scene: ~Scene:) {
         match result {
             Continue => {
                 let opts = current.scene_options();
-                let mintickdelay = opts.tpslimit.map_default(0, |&tps| 1000 / tps);
-                let interval = opts.fpslimit.map_default(0, |&fps| 1000 / fps);
+                let mintickdelay = opts.tpslimit.map_or(0, |tps| 1000 / tps);
+                let interval = opts.fpslimit.map_or(0, |fps| 1000 / fps);
                 let mut ticker = Ticker::with_interval(interval);
                 loop {
                     let ticklimit = get_ticks() + mintickdelay;
                     result = current.tick();
                     match result {
-                        Continue => { do ticker.on_tick(get_ticks()) { current.render(); } }
+                        Continue => { ticker.on_tick(get_ticks(), || { current.render(); }); }
                         _ => { break; }
                     }
                     let now = get_ticks();
@@ -120,7 +120,7 @@ pub fn run_scene(scene: ~Scene:) {
             }
             PopScene => {
                 if stack.is_empty() { break; }
-                current = stack.pop();
+                current = stack.pop().unwrap();
             }
             Exit => {
                 break;

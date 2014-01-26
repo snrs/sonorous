@@ -57,33 +57,33 @@ macro_rules! lex(
         let _line: &str = $e;
         // Rust: `std::num::from_str_bytes_common` does not recognize a number followed
         //        by garbage, so we need to parse it ourselves.
-        do _line.scan_int().map_default(false) |&_endpos| {
+        _line.scan_int().map_or(false, |_endpos| {
             let _prefix = _line.slice_to(_endpos);
-            do from_str(_prefix).map_default(false) |&_value| {
+            from_str(_prefix).map_or(false, |_value| {
                 $dst = _value;
                 lex!(_line.slice_from(_endpos); $($tail)*)
-            }
-        }
+            })
+        })
     });
     ($e:expr; uint -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        do _line.scan_uint().map_default(false) |&_endpos| {
+        _line.scan_uint().map_or(false, |_endpos| {
             let _prefix = _line.slice_to(_endpos);
-            do from_str(_prefix).map_default(false) |&_value| {
+            from_str(_prefix).map_or(false, |_value| {
                 $dst = _value;
                 lex!(_line.slice_from(_endpos); $($tail)*)
-            }
-        }
+            })
+        })
     });
     ($e:expr; f64 -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        do _line.scan_f64().map_default(false) |&_endpos| {
+        _line.scan_f64().map_or(false, |_endpos| {
             let _prefix = _line.slice_to(_endpos);
-            do from_str(_prefix).map_default(false) |&_value| {
+            from_str(_prefix).map_or(false, |_value| {
                 $dst = _value;
                 lex!(_line.slice_from(_endpos); $($tail)*)
-            }
-        }
+            })
+        })
     });
     ($e:expr; str -> $dst:expr, ws*, $($tail:tt)*) => ({
         let _line: &str = $e;
@@ -126,17 +126,17 @@ macro_rules! lex(
     // start Sonorous-specific
     ($e:expr; Key -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        do ::format::bms::types::Key::from_str(_line).map_default(false) |&_value| {
+        ::format::bms::types::Key::from_str(_line).map_or(false, |_value| {
             $dst = _value;
             lex!(_line.slice_from(2u); $($tail)*)
-        }
+        })
     });
     ($e:expr; PartialKey -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        do ::format::bms::types::PartialKey::from_str(_line).map_default(false) |&(_value, _line)| {
+        ::format::bms::types::PartialKey::from_str(_line).map_or(false, |(_value, _line)| {
             $dst = _value;
             lex!(_line; $($tail)*)
-        }
+        })
     });
     ($e:expr; Measure -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
@@ -220,9 +220,9 @@ macro_rules! lex(
     });
     // end Sonorous-specific
     ($e:expr; $lit:expr, $($tail:tt)*) => ({
-        do $lit.prefix_shifted($e).map_default(false) |&_line| {
+        $lit.prefix_shifted($e).map_or(false, |_line| {
             lex!(_line; $($tail)*)
-        }
+        })
     });
 
     ($e:expr; int -> $dst:expr) => (lex!($e; int -> $dst, ));

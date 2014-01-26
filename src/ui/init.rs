@@ -4,7 +4,12 @@
 
 //! Initialization.
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 use sdl::*;
+use sdl_image;
+use sdl_mixer;
 use engine::resource::{BGAW, BGAH, SAMPLERATE};
 use gfx::screen::Screen;
 
@@ -16,11 +21,11 @@ pub static SCREENH: uint = 600;
 /// Initializes SDL video subsystem, and creates a small screen for BGAs (`BGAW` by `BGAH` pixels)
 /// if `exclusive` is set, or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise.
 /// `fullscreen` is ignored when `exclusive` is set.
-pub fn init_video(exclusive: bool, fullscreen: bool) -> @mut Screen {
+pub fn init_video(exclusive: bool, fullscreen: bool) -> Rc<RefCell<Screen>> {
     if !init([InitVideo]) {
         die!("SDL Initialization Failure: {}", get_error());
     }
-    img::init([img::InitJPG, img::InitPNG]);
+    sdl_image::init([sdl_image::InitJPG, sdl_image::InitPNG]);
 
     let (width, height, fullscreen) = if exclusive {
         (BGAW, BGAH, false)
@@ -36,7 +41,7 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> @mut Screen {
     }
 
     wm::set_caption(::version(), "");
-    @mut screen
+    Rc::new(RefCell::new(screen))
 }
 
 /// Initializes SDL audio subsystem and SDL_mixer.
@@ -44,8 +49,8 @@ pub fn init_audio() {
     if !init([InitAudio]) {
         die!("SDL Initialization Failure: {}", get_error());
     }
-    //mixer::init([mixer::InitOGG, mixer::InitMP3]); // TODO
-    if mixer::open(SAMPLERATE, audio::S16_AUDIO_FORMAT, audio::Stereo, 2048).is_err() {
+    //sdl_mixer::init([sdl_mixer::InitOGG, sdl_mixer::InitMP3]); // TODO
+    if sdl_mixer::open(SAMPLERATE, audio::S16_AUDIO_FORMAT, audio::Stereo, 2048).is_err() {
         die!("SDL Mixer Initialization Failure");
     }
 }

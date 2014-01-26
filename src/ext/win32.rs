@@ -63,8 +63,7 @@ pub mod ll {
         cFileName: [CHAR, ..260],
     }
 
-    #[link_args = "-lkernel32"]
-    #[abi = "stdcall"]
+    #[link(name = "kernel32")]
     extern "stdcall" {
         pub fn FindFirstFileA(lpFileName: LPCSTR,
                               lpFindFileData: *WIN32_FIND_DATAA) -> HANDLE;
@@ -74,16 +73,14 @@ pub mod ll {
         pub fn GetACP() -> c_uint;
     }
 
-    #[link_args = "-luser32"]
-    #[abi = "stdcall"]
+    #[link(name = "user32")]
     extern "stdcall" {
         pub fn MessageBoxW(hWnd: HWND, lpText: LPCWSTR, lpCaption: LPCWSTR,
                            uType: c_uint) -> c_int;
         pub fn GetDC(hwnd: HWND) -> HDC;
     }
 
-    #[link_args = "-lcomdlg32"]
-    #[abi = "stdcall"]
+    #[link(name = "comdlg32")]
     extern "stdcall" {
         pub fn GetOpenFileNameW(lpofn: *OPENFILENAMEW) -> BOOL;
     }

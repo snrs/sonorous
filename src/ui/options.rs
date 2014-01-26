@@ -107,7 +107,7 @@ impl Options {
     pub fn loader_options(&self) -> BmsLoaderOptions {
         let mut loaderopts = BmsLoaderOptions::new();
         loaderopts.parser.force_encoding =
-            self.encoding.and_then_ref(|s| encoding_from_whatwg_label(*s));
+            self.encoding.as_ref().and_then(|s| encoding_from_whatwg_label(*s));
         loaderopts
     }
 }
@@ -127,8 +127,8 @@ pub enum ParsingResult {
 
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
-pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResult {
-    let longargs = (~[
+pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult {
+    let longargs: hashmap::HashMap<~str,char> = (~[
         (~"--help", 'h'), (~"--version", 'V'), (~"--speed", 'a'),
         (~"--autoplay", 'v'), (~"--exclusive", 'x'), (~"--sound-only", 'X'),
         (~"--windowed", 'w'), (~"--no-fullscreen", 'w'),
@@ -138,7 +138,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
         (~"--key-spec", 'K'), (~"--bga", ' '), (~"--no-bga", 'B'),
         (~"--movie", ' '), (~"--no-movie", 'M'), (~"--joystick", 'j'),
         (~"--encoding", 'E'), (~"--debug", 'Z'),
-    ]).move_iter().collect::<hashmap::HashMap<~str,char>>();
+    ]).move_iter().collect();
 
     let nargs = args.len();
 
@@ -162,12 +162,14 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
     while i < nargs {
         if !args[i].starts_with("-") {
             if bmspath.is_none() {
-                bmspath = Some(Path(args[i]));
+                let filename: &str = args[i];
+                bmspath = Some(Path::new(filename));
             }
         } else if args[i] == ~"--" {
             i += 1;
             if bmspath.is_none() && i < nargs {
-                bmspath = Some(Path(args[i]));
+                let filename: &str = args[i];
+                bmspath = Some(Path::new(filename));
             }
             break;
         } else {
@@ -183,7 +185,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
             let nshortargs = shortargs.len();
 
             let mut inside = true;
-            for (j, c) in shortargs.iter().enumerate() {
+            for (j, c) in shortargs.chars().enumerate() {
                 // Reads the argument of the option. Option string should be consumed first.
                 macro_rules! fetch_arg(($opt:expr) => ({
                     let off = if inside {j+1} else {j};
@@ -243,7 +245,7 @@ pub fn parse_opts(args: &[~str], get_path: &fn() -> Option<Path>) -> ParsingResu
                         let arg = fetch_arg!('E');
                         // since `Encoding`s are not `Send`able we keep only the encoding name
                         match encoding_from_whatwg_label(arg) {
-                            Some(*) => { encoding = Some(arg.to_owned()); }
+                            Some(..) => { encoding = Some(arg.to_owned()); }
                             None => { return Error(format!("Invalid encoding name: {}", arg)); }
                         }
                     }

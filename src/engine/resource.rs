@@ -4,9 +4,13 @@
 
 //! Resource management.
 
-use sdl::{img, video, mixer};
+use std::str;
+
+use sdl::video;
 use sdl::video::{Surface, RGB};
-use ext::sdl::mpeg;
+use sdl_image;
+use sdl_mixer::Chunk;
+use ext::smpeg::MPEG;
 use util::filesearch::SearchContext;
 use gfx::gl::PreparedSurface;
 
@@ -63,19 +67,15 @@ pub enum SoundResource {
     /// No sound resource is associated, or error occurred while loading.
     NoSound,
     /// Sound resource is associated.
-    //
-    // Rust: ideally this should be just a ~-ptr, but the current borrowck is very constrained
-    //       in this aspect. after several attempts I finally sticked to delegate the ownership
-    //       to a managed box.
-    Sound(@~mixer::Chunk) // XXX borrowck
+    Sound(~Chunk)
 }
 
 impl SoundResource {
     /// Returns the associated chunk if any.
-    pub fn chunk(&self) -> Option<@~mixer::Chunk> {
+    pub fn chunk<'r>(&'r self) -> Option<&'r ~Chunk> {
         match *self {
             NoSound => None,
-            Sound(chunk) => Some(chunk)
+            Sound(ref chunk) => Some(chunk)
         }
     }
 
@@ -85,7 +85,7 @@ impl SoundResource {
     pub fn duration(&self) -> f64 {
         match *self {
             NoSound => 0.0,
-            Sound(chunk) => {
+            Sound(ref chunk) => {
                 let chunk = chunk.to_ll_chunk();
                 (unsafe {(*chunk).alen} as f64) / (BYTESPERSEC as f64)
             }
@@ -100,13 +100,13 @@ impl SoundResource {
 //       cross-task owned pointer containing a managed pointer. (#8983)
 pub enum LoadedSoundResource {
     NoLoadedSound,
-    LoadedSound(~mixer::Chunk)
+    LoadedSound(~Chunk)
 }
 
 impl LoadedSoundResource {
     /// Loads a sound resource.
     pub fn new(path: &Path) -> Result<LoadedSoundResource,~str> {
-        let res = earlyexit!(mixer::Chunk::from_wav(path));
+        let res = earlyexit!(Chunk::from_wav(path));
         Ok(LoadedSound(res))
     }
 
@@ -114,7 +114,7 @@ impl LoadedSoundResource {
     pub fn wrap(self) -> SoundResource {
         match self {
             NoLoadedSound => NoSound,
-            LoadedSound(chunk) => Sound(@chunk)
+            LoadedSound(chunk) => Sound(chunk)
         }
     }
 }
@@ -126,19 +126,19 @@ pub enum ImageResource {
     NoImage,
     /// A static image is associated. The surface may have a transparency which is already
     /// handled by `LoadedImageResource::new`.
-    Image(@PreparedSurface), // XXX borrowck
+    Image(PreparedSurface),
     /// A movie is associated. A playback starts when `start_movie` method is called, and stops
     /// when `stop_animating` is called. An associated surface is updated from the separate thread
     /// during the playback.
-    Movie(@PreparedSurface, @~mpeg::MPEG) // XXX borrowck
+    Movie(PreparedSurface, ~MPEG)
 }
 
 impl ImageResource {
     /// Returns an associated surface if any.
-    pub fn surface(&self) -> Option<@PreparedSurface> {
+    pub fn surface<'r>(&'r self) -> Option<&'r PreparedSurface> {
         match *self {
             NoImage => None,
-            Image(surface) | Movie(surface,_) => Some(surface)
+            Image(ref surface) | Movie(ref surface,_) => Some(surface)
         }
     }
 
@@ -146,7 +146,7 @@ impl ImageResource {
     pub fn stop_animating(&self) {
         match *self {
             NoImage | Image(_) => {}
-            Movie(_,mpeg) => { mpeg.stop(); }
+            Movie(_,ref mpeg) => { mpeg.stop(); }
         }
     }
 
@@ -155,7 +155,7 @@ impl ImageResource {
     pub fn start_animating(&self) {
         match *self {
             NoImage | Image(_) => {}
-            Movie(_,mpeg) => { mpeg.rewind(); mpeg.play(); }
+            Movie(_,ref mpeg) => { mpeg.rewind(); mpeg.play(); }
         }
     }
 }
@@ -165,7 +165,7 @@ impl ImageResource {
 pub enum LoadedImageResource {
     NoLoadedImage,
     LoadedImage(PreparedSurface),
-    LoadedMovie(PreparedSurface, ~mpeg::MPEG)
+    LoadedMovie(PreparedSurface, ~MPEG)
 }
 
 impl LoadedImageResource {
@@ -191,24 +191,25 @@ impl LoadedImageResource {
             }
         }
 
-        if path.filetype().unwrap_or_default().eq_ignore_ascii_case(".mpg") {
+        let ext = path.extension().and_then(str::from_utf8);
+        if ext.unwrap_or_default().eq_ignore_ascii_case(".mpg") {
             if load_movie {
-                let movie = earlyexit!(mpeg::MPEG::from_path(path));
+                let movie = earlyexit!(MPEG::from_path(path));
                 let surface = earlyexit!(PreparedSurface::new(BGAW, BGAH, false));
                 movie.enable_video(true);
                 movie.set_loop(true);
-                movie.set_display(*surface);
+                movie.set_display(surface.as_surface());
                 Ok(LoadedMovie(surface, movie))
             } else {
                 Ok(NoLoadedImage)
             }
         } else {
-            let surface = earlyexit!(img::load(path));
+            let surface = earlyexit!(sdl_image::load(path));
             let prepared = earlyexit!(to_display_format(surface));
 
             // PreparedSurface may destroy SDL_SRCALPHA, which is still required for alpha blitting.
             // for RGB images, it is effectively no-op as per-surface alpha is fully opaque.
-            prepared.set_alpha([video::SrcAlpha, video::RLEAccel], 255);
+            prepared.as_surface().set_alpha([video::SrcAlpha, video::RLEAccel], 255);
             Ok(LoadedImage(prepared))
         }
     }
@@ -217,8 +218,8 @@ impl LoadedImageResource {
     pub fn wrap(self) -> ImageResource {
         match self {
             NoLoadedImage => NoImage,
-            LoadedImage(surface) => Image(@surface),
-            LoadedMovie(surface, mpeg) => Movie(@surface, @mpeg)
+            LoadedImage(surface) => Image(surface),
+            LoadedMovie(surface, mpeg) => Movie(surface, mpeg)
         }
     }
 }

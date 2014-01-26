@@ -4,8 +4,11 @@
 
 //! Song and pattern selection screen.
 
-use std::{cmp, io, os, comm, task, util};
+use std::{str, cmp, io, os, comm, task, util};
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::rand::{rng, Rng};
+use std::comm::{SharedChan, Port};
 use extra::arc::RWArc;
 
 use sdl::{event, get_ticks};
@@ -42,7 +45,7 @@ pub struct PreprocessedBms {
 
 /// Loads and preprocesses the BMS file from given options. Frontend routines should use this.
 pub fn preprocess_bms<R:Rng,Listener:bms::diag::BmsMessageListener>(
-                                bmspath: &Path, f: @io::Reader, opts: @Options, r: &mut R,
+                                bmspath: &Path, f: &mut Reader, opts: &Options, r: &mut R,
                                 loaderopts: &bms::load::BmsLoaderOptions,
                                 callback: &mut Listener) -> Result<~PreprocessedBms,~str> {
     let bms = earlyexit!(bms::load::load_bms(f, r, loaderopts, callback));
@@ -105,11 +108,12 @@ impl PreloadedData {
                              {nnotes, plural, =1{# note} other{# notes}} \
                              [{nkeys}KEY{haslongnote}{difficulty}]",
                             duration_/600, duration_/10%60, duration_%10,
-                            level = preproc.bms.meta.playlevel, bpm = *preproc.bms.timeline.initbpm,
+                            level = preproc.bms.meta.playlevel,
+                            bpm = preproc.bms.timeline.initbpm.to_f64(),
                             hasbpmchange = if preproc.infos.hasbpmchange {"?"} else {""},
                             nnotes = preproc.infos.nnotes, nkeys = preproc.keyspec.nkeys(),
                             haslongnote = if preproc.infos.haslongnote {"-LN"} else {""},
-                            difficulty = difficultyname.map_default(~"", |name| ~" " + *name));
+                            difficulty = difficultyname.map_or(~"", |name| ~" " + name));
 
         PreloadedData { preproc: preproc, banner: None, duration: duration, messages: messages,
                         brief: brief }
@@ -123,7 +127,7 @@ enum PreloadingState {
     /// The selected entry should be preloaded after given timestamp (as per `sdl::get_ticks()`).
     PreloadAfter(uint),
     /// Preloading is in progress, the result of the worker task will be delivered with this port.
-    Preloading(comm::Port<task::TaskResult>),
+    Preloading(Port<task::TaskResult>),
     /// Preloading finished with a success.
     Preloaded(PreloadedData),
     /// Preloading finished with a failure. Error message is available.
@@ -133,9 +137,9 @@ enum PreloadingState {
 /// Song/pattern selection scene context. Used when the directory path is specified.
 pub struct SelectingScene {
     /// Display screen.
-    screen: @mut Screen,
+    screen: Rc<RefCell<Screen>>,
     /// Game play options.
-    opts: @Options,
+    opts: Rc<Options>,
     /// The root path of the scanner.
     root: Path,
     /// A list of paths to loaded files, and MD5 hashes of them if read.
@@ -149,9 +153,9 @@ pub struct SelectingScene {
     /// Preloaded game data or preloading state if any.
     preloaded: PreloadingState,
     /// A port for receiving worker messages.
-    port: comm::Port<Message>,
+    port: Port<Message>,
     /// A shared channel to which workers send messages.
-    chan: comm::SharedChan<Message>,
+    chan: SharedChan<Message>,
     /// A shared cell, set to false when the scene is deactivated.
     keepgoing: RWArc<bool>,
 }
@@ -159,7 +163,7 @@ pub struct SelectingScene {
 /// Returns true if the path should be parsed as a BMS file.
 fn is_bms_file(path: &Path) -> bool {
     use std::ascii::StrAsciiExt;
-    match path.filetype() {
+    match path.extension().and_then(str::from_utf8) {
         Some(ext) => match ext.to_ascii_lower() {
             ~".bms" | ~".bme" | ~".bml" | ~".pms" => true,
             _ => false
@@ -173,8 +177,7 @@ fn is_bms_file(path: &Path) -> bool {
 fn worker_task(name: ~str) -> task::TaskBuilder {
     let mut builder = task::task();
     builder.name(name);
-    builder.sched_mode(task::SingleThreaded); // XXX
-    builder.supervised();
+    builder.watched();
     builder
 }
 
@@ -196,10 +199,9 @@ static PRELOAD_DELAY: uint = 300;
 
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
-    pub fn new(screen: @mut Screen, root: &Path, opts: @Options) -> ~SelectingScene {
+    pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> ~SelectingScene {
         let root = os::make_absolute(root);
-        let (port, chan) = comm::stream();
-        let chan = comm::SharedChan::new(chan);
+        let (port, chan) = SharedChan::new();
         ~SelectingScene {
             screen: screen, opts: opts, root: root,
             files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
@@ -214,15 +216,16 @@ impl SelectingScene {
         let keepgoing = self.keepgoing.clone();
         do worker_task(~"scanner").spawn {
             fn recur(search: &mut SearchContext, root: Path,
-                     chan: &comm::SharedChan<Message>, keepgoing: &RWArc<bool>) -> bool {
+                     chan: &SharedChan<Message>, keepgoing: &RWArc<bool>) -> bool {
                 if !keepgoing.read(|v| *v) { return false; }
 
-                let (dirs, files) = search.get_entries(&root);
-                let files: ~[Path] =
-                    files.iter().map(|e| root.push(*e)).filter(is_bms_file).collect();
+                let (dirs, files) = {
+                    let (dirs, files) = search.get_entries(&root);
+                    (dirs.to_owned(), files.iter().map(|e| e.clone()).filter(is_bms_file).collect())
+                }; // so that we can reborrow `search`
                 chan.send(PushFiles(files));
-                for dir in dirs.iter() {
-                    if !recur(search, root.push(*dir), chan, keepgoing) { return false; }
+                for dir in dirs.move_iter() {
+                    if !recur(search, dir, chan, keepgoing) { return false; }
                 }
                 true
             }
@@ -237,11 +240,11 @@ impl SelectingScene {
     pub fn refresh(&mut self) {
         // terminates prior tasks
         assert!(self.keepgoing.read(|&v| v));
-        do self.keepgoing.write |v| { *v = false; }
+        self.keepgoing.write(|v| { *v = false; });
         self.keepgoing = RWArc::new(true);
-        let (port, chan) = comm::stream();
+        let (port, chan) = SharedChan::new();
         self.port = port;
-        self.chan = comm::SharedChan::new(chan);
+        self.chan = chan;
 
         self.files.clear();
         self.filesdone = false;
@@ -252,19 +255,18 @@ impl SelectingScene {
     }
 
     /// Spawns a new preloading task and returns the port for its result.
-    pub fn spawn_preloading_task(&self, path: &Path) -> comm::Port<task::TaskResult> {
+    pub fn spawn_preloading_task(&self, path: &Path) -> Port<task::TaskResult> {
         let bmspath = path.clone();
-        let opts = (*self.opts).clone();
+        let opts = self.opts.borrow().clone();
         let chan = self.chan.clone();
-        let mut future = None;
         let mut builder = worker_task(~"preloader");
-        do builder.future_result |f| { future = Some(f); }
-        do builder.spawn_with(opts) |opts| {
-            let opts = @opts;
+        let future = builder.future_result();
+        do builder.spawn {
+            let opts = Rc::new(opts);
 
             let load_banner = |bannerpath: ~str, basepath: Option<Path>| {
                 let mut search = SearchContext::new();
-                let basedir = basepath.clone().unwrap_or(Path("."));
+                let basedir = basepath.clone().unwrap_or(Path::new("."));
                 let fullpath = search.resolve_relative_path_for_image(bannerpath, &basedir);
                 let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
                 match res {
@@ -276,15 +278,16 @@ impl SelectingScene {
                 }
             };
 
-            let load_with_reader = |f| {
+            let load_with_reader = |mut f| {
                 let mut r = rng();
                 let mut diags = ~[];
                 let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
                     diags.push((line, msg));
                 };
 
-                let loaderopts = opts.loader_options();
-                match preprocess_bms(&bmspath, f, opts, &mut r, &loaderopts, &mut callback) {
+                let loaderopts = opts.borrow().loader_options();
+                match preprocess_bms(&bmspath, &mut f, opts.borrow(),
+                                     &mut r, &loaderopts, &mut callback) {
                     Ok(preproc) => {
                         let banner = preproc.bms.meta.banner.clone();
                         let basepath = preproc.bms.meta.basepath.clone();
@@ -299,23 +302,21 @@ impl SelectingScene {
                 }
             };
 
-            match io::file_reader(&bmspath) {
-                Ok(f) => {
-                    let buf = f.read_whole_stream();
+            match io::File::open(&bmspath) {
+                Some(mut f) => {
+                    let buf = f.read_to_end();
                     let hash = MD5::from_buffer(buf).final();
                     chan.send(BmsHashRead(bmspath.clone(), hash));
 
                     // since we have read the file we don't want the parser to read it again.
-                    do io::with_bytes_reader(buf) |f| {
-                        load_with_reader(f);
-                    }
+                    load_with_reader(io::MemReader::new(buf));
                 }
-                Err(err) => {
-                    chan.send(BmsFailed(bmspath.clone(), err));
+                None => {
+                    chan.send(BmsFailed(bmspath.clone(), ~"File::open failed"));
                 }
             }
         }
-        future.unwrap()
+        future
     }
 
     /// Returns a `Path` to the currently selected entry if any.
@@ -361,14 +362,15 @@ impl SelectingScene {
                         Some(path) => path,
                         None => { return None; }
                     };
-                    let f = match io::file_reader(path) {
-                        Ok(f) => f,
-                        Err(err) => { warn!("{}", err); return None; }
+                    let mut f = match io::File::open(path) {
+                        Some(f) => f,
+                        None => { warn!("Failed to open {}.", path.display()); return None; }
                     };
                     let mut r = rng();
                     let mut callback = |line, msg| print_diag(line, msg);
-                    let ret = preprocess_bms(path, f, self.opts, &mut r,
-                                             &self.opts.loader_options(), &mut callback);
+                    let opts = self.opts.borrow();
+                    let ret = preprocess_bms(path, &mut f as &mut Reader, opts, &mut r,
+                                             &opts.loader_options(), &mut callback);
                     match ret {
                         Ok(preproc) => *preproc,
                         Err(err) => { warn!("{}", err); return None; }
@@ -379,13 +381,14 @@ impl SelectingScene {
             Ok(map) => ~map,
             Err(err) => die!("{}", err)
         };
-        Some(LoadingScene::new(self.screen, bms, infos, keyspec, keymap, self.opts) as ~Scene:)
+        Some(LoadingScene::new(self.screen.clone(), bms, infos,
+                               keyspec, keymap, self.opts.clone()) as ~Scene:)
     }
 }
 
 impl Scene for SelectingScene {
     fn activate(&mut self) -> SceneCommand {
-        do self.keepgoing.write |v| { *v = true; }
+        self.keepgoing.write(|v| { *v = true; });
         if !self.filesdone { self.refresh(); }
         event::enable_key_repeat(event::DefaultRepeatDelay, event::DefaultRepeatInterval);
         Continue
@@ -455,9 +458,13 @@ impl Scene for SelectingScene {
             }
         }
 
-        while self.port.peek() {
-            match self.port.recv() {
-                PushFiles(paths) => {
+        let disconnected;
+        loop {
+            match self.port.try_recv() {
+                comm::Empty => { disconnected = false; break; }
+                comm::Disconnected => { disconnected = true; break; }
+
+                comm::Data(PushFiles(paths)) => {
                     if self.files.is_empty() { // immediately preloads the first entry
                         self.preloaded = PreloadAfter(0);
                     }
@@ -465,24 +472,24 @@ impl Scene for SelectingScene {
                         self.files.push((path, None));
                     }
                 }
-                NoMoreFiles => {
+                comm::Data(NoMoreFiles) => {
                     self.filesdone = true;
                 }
-                BmsFailed(bmspath,err) => {
-                    if !self.is_current(&bmspath) { loop; }
+                comm::Data(BmsFailed(bmspath,err)) => {
+                    if !self.is_current(&bmspath) { continue; }
                     self.preloaded = PreloadFailed(err);
                 }
-                BmsHashRead(bmspath,hash) => {
-                    if !self.is_current(&bmspath) { loop; }
+                comm::Data(BmsHashRead(bmspath,hash)) => {
+                    if !self.is_current(&bmspath) { continue; }
                     let (_, ref mut hash0) = self.files[self.offset];
                     *hash0 = Some(hash);
                 }
-                BmsLoaded(bmspath,preproc,messages) => {
-                    if !self.is_current(&bmspath) { loop; }
+                comm::Data(BmsLoaded(bmspath,preproc,messages)) => {
+                    if !self.is_current(&bmspath) { continue; }
                     self.preloaded = Preloaded(PreloadedData::new(preproc, messages));
                 }
-                BmsBannerLoaded(bmspath,imgpath,prepared) => {
-                    if !self.is_current(&bmspath) { loop; }
+                comm::Data(BmsBannerLoaded(bmspath,imgpath,prepared)) => {
+                    if !self.is_current(&bmspath) { continue; }
                     match self.preloaded {
                         Preloaded(ref mut data) if data.banner.is_none() => {
                             let prepared = prepared.unwrap();
@@ -507,7 +514,7 @@ impl Scene for SelectingScene {
                         None => Some(NothingToPreload), // XXX wait what happened?!
                     }
                 },
-                Preloading(ref port) if port.peek() && port.recv() == task::Failure => {
+                Preloading(..) if disconnected => {
                     // port.recv() may also return `task::Success` when the message is sent
                     // but being delayed. in this case we can safely ignore it.
                     Some(PreloadFailed(~"unexpected failure"))
@@ -523,7 +530,11 @@ impl Scene for SelectingScene {
     }
 
     fn render(&self) {
-        self.screen.clear();
+        let screen__ = self.screen.borrow();
+        let mut screen_ = screen__.borrow_mut();
+        let screen = screen_.get();
+
+        screen.clear();
 
         static META_TOP: f32 = NUMENTRIES as f32 * 20.0;
 
@@ -538,34 +549,33 @@ impl Scene for SelectingScene {
                 let x1 = SCREENW as f32 - 302.0; let y1 = META_TOP + 24.0;
                 let x2 = SCREENW as f32 - 2.0;   let y2 = META_TOP + 104.0;
                 if data.banner.is_some() {
-                    do self.screen.draw_textured(data.banner.get_ref()) |d| {
+                    screen.draw_textured(data.banner.get_ref(), |d| {
                         d.rect(x1, y1, x2, y2);
-                    }
+                    });
                 } else {
-                    do self.screen.draw_shaded_prim(gl::LINES) |d| {
+                    screen.draw_shaded_prim(gl::LINES, |d| {
                         d.line(x1, y1, x1, y2, WHITE); d.line(x1, y1, x2, y1, WHITE);
                         d.line(x1, y1, x2, y2, WHITE); d.line(x1, y2, x2, y1, WHITE);
                         d.line(x1, y2, x2, y2, WHITE); d.line(x2, y1, x2, y2, WHITE);
-                    }
+                    });
                 }
             }
             _ => {}
         }
 
-        let root = self.root.push("_"); // for the calculation of `Path::get_relative_to`
-        do self.screen.draw_shaded_with_font |d| {
+        screen.draw_shaded_with_font(|d| {
             let top = cmp::min(self.scrolloffset, self.files.len());
             let bottom = cmp::min(self.scrolloffset + NUMENTRIES, self.files.len());
             let windowedfiles = self.files.slice(top, bottom);
 
             let mut y = 0.0;
             for (i, &(ref path, ref hash)) in windowedfiles.iter().enumerate() {
-                let path = root.get_relative_to(&path.push("_"));
+                let path = self.root.path_relative_from(path).unwrap_or_else(|| path.clone());
                 if self.scrolloffset + i == self.offset { // inverted
                     d.rect(10.0, y, SCREENW as f32, y + 20.0, WHITE);
-                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.to_str(), BLACK);
+                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.display().to_str(), BLACK);
                 } else {
-                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.to_str(), WHITE);
+                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.display().to_str(), WHITE);
                 }
                 for hash in hash.iter() {
                     d.string(SCREENW as f32 - 4.0, y + 2.0, 1.0, RightAligned, hash.to_hex(), GRAY);
@@ -579,8 +589,8 @@ impl Scene for SelectingScene {
 
             // preloaded data if any
             match self.preloaded {
-                NothingToPreload | PreloadAfter(*) => {}
-                Preloading(*) => {
+                NothingToPreload | PreloadAfter(..) => {}
+                Preloading(..) => {
                     d.string(4.0, META_TOP + 4.0, 1.0, LeftAligned,
                              "loading...", LIGHTGRAY);
                 }
@@ -588,10 +598,10 @@ impl Scene for SelectingScene {
                     let meta = &data.preproc.bms.meta;
 
                     let mut top = META_TOP + 4.0;
-                    let genre = meta.genre.map_default("", |s| s.as_slice());
+                    let genre = meta.genre.as_ref().map_or("", |s| s.as_slice());
                     d.string(4.0, top, 1.0, LeftAligned, genre, LIGHTGRAY);
                     top += 18.0;
-                    let title = meta.title.map_default("", |s| s.as_slice());
+                    let title = meta.title.as_ref().map_or("", |s| s.as_slice());
                     if !title.is_empty() {
                         d.string(6.0, top + 2.0, 2.0, LeftAligned, title, GRAY);
                         d.string(4.0, top, 2.0, LeftAligned, title, WHITE);
@@ -600,23 +610,23 @@ impl Scene for SelectingScene {
                     }
                     top += 36.0;
                     for subtitle in meta.subtitles.iter() {
-                        if subtitle.is_empty() { loop; }
+                        if subtitle.is_empty() { continue; }
                         d.string(21.0, top + 1.0, 1.0, LeftAligned, *subtitle, GRAY);
                         d.string(20.0, top, 1.0, LeftAligned, *subtitle, WHITE);
                         top += 18.0;
                     }
-                    let artist = meta.artist.map_default("", |s| s.as_slice());
+                    let artist = meta.artist.as_ref().map_or("", |s| s.as_slice());
                     if !artist.is_empty() {
                         d.string(4.0, top, 1.0, LeftAligned, artist, WHITE);
                         top += 18.0;
                     }
                     for subartist in meta.subartists.iter() {
-                        if subartist.is_empty() { loop; }
+                        if subartist.is_empty() { continue; }
                         d.string(20.0, top, 1.0, LeftAligned, *subartist, WHITE);
                         top += 18.0;
                     }
                     for comment in meta.comments.iter() {
-                        if comment.is_empty() { loop; }
+                        if comment.is_empty() { continue; }
                         d.string(4.0, top, 1.0, LeftAligned,
                                  format!("> {}", *comment), RGB(0x80,0xff,0x80));
                         top += 18.0;
@@ -634,7 +644,7 @@ impl Scene for SelectingScene {
                             bms::diag::Fatal => RGB(0xff,0x40,0x40),
                             bms::diag::Warning => RGB(0xff,0xff,0x40),
                             bms::diag::Note => RGB(0x40,0xff,0xff),
-                            bms::diag::Internal => loop, // impossible
+                            bms::diag::Internal => unreachable!(),
                         };
                         d.string(4.0, top, 1.0, LeftAligned, text, color);
                         top += 18.0;
@@ -663,16 +673,16 @@ impl Scene for SelectingScene {
             d.string(2.0, SCREENH as f32 - 18.0, 1.0, LeftAligned,
                      format!("Up/Down/PgUp/PgDn/Home/End: Select   \
                               Enter: {}   F5: Refresh   Esc: Quit",
-                             if self.opts.is_autoplay() {"Autoplay"} else {"Play"}),
+                             if self.opts.borrow().is_autoplay() {"Autoplay"} else {"Play"}),
                      RGB(0,0,0));
-        }
+        });
 
-        self.screen.swap_buffers();
+        screen.swap_buffers();
     }
 
     fn deactivate(&mut self) {
         event::enable_key_repeat(event::CustomRepeatDelay(0), event::DefaultRepeatInterval);
-        do self.keepgoing.write |v| { *v = false; }
+        self.keepgoing.write(|v| { *v = false; });
     }
 
     fn consume(~self) -> ~Scene: { fail!("unreachable"); }

@@ -158,7 +158,7 @@ impl BmsMessage {
             BmsHasENDNotFollowedByIF =>
                 (Note, "#END not followed by IF will be interpreted as #ENDIF."),
 
-            BmsUsesEncoding(*) => (Internal, ""),
+            BmsUsesEncoding(..) => (Internal, ""),
         }
     }
 
@@ -183,13 +183,13 @@ pub trait BmsMessageListener {
     fn on_message(&mut self, line: Option<uint>, message: BmsMessage) -> bool;
 }
 
-impl<'self> BmsMessageListener for &'self fn(Option<uint>,BmsMessage) -> bool {
+impl<'r> BmsMessageListener for 'r |Option<uint>,BmsMessage| -> bool {
     fn on_message(&mut self, line: Option<uint>, msg: BmsMessage) -> bool {
         (*self)(line, msg)
     }
 }
 
-impl<'self> BmsMessageListener for &'self fn(Option<uint>,BmsMessage) {
+impl<'r> BmsMessageListener for 'r |Option<uint>,BmsMessage| {
     fn on_message(&mut self, line: Option<uint>, msg: BmsMessage) -> bool {
         (*self)(line, msg); true
     }
