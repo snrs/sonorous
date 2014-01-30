@@ -4,9 +4,6 @@
 
 //! Initialization.
 
-use std::rc::Rc;
-use std::cell::RefCell;
-
 use sdl::*;
 use sdl_image;
 use sdl_mixer;
@@ -21,7 +18,7 @@ pub static SCREENH: uint = 600;
 /// Initializes SDL video subsystem, and creates a small screen for BGAs (`BGAW` by `BGAH` pixels)
 /// if `exclusive` is set, or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise.
 /// `fullscreen` is ignored when `exclusive` is set.
-pub fn init_video(exclusive: bool, fullscreen: bool) -> Rc<RefCell<Screen>> {
+pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
     if !init([InitVideo]) {
         die!("SDL Initialization Failure: {}", get_error());
     }
@@ -41,7 +38,7 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> Rc<RefCell<Screen>> {
     }
 
     wm::set_caption(::version(), "");
-    Rc::new(RefCell::new(screen))
+    screen
 }
 
 /// Initializes SDL audio subsystem and SDL_mixer.

@@ -49,11 +49,11 @@ pub type u32plus = u32;
 
 /// Internal MD5 state that processes the raw data block (64 bytes long).
 struct MD5State {
-    priv a: u32plus,
-    priv b: u32plus,
-    priv c: u32plus,
-    priv d: u32plus,
-    priv block: [u32plus, ..16],
+    a: u32plus,
+    b: u32plus,
+    c: u32plus,
+    d: u32plus,
+    block: [u32plus, ..16],
 }
 
 impl MD5State {
@@ -430,9 +430,9 @@ mod tests {
         assert!(buf.len() == 0x400);
 
         let mut md5 = MD5::new();
-        do harness.iter() {
+        harness.iter(|| {
             md5.update(buf);
-        }
+        });
     }
 
     #[bench]
@@ -443,10 +443,10 @@ mod tests {
         }
         assert!(buf.len() == 0x400);
 
-        do harness.iter() {
+        harness.iter(|| {
             let mut md5 = MD5::new();
             md5.update(buf);
             md5.final();
-        }
+        });
     }
 }

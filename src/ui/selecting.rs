@@ -126,8 +126,8 @@ enum PreloadingState {
     NothingToPreload,
     /// The selected entry should be preloaded after given timestamp (as per `sdl::get_ticks()`).
     PreloadAfter(uint),
-    /// Preloading is in progress, the result of the worker task will be delivered with this port.
-    Preloading(Port<task::TaskResult>),
+    /// Preloading is in progress.
+    Preloading,
     /// Preloading finished with a success.
     Preloaded(PreloadedData),
     /// Preloading finished with a failure. Error message is available.
@@ -165,20 +165,27 @@ fn is_bms_file(path: &Path) -> bool {
     use std::ascii::StrAsciiExt;
     match path.extension().and_then(str::from_utf8) {
         Some(ext) => match ext.to_ascii_lower() {
-            ~".bms" | ~".bme" | ~".bml" | ~".pms" => true,
+            ~"bms" | ~"bme" | ~"bml" | ~"pms" => true,
             _ => false
         },
         _ => false
     }
 }
 
-/// Returns a task builder for worker tasks. It seems that the SDL event loop does not go well with
-/// libuv loop, so we need to run workers in separate threads for now.
-fn worker_task(name: ~str) -> task::TaskBuilder {
+/// Spawns an worker task. We are required to use `libnative` due to the SDL event loop.
+/// Also we need to use our own wrapper to avoid "sending on a closed channel" error from
+/// the default `future_result` wrapper.
+fn spawn_worker_task(name: ~str, body: proc(), on_error: proc()) {
     let mut builder = task::task();
-    builder.name(name);
+    builder.name(name + " wrapper");
     builder.watched();
-    builder
+    builder.spawn(proc() {
+        let mut builder = task::task();
+        builder.name(name);
+        builder.watched();
+        let ret = builder.try(body);
+        if ret.is_err() { on_error(); }
+    });
 }
 
 /// Prints a diagnostic message to the screen.
@@ -213,8 +220,9 @@ impl SelectingScene {
     pub fn spawn_scanning_task(&self) {
         let root = self.root.clone();
         let chan = self.chan.clone();
+        let chan_ = self.chan.clone();
         let keepgoing = self.keepgoing.clone();
-        do worker_task(~"scanner").spawn {
+        spawn_worker_task(~"scanner", proc() {
             fn recur(search: &mut SearchContext, root: Path,
                      chan: &SharedChan<Message>, keepgoing: &RWArc<bool>) -> bool {
                 if !keepgoing.read(|v| *v) { return false; }
@@ -223,7 +231,7 @@ impl SelectingScene {
                     let (dirs, files) = search.get_entries(&root);
                     (dirs.to_owned(), files.iter().map(|e| e.clone()).filter(is_bms_file).collect())
                 }; // so that we can reborrow `search`
-                chan.send(PushFiles(files));
+                chan.try_send(PushFiles(files));
                 for dir in dirs.move_iter() {
                     if !recur(search, dir, chan, keepgoing) { return false; }
                 }
@@ -231,9 +239,11 @@ impl SelectingScene {
             }
             let mut search = SearchContext::new();
             if recur(&mut search, root.clone(), &chan, &keepgoing) {
-                chan.send(NoMoreFiles);
+                chan.try_send(NoMoreFiles);
             }
-        }
+        }, proc() {
+            chan_.try_send(NoMoreFiles);
+        });
     }
 
     /// Clears the current scanned files and restarts the scanning task.
@@ -254,14 +264,14 @@ impl SelectingScene {
         self.spawn_scanning_task();
     }
 
-    /// Spawns a new preloading task and returns the port for its result.
-    pub fn spawn_preloading_task(&self, path: &Path) -> Port<task::TaskResult> {
+    /// Spawns a new preloading task.
+    pub fn spawn_preloading_task(&self, path: &Path) {
         let bmspath = path.clone();
+        let bmspath_ = path.clone();
         let opts = self.opts.borrow().clone();
         let chan = self.chan.clone();
-        let mut builder = worker_task(~"preloader");
-        let future = builder.future_result();
-        do builder.spawn {
+        let chan_ = self.chan.clone();
+        spawn_worker_task(~"preloader", proc() {
             let opts = Rc::new(opts);
 
             let load_banner = |bannerpath: ~str, basepath: Option<Path>| {
@@ -271,8 +281,8 @@ impl SelectingScene {
                 let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
                 match res {
                     Ok(LoadedImage(surface)) => {
-                        chan.send(BmsBannerLoaded(bmspath.clone(), bannerpath,
-                                                  Envelope::new(surface)));
+                        chan.try_send(BmsBannerLoaded(bmspath.clone(), bannerpath,
+                                                      Envelope::new(surface)));
                     }
                     _ => {}
                 }
@@ -291,13 +301,13 @@ impl SelectingScene {
                     Ok(preproc) => {
                         let banner = preproc.bms.meta.banner.clone();
                         let basepath = preproc.bms.meta.basepath.clone();
-                        chan.send(BmsLoaded(bmspath.clone(), preproc, diags));
+                        chan.try_send(BmsLoaded(bmspath.clone(), preproc, diags));
                         if banner.is_some() {
                             load_banner(banner.unwrap(), basepath);
                         }
                     }
                     Err(err) => {
-                        chan.send(BmsFailed(bmspath.clone(), err));
+                        chan.try_send(BmsFailed(bmspath.clone(), err));
                     }
                 }
             };
@@ -306,17 +316,19 @@ impl SelectingScene {
                 Some(mut f) => {
                     let buf = f.read_to_end();
                     let hash = MD5::from_buffer(buf).final();
-                    chan.send(BmsHashRead(bmspath.clone(), hash));
+                    chan.try_send(BmsHashRead(bmspath.clone(), hash));
 
                     // since we have read the file we don't want the parser to read it again.
                     load_with_reader(io::MemReader::new(buf));
                 }
                 None => {
-                    chan.send(BmsFailed(bmspath.clone(), ~"File::open failed"));
+                    chan.try_send(BmsFailed(bmspath.clone(), ~"File::open failed"));
                 }
             }
-        }
-        future
+        }, proc() {
+            // the task failed to send the error message, so the wrapper sends it instead
+            chan_.try_send(BmsFailed(bmspath_, ~"unexpected error"));
+        });
     }
 
     /// Returns a `Path` to the currently selected entry if any.
@@ -458,11 +470,9 @@ impl Scene for SelectingScene {
             }
         }
 
-        let disconnected;
         loop {
             match self.port.try_recv() {
-                comm::Empty => { disconnected = false; break; }
-                comm::Disconnected => { disconnected = true; break; }
+                comm::Empty | comm::Disconnected => { break; }
 
                 comm::Data(PushFiles(paths)) => {
                     if self.files.is_empty() { // immediately preloads the first entry
@@ -506,23 +516,15 @@ impl Scene for SelectingScene {
         }
 
         if self.offset < self.files.len() {
-            let newpreloaded = match self.preloaded {
+            match self.preloaded {
                 PreloadAfter(timeout) if timeout < get_ticks() => {
                     // preload the current entry after some delay
-                    match self.current() {
-                        Some(path) => Some(Preloading(self.spawn_preloading_task(path))),
-                        None => Some(NothingToPreload), // XXX wait what happened?!
-                    }
-                },
-                Preloading(..) if disconnected => {
-                    // port.recv() may also return `task::Success` when the message is sent
-                    // but being delayed. in this case we can safely ignore it.
-                    Some(PreloadFailed(~"unexpected failure"))
-                },
-                _ => None,
-            };
-            if newpreloaded.is_some() {
-                self.preloaded = newpreloaded.unwrap();
+                    self.preloaded = match self.current() {
+                        Some(path) => { self.spawn_preloading_task(path); Preloading },
+                        None => NothingToPreload, // XXX wait what happened?!
+                    };
+                }
+                _ => {}
             }
         }
 
@@ -570,7 +572,7 @@ impl Scene for SelectingScene {
 
             let mut y = 0.0;
             for (i, &(ref path, ref hash)) in windowedfiles.iter().enumerate() {
-                let path = self.root.path_relative_from(path).unwrap_or_else(|| path.clone());
+                let path = path.path_relative_from(&self.root).unwrap_or_else(|| path.clone());
                 if self.scrolloffset + i == self.offset { // inverted
                     d.rect(10.0, y, SCREENW as f32, y + 20.0, WHITE);
                     d.string(12.0, y + 2.0, 1.0, LeftAligned, path.display().to_str(), BLACK);

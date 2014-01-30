@@ -91,7 +91,7 @@ impl GLState {
 
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
     pub fn swap_buffers(&self) {
-        egl::swap_buffers(self.egl_display, self.egl_surface);
+        let _ = egl::swap_buffers(self.egl_display, self.egl_surface);
     }
 }
 

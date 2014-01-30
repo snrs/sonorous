@@ -249,7 +249,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
         if leftkeys.is_none() && rightkeys.is_none() {
             let ext = bms.bmspath.as_ref().and_then(|p| p.extension())
                                           .and_then(str::from_utf8).map(|e| e.to_ascii_lower());
-            let preset = if preset.is_none() && ext == Some(~".pms") {Some(~"pms")} else {preset};
+            let preset = if preset.is_none() && ext == Some(~"pms") {Some(~"pms")} else {preset};
             match preset_to_key_spec(bms, preset.clone()) {
                 Some(leftright) => leftright,
                 None => {

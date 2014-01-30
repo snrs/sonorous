@@ -192,7 +192,7 @@ impl LoadedImageResource {
         }
 
         let ext = path.extension().and_then(str::from_utf8);
-        if ext.unwrap_or_default().eq_ignore_ascii_case(".mpg") {
+        if ext.unwrap_or_default().eq_ignore_ascii_case("mpg") {
             if load_movie {
                 let movie = earlyexit!(MPEG::from_path(path));
                 let surface = earlyexit!(PreparedSurface::new(BGAW, BGAH, false));

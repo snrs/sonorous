@@ -16,9 +16,6 @@
  *
  * # Notes
  *
- * - This code is known to compile with the following combinations of rustc and rust-sdl:
- *     - rustc 0.8 + rust-sdl `5598e68` 2013-10-03
- *
  * - There are several comments with Rust issue numbers like #1234. They are intended to be fixed
  *   after corresponding issues are resolved. The following issues are common enough that we put
  *   the explanation here:
@@ -31,12 +28,14 @@
 #[crate_id = "https://github.com/snrs/sonorous/#sonorous:0.1.0"];
 #[crate_type = "bin"];
 
+#[no_uv];
 #[feature(macro_rules, globs)];
 
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
 
 extern mod extra;
+extern mod native;
 
 extern mod sdl;
 extern mod sdl_image;
@@ -61,6 +60,7 @@ extern mod sqlite3;
     pub mod console;
     pub mod md5;
 }
+
 pub mod ext {
     //! Bindings to external libraries or APIs.
     pub mod sdl;
@@ -68,6 +68,7 @@ pub mod ext {
     pub mod smpeg;
     pub mod win32;
 }
+
 pub mod gfx {
     //! Various graphics routines.
     pub mod color;
@@ -77,6 +78,7 @@ pub mod gfx {
     pub mod bmfont;
     pub mod screen;
 }
+
 pub mod format {
     //! Data structures and operations for formats used by music video games.
     pub mod obj;
@@ -84,6 +86,7 @@ pub mod format {
     pub mod pointer;
     #[path="bms/mod.rs"] pub mod bms;
 }
+
 pub mod engine {
     //! Shared game engine modules.
     pub mod keyspec;
@@ -92,6 +95,7 @@ pub mod engine {
     pub mod skin;
     pub mod player;
 }
+
 #[macro_escape] pub mod ui {
     //! User interface. Most user interaction is implemented via the `Scene` interface.
     pub mod common;
@@ -147,6 +151,7 @@ pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
 pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
     use std::{rand, io};
     use std::rc::Rc;
+    use std::cell::RefCell;
 
     use ui::init::{init_audio, init_video, init_joystick};
     use ui::scene::{Scene, run_scene};
@@ -163,7 +168,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
 
         init_audio();
         for &joyidx in opts.joystick.iter() { init_joystick(joyidx); }
-        let screen = init_video(false, opts.fullscreen);
+        let screen = Rc::new(RefCell::new(init_video(false, opts.fullscreen)));
         scene = SelectingScene::new(screen, bmspath, wrap_opts(opts)) as ~Scene:
     } else {
         let mut callback = |line, msg| print_diag(line, msg);
@@ -199,7 +204,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         let screen;
         let keymap;
         if opts.has_screen() {
-            screen = Some(init_video(opts.is_exclusive(), opts.fullscreen));
+            screen = Some(Rc::new(RefCell::new(init_video(opts.is_exclusive(), opts.fullscreen))));
             // this requires a video subsystem.
             keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
                 Ok(map) => ~map,
@@ -305,6 +310,11 @@ The list of available subprograms:
 pub fn subprogram(_args: &[~str]) -> ! {
     std::io::stderr().write_str("Subprograms are not supported in this build.\n");
     ui::common::exit(1);
+}
+
+#[start]
+fn start(argc: int, argv: **u8) -> int {
+    native::start(argc, argv, main)
 }
 
 /// The entry point. Parses the command line options and delegates other things to `play`.
