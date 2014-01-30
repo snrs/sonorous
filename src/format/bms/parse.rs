@@ -376,15 +376,15 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                 })
             );
             ($prefix:tt -> $constr:expr) => (
-                if_prefix!($prefix |_key, _line| {
+                if upperline.starts_with(tt_to_expr!($prefix)) { // avoids an unreachable code
                     emit!($constr);
-                })
+                }
             );
             ($prefix:tt -> $constr:expr; $diag:expr) => (
-                if_prefix!($prefix |_key, _line| {
+                if upperline.starts_with(tt_to_expr!($prefix)) { // avoids an unreachable code
                     diag!($diag at lineno);
                     emit!($constr);
-                })
+                }
             );
             ($prefix:tt |$v:ident| $then:expr) => ({ // #<command>...
                 let prefix: &'static str = tt_to_expr!($prefix);
