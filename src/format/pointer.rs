@@ -440,8 +440,8 @@ impl<S,I> Pointer<S,I> {
     /// The proximity is measured in terms of given axis.
     pub fn find_closest_of_type(&self, axis: ObjAxis,
                                 cond: |&Obj<S,I>| -> bool) -> Option<Pointer<S,I>> {
-        let prev = self.find_previous_of_type(|obj| cond(obj)); // XXX #7363
-        let next = self.find_next_of_type(|obj| cond(obj)); // XXX #7363
+        let prev = self.find_previous_of_type(|obj| cond(obj));
+        let next = self.find_next_of_type(|obj| cond(obj));
         match (prev, next) {
             (None, None) => None,
             (None, Some(next)) => Some(next),

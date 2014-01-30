@@ -154,8 +154,7 @@ pub mod builder {
                 while j < len {
                     let obj = &mut objs[j];
                     if obj.vpos > vpos { break; }
-                    let ty = to_type(&obj.data); // XXX #3511
-                    for &t in ty.iter() {
+                    for &t in to_type(&obj.data).iter() {
                         if (types & (1 << t)) != 0 {
                             // duplicate type
                             obj.data = obj.data.to_effect();
@@ -170,8 +169,7 @@ pub mod builder {
 
                 while i < j {
                     let obj = &mut objs[i];
-                    let ty = to_type(&obj.data); // XXX #3511
-                    for &t in ty.iter() {
+                    for &t in to_type(&obj.data).iter() {
                         if (types & (1 << t)) == 0 {
                             obj.data = obj.data.to_effect();
                         }
@@ -202,7 +200,7 @@ pub mod builder {
             };
 
             let mut inside = false;
-            sanitize(objs, |obj| to_type(obj), |mut types| { // XXX #7363
+            sanitize(objs, |obj| to_type(obj), |mut types| {
                 static LNMASK: uint = (1 << LNSTART) | (1 << LNDONE);
 
                 // remove overlapping LN endpoints altogether
@@ -442,8 +440,7 @@ pub mod modf {
     /// Swaps given lanes in the reverse order.
     pub fn mirror<S:Clone,I:Clone>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
         let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
-        let mut assocs = lanes.iter().zip(lanes.rev_iter()); // XXX #3511
-        for (&Lane(from), &to) in assocs {
+        for (&Lane(from), &to) in lanes.iter().zip(lanes.rev_iter()) {
             map[from] = to;
         }
 
@@ -456,8 +453,7 @@ pub mod modf {
     pub fn shuffle<S:Clone,I:Clone,R:Rng>(timeline: &mut Timeline<S,I>, r: &mut R, lanes: &[Lane]) {
         let shuffled = r.shuffle(lanes.to_owned());
         let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
-        let mut assocs = lanes.iter().zip(shuffled.iter()); // XXX #3511
-        for (&Lane(from), &to) in assocs {
+        for (&Lane(from), &to) in lanes.iter().zip(shuffled.iter()) {
             map[from] = to;
         }
 
@@ -486,8 +482,7 @@ pub mod modf {
             if lasttime < obj.loc.time { // reshuffle required
                 lasttime = obj.loc.time; // XXX should we use this restriction on very quick notes?
                 let shuffled = r.shuffle(movable.clone());
-                let mut assocs = movable.iter().zip(shuffled.iter()); // XXX #3511
-                for (&Lane(from), &to) in assocs {
+                for (&Lane(from), &to) in movable.iter().zip(shuffled.iter()) {
                     map[from] = to;
                 }
             }

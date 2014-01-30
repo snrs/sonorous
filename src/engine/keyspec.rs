@@ -209,8 +209,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
 
     let mut present = [false, ..NLANES];
     for obj in bms.timeline.objs.iter() {
-        let lane = obj.object_lane(); // XXX #3511
-        for &Lane(lane) in lane.iter() {
+        for &Lane(lane) in obj.object_lane().iter() {
             present[lane] = true;
         }
     }

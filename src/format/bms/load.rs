@@ -308,8 +308,7 @@ fn load_bms_<R:Rng>(f: &mut Reader, r: &mut R, opts: &BmsLoaderOptions,
 
             // channel #03: BPM as an hexadecimal key
             Key(3) => {
-                let v = v.to_hex(); // XXX #3511
-                for &v in v.iter() {
+                for &v in v.to_hex().iter() {
                     builder.add(t, SetBPM(BPM(v as f64)))
                 }
             }

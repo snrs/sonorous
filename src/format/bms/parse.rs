@@ -376,16 +376,15 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                 })
             );
             ($prefix:tt -> $constr:expr) => (
-                // Rust: unreachable code sometimes causes an ICE. (#7344)
-                if upperline.starts_with(tt_to_expr!($prefix)) {
+                if_prefix!($prefix |_key, _line| {
                     emit!($constr);
-                }
+                })
             );
             ($prefix:tt -> $constr:expr; $diag:expr) => (
-                if upperline.starts_with(tt_to_expr!($prefix)) {
+                if_prefix!($prefix |_key, _line| {
                     diag!($diag at lineno);
                     emit!($constr);
-                }
+                })
             );
             ($prefix:tt |$v:ident| $then:expr) => ({ // #<command>...
                 let prefix: &'static str = tt_to_expr!($prefix);

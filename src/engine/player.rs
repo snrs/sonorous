@@ -497,8 +497,7 @@ impl Player {
                 if dist < BAD_CUTOFF { break; }
 
                 if !self.nograding[p.index] {
-                    let lane = p.object_lane(); // XXX #3511
-                    for &Lane(lane) in lane.iter() {
+                    for &Lane(lane) in p.object_lane().iter() {
                         let missable =
                             match p.data() {
                                 Visible(..) | LNStart(..) => true,
@@ -600,8 +599,7 @@ impl Player {
                         obj.object_lane() == Some(lane) && obj.is_soundable()
                     });
                 for p in soundable.iter() {
-                    let sounds = p.sounds(); // XXX #3511
-                    for &sref in sounds.iter() {
+                    for &sref in p.sounds().iter() {
                         self.play_sound(sref, false);
                     }
                 }
@@ -627,16 +625,14 @@ impl Player {
             match (vkey, state) {
                 (SpeedDownInput, Positive) | (SpeedDownInput, Negative) => {
                     let current = self.targetspeed.unwrap_or(self.playspeed);
-                    let newspeed = next_speed_mark(current); // XXX #3511
-                    for &newspeed in newspeed.iter() {
+                    for &newspeed in next_speed_mark(current).iter() {
                         self.targetspeed = Some(newspeed);
                         self.play_beep();
                     }
                 }
                 (SpeedUpInput, Positive) | (SpeedUpInput, Negative) => {
                     let current = self.targetspeed.unwrap_or(self.playspeed);
-                    let newspeed = previous_speed_mark(current); // XXX #3511
-                    for &newspeed in newspeed.iter() {
+                    for &newspeed in previous_speed_mark(current).iter() {
                         self.targetspeed = Some(newspeed);
                         self.play_beep();
                     }

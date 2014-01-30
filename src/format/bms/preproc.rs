@@ -164,8 +164,7 @@ impl<'r,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'r,T,R,List
                 last.state = if last.state == Ignore {Process} else {NoFurther};
             }
             BmsEndIf => {
-                let lastinside = self.blocks.iter().rposition(|&i| i.state != Outside); // XXX #3511
-                for &idx in lastinside.iter() {
+                for &idx in self.blocks.iter().rposition(|&i| i.state != Outside).iter() {
                     if idx > 0 { self.blocks.truncate(idx + 1); }
                 }
 

@@ -113,8 +113,7 @@ pub fn get_path_from_dialog() -> Option<Path> {
             if ret != 0 {
                 let path: &[u16] = match buf.position_elem(&0) {
                     Some(idx) => buf.slice(0, idx),
-                    // Rust: why can't we cast `&[u16, ..512]` to `&[u16]`?!
-                    None => buf.slice(0, buf.len())
+                    None => buf.as_slice()
                 };
                 Some(Path::new(str::from_utf16(path)))
             } else {

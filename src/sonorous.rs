@@ -13,16 +13,6 @@
  * At the moment Sonorous is highly experimental, so do not expect high stabillity nor features.
  * Still, you are greatly welcomed to make any suggestions or file any issues: please use 
  * [Github page](https://github.com/snrs/sonorous) for now.
- *
- * # Notes
- *
- * - There are several comments with Rust issue numbers like #1234. They are intended to be fixed
- *   after corresponding issues are resolved. The following issues are common enough that we put
- *   the explanation here:
- *     - \#3511 - iterator needs to ensure its underlying object available but rvalue lifetime is
- *       too short for it. rooting the underlying object is necessary for now.
- *     - \#7363 - implicit borrowing of stack closures is currently disabled due to the soundness
- *       issue. can be worked around by wrapping a reference to the closure to another closure.
  */
 
 #[crate_id = "https://github.com/snrs/sonorous/#sonorous:0.1.0"];
