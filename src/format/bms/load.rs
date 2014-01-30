@@ -429,7 +429,7 @@ fn load_bms_<R:Rng>(f: &mut Reader, r: &mut R, opts: &BmsLoaderOptions,
     };
 
     // loop over the sorted bmslines
-    bmsline.sort_by(|a, b| (a.measure, b.chan).cmp(&(a.measure, b.chan)));
+    bmsline.sort_by(|a, b| (a.measure, a.chan).cmp(&(b.measure, b.chan)));
     for line in bmsline.iter() {
         let measure = line.measure as f64;
         let data: ~[char] = line.data.chars().collect();
