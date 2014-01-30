@@ -1,5 +1,5 @@
 // This is a part of Sonorous.
-// Copyright (c) 2005, 2007, 2009, 2012, 2013, Kang Seonghoon.
+// Copyright (c) 2005, 2007, 2009, 2012, 2013, 2014, Kang Seonghoon.
 // See README.md and LICENSE.txt for details.
 
 //! Common types for BMS format.

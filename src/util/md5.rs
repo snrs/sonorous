@@ -1,5 +1,5 @@
 // This is a part of Sonorous.
-// Copyright (c) 2005, 2007, 2009, 2012, 2013, Kang Seonghoon. (But see below)
+// Copyright (c) 2005, 2007, 2009, 2012, 2013, 2014, Kang Seonghoon. (But see below)
 // See README.md for details.
 //
 // This code is placed in the public domain and the author disclaims any copyright.
