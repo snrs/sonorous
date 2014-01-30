@@ -218,55 +218,49 @@ impl Program {
 }
 
 /// Internally used pixel format (three bytes R, G, B for one pixel) for opaque textures.
+//
+// Rust: using `video::PixelFormat` directly causes an ICE. (#11882)
 #[cfg(target_endian="little")]
-static RGB_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
-    palette: None, bpp: 24,
-    r_loss: 0, g_loss: 0, b_loss: 0, a_loss: 0,
-    r_shift: 0, g_shift: 8, b_shift: 16, a_shift: 0,
-    r_mask: 0x000000ff, g_mask: 0x0000ff00, b_mask: 0x00ff0000, a_mask: 0,
-    color_key: 0, alpha: 255,
-};
+static RGB_PIXEL_FORMAT_TUPLE: (u8, u8, u8, u8, u8, u32, u32, u32, u32) =
+    (24, 0, 8, 16, 0, 0x000000ff, 0x0000ff00, 0x00ff0000, 0);
 
 /// Internally used pixel format (three bytes R, G, B for one pixel) for opaque textures.
 #[cfg(target_endian="big")]
-static RGB_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
-    palette: None, bpp: 24,
-    r_loss: 0, g_loss: 0, b_loss: 0, a_loss: 0,
-    r_shift: 16, g_shift: 8, b_shift: 0, a_shift: 0,
-    r_mask: 0x00ff0000, g_mask: 0x0000ff00, b_mask: 0x000000ff, a_mask: 0,
-    color_key: 0, alpha: 255,
-};
+static RGB_PIXEL_FORMAT_TUPLE: (u8, u8, u8, u8, u8, u32, u32, u32, u32) =
+    (24, 16, 8, 0, 0, 0x00ff0000, 0x0000ff00, 0x000000ff, 0);
 
 /// Internally used pixel format (four bytes R, G, B, A for one pixel) for transparent textures.
 #[cfg(target_endian="little")]
-static RGBA_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
-    palette: None, bpp: 32,
-    r_loss: 0, g_loss: 0, b_loss: 0, a_loss: 0,
-    r_shift: 0, g_shift: 8, b_shift: 16, a_shift: 24,
-    r_mask: 0x000000ff, g_mask: 0x0000ff00, b_mask: 0x00ff0000, a_mask: 0xff000000,
-    color_key: 0, alpha: 255,
-};
+static RGBA_PIXEL_FORMAT_TUPLE: (u8, u8, u8, u8, u8, u32, u32, u32, u32) =
+    (32, 0, 8, 16, 24, 0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000);
 
 /// Internally used pixel format (four bytes R, G, B, A for one pixel) for transparent textures.
 #[cfg(target_endian="big")]
-static RGBA_PIXEL_FORMAT: &'static video::PixelFormat = &video::PixelFormat {
-    palette: None, bpp: 32,
-    r_loss: 0, g_loss: 0, b_loss: 0, a_loss: 0,
-    r_shift: 24, g_shift: 16, b_shift: 8, a_shift: 0,
-    r_mask: 0xff000000, g_mask: 0x00ff0000, b_mask: 0x0000ff00, a_mask: 0x000000ff,
-    color_key: 0, alpha: 255,
-};
+static RGBA_PIXEL_FORMAT_TUPLE: (u8, u8, u8, u8, u8, u32, u32, u32, u32) =
+    (32, 24, 16, 8, 0, 0xff000000, 0x00ff0000, 0x0000ff00, 0x000000ff);
+
+/// Temporary measure for making `video::PixelFormat` from prespecified BPP, shifts and masks.
+fn pixel_format_from_tuple((bpp, rsh, gsh, bsh, ash, rm, gm, bm, am):
+                           (u8, u8, u8, u8, u8, u32, u32, u32, u32)) -> video::PixelFormat {
+    video::PixelFormat { palette: None, bpp: bpp,
+                         r_loss: 0, g_loss: 0, b_loss: 0, a_loss: 0,
+                         r_shift: rsh, g_shift: gsh, b_shift: bsh, a_shift: ash,
+                         r_mask: rm, g_mask: gm, b_mask: bm, a_mask: am,
+                         color_key: 0, alpha: 255 }
+}
 
 /// Checks if the surface is in the appropriate format for uploading via OpenGL.
 fn is_surface_prepared_for_texture(surface: &video::Surface) -> bool {
     let format = unsafe { &*(*surface.raw).format };
     if format.BitsPerPixel == 24 {
         // we still have to ensure that it has a proper byte order
-        format.Rmask == RGB_PIXEL_FORMAT.r_mask && format.Gmask == RGB_PIXEL_FORMAT.g_mask &&
-        format.Bmask == RGB_PIXEL_FORMAT.b_mask && format.Amask == RGB_PIXEL_FORMAT.a_mask
+        let reffmt = pixel_format_from_tuple(RGB_PIXEL_FORMAT_TUPLE);
+        format.Rmask == reffmt.r_mask && format.Gmask == reffmt.g_mask &&
+        format.Bmask == reffmt.b_mask && format.Amask == reffmt.a_mask
     } else if format.BitsPerPixel == 32 {
-        format.Rmask == RGBA_PIXEL_FORMAT.r_mask && format.Gmask == RGBA_PIXEL_FORMAT.g_mask &&
-        format.Bmask == RGBA_PIXEL_FORMAT.b_mask && format.Amask == RGBA_PIXEL_FORMAT.a_mask
+        let reffmt = pixel_format_from_tuple(RGBA_PIXEL_FORMAT_TUPLE);
+        format.Rmask == reffmt.r_mask && format.Gmask == reffmt.g_mask &&
+        format.Bmask == reffmt.b_mask && format.Amask == reffmt.a_mask
     } else {
         false
     }
@@ -277,8 +271,9 @@ fn is_surface_prepared_for_texture(surface: &video::Surface) -> bool {
 fn prepare_surface_for_texture(surface: &video::Surface) -> Result<~video::Surface,~str> {
     let hasalpha = unsafe { ((*surface.raw).flags & video::SrcColorKey as u32) != 0 ||
                             (*(*surface.raw).format).Amask != 0 };
-    let newfmt = if hasalpha {RGBA_PIXEL_FORMAT} else {RGB_PIXEL_FORMAT};
-    surface.convert(newfmt, [video::SWSurface])
+    let newfmt = pixel_format_from_tuple(if hasalpha {RGBA_PIXEL_FORMAT_TUPLE}
+                                         else {RGB_PIXEL_FORMAT_TUPLE});
+    surface.convert(&newfmt, [video::SWSurface])
 }
 
 /// Calls `f` with the OpenGL-compatible parameters of the prepared surface.
@@ -301,7 +296,8 @@ pub struct PreparedSurface(~video::Surface); // so normal surface methods are av
 impl PreparedSurface {
     /// Creates a new SDL surface suitable for direct uploading to OpenGL.
     pub fn new(width: uint, height: uint, transparent: bool) -> Result<PreparedSurface,~str> {
-        let newfmt = if transparent {RGBA_PIXEL_FORMAT} else {RGB_PIXEL_FORMAT};
+        let newfmt = pixel_format_from_tuple(if transparent {RGBA_PIXEL_FORMAT_TUPLE}
+                                             else {RGB_PIXEL_FORMAT_TUPLE});
         let surface =
             video::Surface::new([video::SWSurface], width as int, height as int, newfmt.bpp as int,
                                 newfmt.r_mask, newfmt.g_mask, newfmt.b_mask, newfmt.a_mask);
