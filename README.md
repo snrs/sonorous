@@ -1,5 +1,10 @@
 # Sonorous
 
+[![Sonorous on Travis CI][travis-image]][travis]
+
+[travis-image]: https://travis-ci.org/snrs/sonorous.png
+[travis]: https://travis-ci.org/snrs/sonorous
+
 Sonorous is a music video game, originated from [Angolmois](http://mearie.org/projects/angolmois/), [Angolmois Rust Edition](https://github.com/lifthrasiir/angolmois-rust/) and in turn [theseit project](http://theseit.ruree.net/). Highly experimental at the moment.
 
 Please consult the [temporary page](http://cosmic.mearie.org/f/sonorous/) for Sonorous if you are interested in it.

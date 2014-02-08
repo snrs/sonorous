@@ -369,15 +369,8 @@ impl<'r,T:IterBytes> IterBytes for OptOwnedVec<'r,T> {
 
 impl<'r> Show for OptOwnedStr<'r> {
     #[inline]
-    #[cfg(rust_nightly_20140206)]
     fn fmt(s: &OptOwnedStr<'r>, out: &mut Formatter) -> io::IoResult<()> {
         write!(out.buf, "{}", s.as_slice())
-    }
-
-    #[inline]
-    #[cfg(not(rust_nightly_20140206))]
-    fn fmt(&self, formatter: &mut Formatter) -> io::IoResult<()> {
-        write!(out.buf, "{}", self.as_slice())
     }
 }
 
