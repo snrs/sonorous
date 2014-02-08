@@ -49,7 +49,7 @@ static LOG_PROBS_JA: &'static [i32] = &[
 /// Reads the whole stream with given encoding. Any error would be substituted with U+FFFD.
 pub fn decode_stream(f: &mut Reader, encoding: EncodingRef) -> ~str {
     // TODO use incremental decoding when available
-    let s = f.read_to_end();
+    let s = f.read_to_end().ok().unwrap_or_else(|| ~[]);
     encoding.decode(s, DecodeReplace).unwrap()
 }
 
@@ -61,7 +61,7 @@ pub fn decode_stream(f: &mut Reader, encoding: EncodingRef) -> ~str {
 // Rust: cannot change this to return `EncodingRef`, it seems to "infect" other uses of
 //       `UTF_8.decode(...)` etc. to fail to resolve.
 pub fn guess_decode_stream(f: &mut Reader) -> (~str, &'static Encoding, f64) {
-    let s: ~[u8] = f.read_to_end();
+    let s: ~[u8] = f.read_to_end().ok().unwrap_or_else(|| ~[]);
 
     // check for BOM (Sonorous proposal #1)
     if s.len() >= 3 && [0xef, 0xbb, 0xbf].equiv(&s.slice_to(3)) {

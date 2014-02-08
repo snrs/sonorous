@@ -139,8 +139,8 @@ impl Shader {
             return Err(format!("GL error 0x{:x}", gl::get_error()));
         }
 
-        gl::shader_source(shader, ["#version 100\n".as_bytes().to_owned(),
-                                   code.as_bytes().to_owned()]);
+        gl::shader_source(shader, ["#version 100\n".as_bytes(),
+                                   code.as_bytes()]);
         gl::compile_shader(shader);
         if gl::get_shader_iv(shader, gl::COMPILE_STATUS) != 0 {
             Ok(Shader { shader_type: shader_type, index: shader })
@@ -153,9 +153,9 @@ impl Shader {
 
     /// Creates a shader from given file path.
     pub fn from_file(shader_type: ShaderType, path: &Path) -> Result<Shader,~str> {
-        match io::File::open(path) {
-            Some(mut f) => Shader::from_str(shader_type, f.read_to_str()),
-            None => Err(~"File::open failed"),
+        match io::File::open(path).and_then(|mut f| f.read_to_str()) {
+            Ok(s) => Shader::from_str(shader_type, s),
+            Err(err) => Err(err.to_str()),
         }
     }
 }
@@ -385,7 +385,7 @@ impl Texture2D {
     pub fn from_prepared_surface(prepared: &PreparedSurface,
                                  xwrap: bool, ywrap: bool) -> Result<Texture2D,~str> {
         let (width, height) = prepared.as_surface().get_size();
-        let texture = earlyexit!(Texture2D::new(width as uint, height as uint));
+        let texture = if_ok!(Texture2D::new(width as uint, height as uint));
         texture.upload_surface(prepared, xwrap, ywrap);
         Ok(texture)
     }
@@ -396,7 +396,7 @@ impl Texture2D {
     pub fn from_owned_surface(surface: ~video::Surface,
                               xwrap: bool, ywrap: bool) -> Result<Texture2D,~str> {
         let (width, height) = surface.get_size();
-        let texture = earlyexit!(Texture2D::new(width as uint, height as uint));
+        let texture = if_ok!(Texture2D::new(width as uint, height as uint));
         match PreparedSurface::from_owned_surface(surface) {
             Ok(prepared) => {
                 texture.upload_surface(&prepared, xwrap, ywrap);

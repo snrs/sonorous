@@ -10,9 +10,4 @@
 
 #[macro_escape];
 
-// Given a value of `Result<T,E>`, exits from the function with a return type `Result<U,E>` when
-// the value is an error. Otherwise returns the value contained in the `Ok` variant.
-macro_rules! earlyexit(
-    ($e:expr) => (match $e { Ok(v) => v, Err(err) => { return Err(err); } })
-)
 

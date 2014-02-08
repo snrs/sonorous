@@ -17,7 +17,8 @@ use std::str::{Str, StrSlice};
 use std::vec::Vector;
 use std::to_str::ToStr;
 use std::to_bytes::{IterBytes, Cb};
-use std::fmt;
+use std::fmt::{Show, Formatter};
+use std::io;
 
 use util::into_send::IntoSend;
 
@@ -364,12 +365,19 @@ impl<'r,T:IterBytes> IterBytes for OptOwnedVec<'r,T> {
     fn iter_bytes(&self, lsb0: bool, f: Cb) -> bool { self.as_slice().iter_bytes(lsb0, f) }
 }
 
-// * `fmt::Default` implementation
+// * `Show` implementation
 
-impl<'r> fmt::Default for OptOwnedStr<'r> {
+impl<'r> Show for OptOwnedStr<'r> {
     #[inline]
-    fn fmt(s: &OptOwnedStr<'r>, formatter: &mut fmt::Formatter) {
-        fmt::Default::fmt(&s.as_slice(), formatter)
+    #[cfg(rust_nightly_20140206)]
+    fn fmt(s: &OptOwnedStr<'r>, out: &mut Formatter) -> io::IoResult<()> {
+        write!(out.buf, "{}", s.as_slice())
+    }
+
+    #[inline]
+    #[cfg(not(rust_nightly_20140206))]
+    fn fmt(&self, formatter: &mut Formatter) -> io::IoResult<()> {
+        write!(out.buf, "{}", self.as_slice())
     }
 }
 
@@ -390,7 +398,7 @@ mod tests {
         assert_eq!(s.len(), 5);
         assert_eq!(s.as_slice(), "abcde");
         assert_eq!(s.to_str(), ~"abcde");
-        assert!(s.equiv(&@"abcde"));
+        assert!(s.equiv(&~"abcde"));
         assert!(s.lt(&OptOwnedStrOwned(~"bcdef")));
         assert_eq!(OptOwnedStrBorrowed(""), Default::default());
 
@@ -398,7 +406,7 @@ mod tests {
         assert_eq!(o.len(), 5);
         assert_eq!(o.as_slice(), "abcde");
         assert_eq!(o.to_str(), ~"abcde");
-        assert!(o.equiv(&@"abcde"));
+        assert!(o.equiv(&~"abcde"));
         assert!(o.lt(&OptOwnedStrBorrowed("bcdef")));
         assert_eq!(OptOwnedStrOwned(~""), Default::default());
 

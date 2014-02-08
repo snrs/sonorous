@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::rand::{rng, Rng};
 use std::comm::{SharedChan, Port};
-use extra::arc::RWArc;
+use sync::RWArc;
 
 use sdl::{event, get_ticks};
 use gl = opengles::gl2;
@@ -48,10 +48,10 @@ pub fn preprocess_bms<R:Rng,Listener:bms::diag::BmsMessageListener>(
                                 bmspath: &Path, f: &mut Reader, opts: &Options, r: &mut R,
                                 loaderopts: &bms::load::BmsLoaderOptions,
                                 callback: &mut Listener) -> Result<~PreprocessedBms,~str> {
-    let bms = earlyexit!(bms::load::load_bms(f, r, loaderopts, callback));
+    let bms = if_ok!(bms::load::load_bms(f, r, loaderopts, callback));
     let mut bms = bms.with_bmspath(bmspath);
-    let keyspec = earlyexit!(key_spec(&bms, opts.preset.clone(),
-                                      opts.leftkeys.clone(), opts.rightkeys.clone()));
+    let keyspec = if_ok!(key_spec(&bms, opts.preset.clone(),
+                                  opts.leftkeys.clone(), opts.rightkeys.clone()));
     keyspec.filter_timeline(&mut bms.timeline);
     let infos = bms.timeline.analyze();
     for &modf in opts.modf.iter() {
@@ -313,16 +313,16 @@ impl SelectingScene {
             };
 
             match io::File::open(&bmspath) {
-                Some(mut f) => {
-                    let buf = f.read_to_end();
+                Ok(mut f) => {
+                    let buf = f.read_to_end().ok().unwrap_or_else(|| ~[]);
                     let hash = MD5::from_buffer(buf).final();
                     chan.try_send(BmsHashRead(bmspath.clone(), hash));
 
                     // since we have read the file we don't want the parser to read it again.
                     load_with_reader(io::MemReader::new(buf));
                 }
-                None => {
-                    chan.try_send(BmsFailed(bmspath.clone(), ~"File::open failed"));
+                Err(err) => {
+                    chan.try_send(BmsFailed(bmspath.clone(), err.to_str()));
                 }
             }
         }, proc() {
@@ -375,8 +375,11 @@ impl SelectingScene {
                         None => { return None; }
                     };
                     let mut f = match io::File::open(path) {
-                        Some(f) => f,
-                        None => { warn!("Failed to open {}.", path.display()); return None; }
+                        Ok(f) => f,
+                        Err(err) => {
+                            warn!("Failed to open {}: {}", path.display(), err);
+                            return None;
+                        }
                     };
                     let mut r = rng();
                     let mut callback = |line, msg| print_diag(line, msg);

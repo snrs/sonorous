@@ -7,7 +7,6 @@ CRATE = src/sonorous.rs
 BIN = sonorous
 RUSTC ?= rustc
 RUSTDOC ?= rustdoc
-RUSTPKG ?= rustpkg
 RUSTSDL ?= libs/rust-sdl
 RUSTOPENGLES ?= libs/rust-opengles
 RUSTENCODING ?= libs/rust-encoding
@@ -15,11 +14,10 @@ RUSTSQLITE ?= libs/rustsqlite
 DIRECTX_SDK_INCLUDES ?= libs/w32api-directx-standalone/include
 SQLITE3 ?= libs/sqlite3
 RUSTFLAGS ?= -O
-RUSTPKGFLAGS ?= -O --rlib
+RUSTPKGFLAGS ?= -O --crate-type=rlib
 CFLAGS ?= -Os
 CXXFLAGS ?= -Os
 
-# intentionally ignores rustpkg for sdl, sdl_image, sdl_mixer and sqlite3.
 LIBSDL = $(RUSTSDL)/libsdl.dummy
 LIBSDL_IMAGE = $(RUSTSDL)/libsdl_image.dummy
 LIBSDL_MIXER = $(RUSTSDL)/libsdl_mixer.dummy
@@ -36,14 +34,14 @@ all: $(BIN)
 $(BIN): $(SRC) $(LIBS)
 	$(RUSTC) $(RUSTFLAGS) $(patsubst %,-L %,$(dir $(LIBS))) -L $(SQLITE3) $(CRATE) -o $(BIN)
 
-$(LIBSDL):
-	$(RUSTC) $(RUSTPKGFLAGS) $(RUSTSDL)/src/sdl/lib.rs -o $@ && touch $@
+$(LIBSDL): $(RUSTSDL)/src/sdl/lib.rs
+	$(RUSTC) $(RUSTPKGFLAGS) $< --out-dir $(dir $@) && touch $@
 
-$(LIBSDL_IMAGE): $(LIBSDL)
-	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $(RUSTSDL)/src/sdl_image/lib.rs -o $@ && touch $@
+$(LIBSDL_IMAGE): $(RUSTSDL)/src/sdl_image/lib.rs $(LIBSDL)
+	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $< --out-dir $(dir $@) && touch $@
 
-$(LIBSDL_MIXER): $(LIBSDL)
-	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $(RUSTSDL)/src/sdl_mixer/lib.rs -o $@ && touch $@
+$(LIBSDL_MIXER): $(RUSTSDL)/src/sdl_mixer/lib.rs $(LIBSDL)
+	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $< --out-dir $(dir $@) && touch $@
 
 $(LIBOPENGLES):
 	cd $(RUSTOPENGLES) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS)" DIRECTX_SDK_INCLUDES=$(realpath $(DIRECTX_SDK_INCLUDES))
@@ -51,11 +49,14 @@ $(LIBOPENGLES):
 $(LIBENCODING):
 	cd $(RUSTENCODING) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS)"
 
-$(LIBSQLITE3): $(SQLITE3)/libsqlite3.a
-	$(RUSTC) $(RUSTPKGFLAGS) -L $(SQLITE3) $(RUSTSQLITE)/src/sqlite3/lib.rs -o $@ && touch $@
+$(LIBSQLITE3): $(RUSTSQLITE)/src/sqlite3/lib.rs $(SQLITE3)/libsqlite3.a
+	$(RUSTC) $(RUSTPKGFLAGS) -L $(SQLITE3) $< --out-dir $(dir $@) && touch $@
 
 $(SQLITE3)/libsqlite3.a:
 	cd $(SQLITE3) && $(MAKE) all
+
+doc:
+	$(RUSTDOC) $(patsubst %,-L %,$(dir $(LIBS))) $(CRATE)
 
 clean: clean-sdl clean-opengles clean-encoding clean-sqlite
 	rm -rf $(BIN) $(BIN).exe

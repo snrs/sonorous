@@ -59,25 +59,25 @@ pub fn to_console_encoding(s: &str) -> ~[u8] {
 
 /// Same as `std::io::print` but converts to the current console encoding if possible.
 pub fn printout(s: &str) {
-    stdout().write(to_console_encoding(s));
+    let _ = stdout().write(to_console_encoding(s));
 }
 
 /// Same as `std::io::println` but converts to the current console encoding if possible.
 pub fn printoutln(s: &str) {
     let mut out = stdout();
-    out.write(to_console_encoding(s));
-    out.write(['\n' as u8]);
+    let _ = out.write(to_console_encoding(s));
+    let _ = out.write(['\n' as u8]);
 }
 
 /// Same as `std::io::stderr().write_str` but converts to the current console encoding if possible.
 pub fn printerr(s: &str) {
-    stderr().write(to_console_encoding(s));
+    let _ = stderr().write(to_console_encoding(s));
 }
 
 /// Same as `std::io::stderr().write_line` but converts to the current console encoding if possible.
 pub fn printerrln(s: &str) {
     let mut err = stderr();
-    err.write(to_console_encoding(s));
-    err.write(['\n' as u8]);
+    let _ = err.write(to_console_encoding(s));
+    let _ = err.write(['\n' as u8]);
 }
 

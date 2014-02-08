@@ -31,7 +31,7 @@ impl SearchContext {
         // invalidate any cache items since it turned out that `os::list_dir` is very, very slow.
         // for example, it is not rare for `list_dir` to take more than 100ms in Windows.
         let &(ref dirs, ref files) = self.get_entries_cache.find_or_insert_with(dir.clone(), |_| {
-            let entries = io::fs::readdir(dir);
+            let entries = io::fs::readdir(dir).ok().unwrap_or_else(|| ~[]);
             let (dirs, files) = entries.partition(|path| path.is_dir());
             (Rc::new(dirs), Rc::new(files))
         });

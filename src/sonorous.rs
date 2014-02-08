@@ -7,7 +7,7 @@
  * the [BMS format](http://en.wikipedia.org/wiki/Be-Music_Source) for playing.
  *
  * Sonorous is a continuation of prior attempts to the free music video games: Angolmois (2005--),
- * theseit (2007--2008) and Angolmois Rust edition (2012--2013). Unlike prior attempts, however,
+ * theseit (2007--2008) and Angolmois Rust edition (2012--). Unlike prior attempts, however,
  * Sonorous aims at the full-featured game with relatively liberal decisions (e.g. languages).
  *
  * At the moment Sonorous is highly experimental, so do not expect high stabillity nor features.
@@ -24,7 +24,9 @@
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
 
-extern mod extra;
+#[cfg(rust_nightly_20140206)] extern mod extra;
+#[cfg(not(rust_nightly_20140206))] extern mod collections;
+extern mod sync;
 extern mod native;
 
 extern mod sdl;
@@ -74,7 +76,7 @@ pub mod format {
     pub mod obj;
     pub mod timeline;
     pub mod pointer;
-    #[path="bms/mod.rs"] pub mod bms;
+    pub mod bms;
 }
 
 pub mod engine {
@@ -118,8 +120,8 @@ pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
     use format::bms::parse::{each_bms_command_with_flow, each_bms_command};
 
     let mut f = match io::File::open(bmspath) {
-        Some(f) => f,
-        None => die!("Couldn't load BMS file: {}", bmspath.display())
+        Ok(f) => f,
+        Err(err) => die!("Couldn't load BMS file: {}", err)
     };
     let blk = |_lineno: uint, cmd: BmsCommand| {
         match cmd {
@@ -172,9 +174,9 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         // parses the file and sanitizes it
         let mut r = rand::rng();
         let preproc = match io::File::open(bmspath) {
-            Some(mut f) => preprocess_bms(bmspath, &mut f, opts,
-                                          &mut r, &opts.loader_options(), &mut callback),
-            None => Err(~"File::open failed"),
+            Ok(mut f) => preprocess_bms(bmspath, &mut f, opts,
+                                        &mut r, &opts.loader_options(), &mut callback),
+            Err(err) => Err(err.to_str()),
         };
         let PreprocessedBms { bms, infos, keyspec } = match preproc {
             Ok(preproc) => *preproc,
@@ -182,7 +184,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         };
 
         if opts.debug_dumptimeline {
-            bms.timeline.dump(&mut std::io::stdout());
+            let _ = bms.timeline.dump(&mut std::io::stdout());
             ui::common::exit(0);
         }
 
@@ -221,7 +223,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
 /// Prints the usage.
 pub fn usage() {
     // Rust: this is actually a good use case of `include_str!`...
-    std::io::stderr().write_str(format!("\
+    let _ = write!(&mut std::io::stderr(), "\
 {version}
 https://github.com/snrs/sonorous/
 
@@ -272,7 +274,7 @@ Available debugging options:
   -Z dump-bmscommand-full Same as above but also dumps skipped flow commands
   -Z dump-timeline        Dumps precalculated timeline and exit
 
-", version = version(), prog = exename()));
+", version = version(), prog = exename());
     ui::common::exit(1);
 }
 
@@ -280,7 +282,7 @@ Available debugging options:
 pub fn subprogram(args: &[~str]) -> ! {
     let ret: int = match args.head_opt() {
         None => {
-            std::io::stderr().write_str("\
+            let _ = write!(&mut std::io::stderr(), "\
 The list of available subprograms:
   chardet-train         Trains a character encoding detection algorithm.
 
@@ -289,7 +291,7 @@ The list of available subprograms:
         }
         Some(&~"chardet-train") => util::chardet::chardet_train(args.tail()),
         Some(prog) => {
-            std::io::stderr().write_str(format!("Subprogram {} is unknown.", *prog));
+            let _ = write!(&mut std::io::stderr(), "Subprogram {} is unknown.", *prog);
             1
         }
     };
@@ -298,7 +300,7 @@ The list of available subprograms:
 
 #[cfg(not(subprogram))]
 pub fn subprogram(_args: &[~str]) -> ! {
-    std::io::stderr().write_str("Subprograms are not supported in this build.\n");
+    let _ = write!(&mut std::io::stderr(), "Subprograms are not supported in this build.\n");
     ui::common::exit(1);
 }
 

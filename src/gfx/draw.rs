@@ -54,14 +54,14 @@ impl ProgramForShades {
             }
         );
 
-        let vertex_shader = earlyexit!(Shader::from_str(VertexShader, vertex_code));
-        let fragment_shader = earlyexit!(Shader::from_str(FragmentShader, fragment_code));
-        let program = earlyexit!(Program::new(vertex_shader, fragment_shader));
+        let vertex_shader = if_ok!(Shader::from_str(VertexShader, vertex_code));
+        let fragment_shader = if_ok!(Shader::from_str(FragmentShader, fragment_code));
+        let program = if_ok!(Program::new(vertex_shader, fragment_shader));
 
-        let vertex_position = earlyexit!(program.attrib_location("vertex_position_in"));
-        let color = earlyexit!(program.attrib_location("color_in"));
-        let local_transform = earlyexit!(program.uniform_location("local_transform"));
-        let projection = earlyexit!(program.uniform_location("projection"));
+        let vertex_position = if_ok!(program.attrib_location("vertex_position_in"));
+        let color = if_ok!(program.attrib_location("color_in"));
+        let local_transform = if_ok!(program.uniform_location("local_transform"));
+        let projection = if_ok!(program.uniform_location("projection"));
 
         vertex_position.enable_array();
         color.enable_array();
@@ -127,16 +127,16 @@ impl ProgramForTextures {
             }
         );
 
-        let vertex_shader = earlyexit!(Shader::from_str(VertexShader, vertex_code));
-        let fragment_shader = earlyexit!(Shader::from_str(FragmentShader, fragment_code));
-        let program = earlyexit!(Program::new(vertex_shader, fragment_shader));
+        let vertex_shader = if_ok!(Shader::from_str(VertexShader, vertex_code));
+        let fragment_shader = if_ok!(Shader::from_str(FragmentShader, fragment_code));
+        let program = if_ok!(Program::new(vertex_shader, fragment_shader));
 
-        let vertex_position = earlyexit!(program.attrib_location("vertex_position_in"));
-        let texture_coord = earlyexit!(program.attrib_location("texture_coord_in"));
-        let color = earlyexit!(program.attrib_location("color_in"));
-        let local_transform = earlyexit!(program.uniform_location("local_transform"));
-        let projection = earlyexit!(program.uniform_location("projection"));
-        let sampler = earlyexit!(program.uniform_location("sampler"));
+        let vertex_position = if_ok!(program.attrib_location("vertex_position_in"));
+        let texture_coord = if_ok!(program.attrib_location("texture_coord_in"));
+        let color = if_ok!(program.attrib_location("color_in"));
+        let local_transform = if_ok!(program.uniform_location("local_transform"));
+        let projection = if_ok!(program.uniform_location("projection"));
+        let sampler = if_ok!(program.uniform_location("sampler"));
 
         vertex_position.enable_array();
         texture_coord.enable_array();

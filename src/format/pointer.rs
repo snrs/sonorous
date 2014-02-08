@@ -4,7 +4,7 @@
 
 //! Pointer interface, which provides a reference to the position or object in the timeline.
 
-use std::{num, borrow};
+use std::num;
 use std::rc::Rc;
 use format::obj::{Obj, ObjAxis, ObjLoc, ObjData, ToObjData};
 use format::timeline::Timeline;
@@ -37,7 +37,7 @@ pub struct Pointer<SoundRef,ImageRef> {
 
 /// Returns true if two pointers share the common timeline.
 fn has_same_timeline<S,I>(lhs: &Pointer<S,I>, rhs: &Pointer<S,I>) -> bool {
-    borrow::ref_eq(lhs.timeline.borrow(), rhs.timeline.borrow())
+    lhs.timeline.borrow() as *Timeline<S,I> == rhs.timeline.borrow() as *Timeline<S,I>
 }
 
 /// Returns the first index `i` such that `v[i]` is no `Less` than the target, or `v.len()` if

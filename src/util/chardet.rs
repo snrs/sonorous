@@ -281,15 +281,16 @@ pub fn chardet_train(args: &[~str]) -> int {
     use encoding::all::{WINDOWS_949, WINDOWS_31J};
 
     if args.len() != 1 {
-        stderr().write_str(format!("Usage: {prog} --subprogram chardet-train <rescale> \
-                                    < per-line-corpus-in-utf-8 > code.rs\n", prog = ::exename()));
+        write!(&mut stderr(),
+               "Usage: {prog} --subprogram chardet-train <rescale> \
+                       < per-line-corpus-in-utf-8 > code.rs\n", prog = ::exename());
         return 1;
     }
 
     let rescale = match from_str::<f64>(args[0]) {
         Some(v) if v > 0.0 => v,
         _ => {
-            stderr().write_str(format!("Invalid rescale argument: {}\n", args[1]));
+            write!(&mut stderr(), "Invalid rescale argument: {}\n", args[1]);
             return 1;
         }
     };
@@ -308,7 +309,7 @@ pub fn chardet_train(args: &[~str]) -> int {
     let nwords = words.len();
     for (i, w) in words.move_iter().enumerate() {
         if (i + 1) % 10000 == 0 {
-            stderr().write_str(format!("Processing {} out of {} words...\n", i + 1, nwords));
+            write!(&mut stderr(), "Processing {} out of {} words...\n", i + 1, nwords);
         }
         match WINDOWS_949.encode(w, Strict) {
             Ok(w_) => {
@@ -329,11 +330,11 @@ pub fn chardet_train(args: &[~str]) -> int {
     }
 
     if nkowords == 0 {
-        stderr().write_str("There are no Korean words available.\n");
+        write!(&mut stderr(), "There are no Korean words available.\n");
         return 1;
     }
     if njawords == 0 {
-        stderr().write_str("There are no Japanese words available.\n");
+        write!(&mut stderr(), "There are no Japanese words available.\n");
         return 1;
     }
 
