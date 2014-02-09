@@ -1,4 +1,5 @@
 sonorous
+sonorous-test
 *.exe
 *.o
 *.a

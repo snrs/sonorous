@@ -8,7 +8,7 @@ install:
   - sudo apt-get install rust-nightly
   - sudo apt-get install libsdl1.2-dev libsdl-mixer1.2-dev libsdl-image1.2-dev libsmpeg-dev libsqlite3-dev
 script:
-  - make RUSTFLAGS= RUSTPKGFLAGS=
+  - make RUSTFLAGS='--cfg subprogram' RUSTPKGFLAGS=
   - make doc
 branches:
   only:

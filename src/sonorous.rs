@@ -45,8 +45,7 @@ extern mod sqlite3;
     pub mod macros;
     pub mod lex;
     pub mod filesearch;
-    pub mod into_send;
-    pub mod opt_owned;
+    pub mod maybe_owned;
     pub mod envelope;
     pub mod chardet;
     pub mod console;
@@ -218,6 +217,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
     }
 
     run_scene(scene);
+    ui::common::exit(0);
 }
 
 /// Prints the usage.
@@ -278,9 +278,10 @@ Available debugging options:
     ui::common::exit(1);
 }
 
+/// The entry point for subprograms. Only enabled with `--cfg subprogram`.
 #[cfg(subprogram)]
 pub fn subprogram(args: &[~str]) -> ! {
-    let ret: int = match args.head_opt() {
+    let ret: int = match args.head() {
         None => {
             let _ = write!(&mut std::io::stderr(), "\
 The list of available subprograms:
@@ -298,6 +299,7 @@ The list of available subprograms:
     ui::common::exit(ret);
 }
 
+/// The entry point for subprograms. Only enabled with `--cfg subprogram`.
 #[cfg(not(subprogram))]
 pub fn subprogram(_args: &[~str]) -> ! {
     let _ = write!(&mut std::io::stderr(), "Subprograms are not supported in this build.\n");
@@ -305,6 +307,8 @@ pub fn subprogram(_args: &[~str]) -> ! {
 }
 
 #[start]
+#[doc(hidden)]
+#[allow(dead_code)]
 fn start(argc: int, argv: **u8) -> int {
     native::start(argc, argv, main)
 }

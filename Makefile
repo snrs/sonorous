@@ -5,6 +5,7 @@
 SRC = $(wildcard src/*.rs src/*/*.rs src/*/*/*.rs src/*/*/*/*.rs)
 CRATE = src/sonorous.rs
 BIN = sonorous
+TESTBIN = sonorous-test
 RUSTC ?= rustc
 RUSTDOC ?= rustdoc
 RUSTSDL ?= libs/rust-sdl
@@ -27,7 +28,7 @@ LIBSQLITE3 = $(RUSTSQLITE)/libsqlite3.dummy
 LIBS = $(LIBSDL) $(LIBSDL_IMAGE) $(LIBSDL_MIXER) $(LIBOPENGLES) $(LIBENCODING) $(LIBSQLITE3)
 
 
-.PHONY: all clean clean-sdl clean-opengles clean-encoding clean-sqlite
+.PHONY: all check doc clean clean-sdl clean-opengles clean-encoding clean-sqlite
 
 all: $(BIN)
 
@@ -55,11 +56,17 @@ $(LIBSQLITE3): $(RUSTSQLITE)/src/sqlite3/lib.rs $(SQLITE3)/libsqlite3.a
 $(SQLITE3)/libsqlite3.a:
 	cd $(SQLITE3) && $(MAKE) all
 
+#$(TESTBIN): $(SRC) $(LIBS)
+#	$(RUSTC) $(RUSTFLAGS) $(patsubst %,-L %,$(dir $(LIBS))) -L $(SQLITE3) --test $(CRATE) -o $(TESTBIN)
+#
+#check: $(TESTBIN)
+#	./$(TESTBIN)
+
 doc:
 	$(RUSTDOC) $(patsubst %,-L %,$(dir $(LIBS))) $(CRATE)
 
 clean: clean-sdl clean-opengles clean-encoding clean-sqlite
-	rm -rf $(BIN) $(BIN).exe
+	rm -rf $(BIN) $(BIN).exe $(TESTBIN) $(TESTBIN).exe
 
 clean-sdl:
 	cd $(RUSTSDL) && rm -f *.so *.dylib *.dll *.rlib *.dummy

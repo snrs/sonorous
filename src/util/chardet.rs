@@ -41,7 +41,7 @@
 
 use std::vec;
 use std::num::{Round, ln, exp};
-use util::opt_owned::{OptOwnedVec, IntoOptOwnedVec};
+use util::maybe_owned::{MaybeOwnedVec, IntoMaybeOwnedVec};
 
 /// Character classes definitions for each language.
 pub trait CharClass {
@@ -229,7 +229,7 @@ pub struct Classifier<CC> {
     cc: CC,
     /// Precalculated probabilities for each class. For the ease of calculation, it is not an exact
     /// probability `p` but rather `round((log(1-p)-log(p))*2^16)`.
-    logprobs: OptOwnedVec<'static,i32>
+    logprobs: MaybeOwnedVec<'static,i32>
 }
 
 /// Converts a raw confidence value from `Classifier::raw_confidence`
@@ -240,8 +240,8 @@ pub fn convert_raw_confidence(v: i32) -> f64 {
 
 impl<CC:CharClass> Classifier<CC> {
     /// Creates a classifier from given precalculated probabilities.
-    pub fn new<T:IntoOptOwnedVec<'static,i32>>(cc: CC, logprobs: T) -> Classifier<CC> {
-        let logprobs = logprobs.into_opt_owned_vec();
+    pub fn new<T:IntoMaybeOwnedVec<'static,i32>>(cc: CC, logprobs: T) -> Classifier<CC> {
+        let logprobs = logprobs.into_maybe_owned_vec();
         assert!(logprobs.len() == cc.num_classes());
         Classifier { cc: cc, logprobs: logprobs }
     }
@@ -276,21 +276,21 @@ impl<CC:CharClass> Classifier<CC> {
  */
 #[cfg(subprogram)]
 pub fn chardet_train(args: &[~str]) -> int {
-    use std::io::{ReaderUtil, stdin, stderr};
-    use encoding::{Encoding, Strict, Replace};
+    use std::io::{stdin, stderr, BufferedReader};
+    use encoding::{Encoding, EncodeStrict, DecodeReplace};
     use encoding::all::{WINDOWS_949, WINDOWS_31J};
 
     if args.len() != 1 {
-        write!(&mut stderr(),
-               "Usage: {prog} --subprogram chardet-train <rescale> \
-                       < per-line-corpus-in-utf-8 > code.rs\n", prog = ::exename());
+        let _ = write!(&mut stderr(),
+                       "Usage: {prog} --subprogram chardet-train <rescale> \
+                               < per-line-corpus-in-utf-8 > code.rs\n", prog = ::exename());
         return 1;
     }
 
     let rescale = match from_str::<f64>(args[0]) {
         Some(v) if v > 0.0 => v,
         _ => {
-            write!(&mut stderr(), "Invalid rescale argument: {}\n", args[1]);
+            let _ = write!(&mut stderr(), "Invalid rescale argument: {}\n", args[1]);
             return 1;
         }
     };
@@ -304,37 +304,37 @@ pub fn chardet_train(args: &[~str]) -> int {
     let mut nkowords = 0;
     let mut njawords = 0;
 
-    let mut words = stdin().read_lines();
-    words.retain(|w| !w.trim().is_empty());
+    let words: ~[~str] =
+        BufferedReader::new(stdin()).lines().filter(|w| !w.trim().is_empty()).collect();
     let nwords = words.len();
     for (i, w) in words.move_iter().enumerate() {
         if (i + 1) % 10000 == 0 {
-            write!(&mut stderr(), "Processing {} out of {} words...\n", i + 1, nwords);
+            let _ = write!(&mut stderr(), "Processing {} out of {} words...\n", i + 1, nwords);
         }
-        match WINDOWS_949.encode(w, Strict) {
+        match WINDOWS_949.encode(w, EncodeStrict) {
             Ok(w_) => {
                 nkowords += 1;
                 kotrainerko.train(w, true);
-                jatrainerko.train(WINDOWS_31J.decode(w_, Replace).unwrap(), false);
+                jatrainerko.train(WINDOWS_31J.decode(w_, DecodeReplace).unwrap(), false);
             }
             Err(..) => {}
         }
-        match WINDOWS_31J.encode(w, Strict) {
+        match WINDOWS_31J.encode(w, EncodeStrict) {
             Ok(w_) => {
                 njawords += 1;
                 jatrainerja.train(w, true);
-                kotrainerja.train(WINDOWS_949.decode(w_, Replace).unwrap(), false);
+                kotrainerja.train(WINDOWS_949.decode(w_, DecodeReplace).unwrap(), false);
             }
             Err(..) => {}
         }
     }
 
     if nkowords == 0 {
-        write!(&mut stderr(), "There are no Korean words available.\n");
+        let _ = write!(&mut stderr(), "There are no Korean words available.\n");
         return 1;
     }
     if njawords == 0 {
-        write!(&mut stderr(), "There are no Japanese words available.\n");
+        let _ = write!(&mut stderr(), "There are no Japanese words available.\n");
         return 1;
     }
 
@@ -349,12 +349,12 @@ pub fn chardet_train(args: &[~str]) -> int {
     fn process_trainer<CC:CharClass+Clone>(mut trainer: Trainer<CC>, varname: &str) {
         trainer.add_default();
         let classifier = trainer.into_classifier();
-        print(format!("static {}: &'static [i32] = &[", varname));
+        print!("static {}: &'static [i32] = &[", varname);
         for (i, &v) in classifier.logprobs.as_slice().iter().enumerate() {
-            if i % 10 == 0 { print("\n   "); }
-            print(format!(" {:7i},", v));
+            if i % 10 == 0 { print!("\n   "); }
+            print!(" {:7i},", v);
         }
-        println("\n];\n");
+        println!("\n];\n");
     }
 
     process_trainer(kotrainerko, "LOG_PROBS_KO");

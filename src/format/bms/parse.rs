@@ -5,11 +5,10 @@
 //! BMS parser.
 
 use std::{iter, f64, char};
+use std::str::MaybeOwned;
 use std::rand::Rng;
 use encoding::EncodingRef;
 
-use util::into_send::IntoSend;
-use util::opt_owned::{OptOwnedStr, IntoOptOwnedStr};
 use format::obj::{BPM, Duration, Seconds, Measures, ImageSlice};
 use format::bms::types::{Key, PartialKey};
 use format::bms::diag::*;
@@ -25,21 +24,21 @@ pub type ARGB = (u8,u8,u8,u8);
 /// Represents one line of BMS file.
 #[deriving(Clone)]
 pub enum BmsCommand<'r> {
-    BmsUnknown(OptOwnedStr<'r>),                // starting with `#` but unknown otherwise
-    BmsTitle(OptOwnedStr<'r>),                  // #TITLE
-    BmsSubtitle(OptOwnedStr<'r>),               // #SUBTITLE
-    BmsGenre(OptOwnedStr<'r>),                  // #GENRE
-    BmsArtist(OptOwnedStr<'r>),                 // #ARTIST
-    BmsSubartist(OptOwnedStr<'r>),              // #SUBARTIST
-    BmsMaker(OptOwnedStr<'r>),                  // #MAKER
-    BmsComment(OptOwnedStr<'r>),                // #COMMENT
-    BmsStageFile(OptOwnedStr<'r>),              // #STAGEFILE
-    BmsBanner(OptOwnedStr<'r>),                 // #BANNER
-    BmsPathWAV(OptOwnedStr<'r>),                // #PATH_WAV
+    BmsUnknown(MaybeOwned<'r>),                 // starting with `#` but unknown otherwise
+    BmsTitle(MaybeOwned<'r>),                   // #TITLE
+    BmsSubtitle(MaybeOwned<'r>),                // #SUBTITLE
+    BmsGenre(MaybeOwned<'r>),                   // #GENRE
+    BmsArtist(MaybeOwned<'r>),                  // #ARTIST
+    BmsSubartist(MaybeOwned<'r>),               // #SUBARTIST
+    BmsMaker(MaybeOwned<'r>),                   // #MAKER
+    BmsComment(MaybeOwned<'r>),                 // #COMMENT
+    BmsStageFile(MaybeOwned<'r>),               // #STAGEFILE
+    BmsBanner(MaybeOwned<'r>),                  // #BANNER
+    BmsPathWAV(MaybeOwned<'r>),                 // #PATH_WAV
     BmsBPM(BPM),                                // #BPM (without a following alphanumeric key)
     BmsExBPM(Key, BPM),                         // #EXBPM or #BPMxx
     BmsPlayer(int),                             // #PLAYER
-    BmsLanes(~[(Key, OptOwnedStr<'r>)]),        // #SNRS:LANES (experimental)
+    BmsLanes(~[(Key, MaybeOwned<'r>)]),         // #SNRS:LANES (experimental)
     BmsPlayLevel(int),                          // #PLAYLEVEL
     BmsDifficulty(int),                         // #DIFFICULTY
     BmsRank(int),                               // #RANK
@@ -48,51 +47,54 @@ pub enum BmsCommand<'r> {
     BmsTotal(int),                              // #TOTAL
     BmsLNType(int),                             // #LNTYPE
     BmsLNObj(Key),                              // #LNOBJ
-    BmsWAV(Key, OptOwnedStr<'r>),               // #WAV
+    BmsWAV(Key, MaybeOwned<'r>),                // #WAV
     BmsWAVCmd(int, Key, int),                   // #WAVCMD
-    BmsExWAV(Key, Option<int>, Option<int>, Option<int>, OptOwnedStr<'r>), // #EXWAV
+    BmsExWAV(Key, Option<int>, Option<int>, Option<int>, MaybeOwned<'r>), // #EXWAV
     BmsVolWAV(int),                             // #VOLWAV
-    BmsMIDIFile(OptOwnedStr<'r>),               // #MIDIFILE
-    BmsBMP(Key, OptOwnedStr<'r>),               // #BMP
-    BmsExBMP(Key, ARGB, OptOwnedStr<'r>),       // #EXBMP
-    BmsBackBMP(OptOwnedStr<'r>),                // #BACKBMP
+    BmsMIDIFile(MaybeOwned<'r>),                // #MIDIFILE
+    BmsBMP(Key, MaybeOwned<'r>),                // #BMP
+    BmsExBMP(Key, ARGB, MaybeOwned<'r>),        // #EXBMP
+    BmsBackBMP(MaybeOwned<'r>),                 // #BACKBMP
     BmsBGA(Key, Key, ImageSlice),               // #BGA or #@BGA
     BmsPoorBGA(int),                            // #POORBGA
-    BmsSwBGA(Key, int, int, Key, bool, ARGB, OptOwnedStr<'r>), // #SWBGA
+    BmsSwBGA(Key, int, int, Key, bool, ARGB, MaybeOwned<'r>), // #SWBGA
     BmsARGB(Key, ARGB),                         // #ARGB
-    BmsCharFile(OptOwnedStr<'r>),               // #CHARFILE
-    BmsVideoFile(OptOwnedStr<'r>),              // #VIDEOFILE
-    BmsMovie(OptOwnedStr<'r>),                  // #MOVIE
+    BmsCharFile(MaybeOwned<'r>),                // #CHARFILE
+    BmsVideoFile(MaybeOwned<'r>),               // #VIDEOFILE
+    BmsMovie(MaybeOwned<'r>),                   // #MOVIE
     BmsCanvasSize(int, int),                    // #SNRS:CANVASSIZE (experimental)
     BmsStop(Key, Duration),                     // #STOP
     BmsStp(f64, Duration),                      // #STP
-    BmsText(Key, OptOwnedStr<'r>),              // #TEXT or #SONG
-    BmsOption(OptOwnedStr<'r>),                 // #OPTION
-    BmsChangeOption(Key, OptOwnedStr<'r>),      // #CHANGEOPTION
+    BmsText(Key, MaybeOwned<'r>),               // #TEXT or #SONG
+    BmsOption(MaybeOwned<'r>),                  // #OPTION
+    BmsChangeOption(Key, MaybeOwned<'r>),       // #CHANGEOPTION
     BmsShorten(uint, f64),                      // #xxx02
-    BmsData(uint, Key, OptOwnedStr<'r>),        // #xxxyy:...
+    BmsData(uint, Key, MaybeOwned<'r>),         // #xxxyy:...
     BmsFlow(BmsFlowCommand),                    // flow commands (#RANDOM, #IF, #ENDIF etc.)
 }
 
-impl<'r> IntoSend<BmsCommand<'static>> for BmsCommand<'r> {
+impl<'r> BmsCommand<'r> {
     fn into_send(self) -> BmsCommand<'static> {
+        fn into_send_str<'r>(s: MaybeOwned<'r>) -> MaybeOwned<'static> {
+            s.into_owned().into_maybe_owned()
+        }
         match self {
-            BmsUnknown(s) => BmsUnknown(s.into_send()),
-            BmsTitle(s) => BmsTitle(s.into_send()),
-            BmsSubtitle(s) => BmsSubtitle(s.into_send()),
-            BmsGenre(s) => BmsGenre(s.into_send()),
-            BmsArtist(s) => BmsArtist(s.into_send()),
-            BmsSubartist(s) => BmsSubartist(s.into_send()),
-            BmsMaker(s) => BmsMaker(s.into_send()),
-            BmsComment(s) => BmsComment(s.into_send()),
-            BmsStageFile(s) => BmsStageFile(s.into_send()),
-            BmsBanner(s) => BmsBanner(s.into_send()),
-            BmsPathWAV(s) => BmsPathWAV(s.into_send()),
+            BmsUnknown(s) => BmsUnknown(into_send_str(s)),
+            BmsTitle(s) => BmsTitle(into_send_str(s)),
+            BmsSubtitle(s) => BmsSubtitle(into_send_str(s)),
+            BmsGenre(s) => BmsGenre(into_send_str(s)),
+            BmsArtist(s) => BmsArtist(into_send_str(s)),
+            BmsSubartist(s) => BmsSubartist(into_send_str(s)),
+            BmsMaker(s) => BmsMaker(into_send_str(s)),
+            BmsComment(s) => BmsComment(into_send_str(s)),
+            BmsStageFile(s) => BmsStageFile(into_send_str(s)),
+            BmsBanner(s) => BmsBanner(into_send_str(s)),
+            BmsPathWAV(s) => BmsPathWAV(into_send_str(s)),
             BmsBPM(bpm) => BmsBPM(bpm),
             BmsExBPM(key, bpm) => BmsExBPM(key, bpm),
             BmsPlayer(v) => BmsPlayer(v),
             BmsLanes(lanes) =>
-                BmsLanes(lanes.move_iter().map(|(lane,spec)| (lane,spec.into_send())).collect()),
+                BmsLanes(lanes.move_iter().map(|(lane,spec)| (lane,into_send_str(spec))).collect()),
             BmsPlayLevel(v) => BmsPlayLevel(v),
             BmsDifficulty(v) => BmsDifficulty(v),
             BmsRank(v) => BmsRank(v),
@@ -101,30 +103,30 @@ impl<'r> IntoSend<BmsCommand<'static>> for BmsCommand<'r> {
             BmsTotal(v) => BmsTotal(v),
             BmsLNType(lntype) => BmsLNType(lntype),
             BmsLNObj(key) => BmsLNObj(key),
-            BmsWAV(key, s) => BmsWAV(key, s.into_send()),
+            BmsWAV(key, s) => BmsWAV(key, into_send_str(s)),
             BmsWAVCmd(cmd, key, v) => BmsWAVCmd(cmd, key, v),
-            BmsExWAV(key, pan, vol, freq, s) => BmsExWAV(key, pan, vol, freq, s.into_send()),
+            BmsExWAV(key, pan, vol, freq, s) => BmsExWAV(key, pan, vol, freq, into_send_str(s)),
             BmsVolWAV(v) => BmsVolWAV(v),
-            BmsMIDIFile(s) => BmsMIDIFile(s.into_send()),
-            BmsBMP(key, s) => BmsBMP(key, s.into_send()),
-            BmsExBMP(key, argb, s) => BmsExBMP(key, argb, s.into_send()),
-            BmsBackBMP(s) => BmsBackBMP(s.into_send()),
+            BmsMIDIFile(s) => BmsMIDIFile(into_send_str(s)),
+            BmsBMP(key, s) => BmsBMP(key, into_send_str(s)),
+            BmsExBMP(key, argb, s) => BmsExBMP(key, argb, into_send_str(s)),
+            BmsBackBMP(s) => BmsBackBMP(into_send_str(s)),
             BmsBGA(dst, src, slice) => BmsBGA(dst, src, slice),
             BmsPoorBGA(poorbga) => BmsPoorBGA(poorbga),
             BmsSwBGA(key, fr, time, line, doloop, argb, pattern) =>
-                BmsSwBGA(key, fr, time, line, doloop, argb, pattern.into_send()),
+                BmsSwBGA(key, fr, time, line, doloop, argb, into_send_str(pattern)),
             BmsARGB(key, argb) => BmsARGB(key, argb),
-            BmsCharFile(s) => BmsCharFile(s.into_send()),
-            BmsVideoFile(s) => BmsVideoFile(s.into_send()),
-            BmsMovie(s) => BmsMovie(s.into_send()),
+            BmsCharFile(s) => BmsCharFile(into_send_str(s)),
+            BmsVideoFile(s) => BmsVideoFile(into_send_str(s)),
+            BmsMovie(s) => BmsMovie(into_send_str(s)),
             BmsCanvasSize(w, h) => BmsCanvasSize(w, h),
             BmsStop(key, dur) => BmsStop(key, dur),
             BmsStp(pos, dur) => BmsStp(pos, dur),
-            BmsText(key, s) => BmsText(key, s.into_send()),
-            BmsOption(opt) => BmsOption(opt.into_send()),
-            BmsChangeOption(key, opt) => BmsChangeOption(key, opt.into_send()),
+            BmsText(key, s) => BmsText(key, into_send_str(s)),
+            BmsOption(opt) => BmsOption(into_send_str(opt)),
+            BmsChangeOption(key, opt) => BmsChangeOption(key, into_send_str(opt)),
             BmsShorten(measure, shorten) => BmsShorten(measure, shorten),
-            BmsData(measure, chan, data) => BmsData(measure, chan, data.into_send()),
+            BmsData(measure, chan, data) => BmsData(measure, chan, into_send_str(data)),
             BmsFlow(flow) => BmsFlow(flow),
         }
     }
@@ -317,7 +319,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                 if_prefix!($prefix |line| { // #<command> <string>
                     let mut text = "";
                     if lex!(line; ws, str* -> text, ws*, !) {
-                        emit!($constr(text.into_opt_owned_str()));
+                        emit!($constr(text.into_maybe_owned()));
                     }
                 })
             );
@@ -326,7 +328,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                     let mut text = "";
                     if lex!(line; ws, str* -> text, ws*, !) {
                         diag!($diag at lineno);
-                        emit!($constr(text.into_opt_owned_str()));
+                        emit!($constr(text.into_maybe_owned()));
                     }
                 })
             );
@@ -362,7 +364,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                 if_prefix!($prefix |key, line| { // #<command>xx <string>
                     let mut text = "";
                     if lex!(line; str -> text, ws*, !) {
-                        emit!($constr(key, text.into_opt_owned_str()));
+                        emit!($constr(key, text.into_maybe_owned()));
                     }
                 })
             );
@@ -371,7 +373,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                     let mut text = "";
                     if lex!(line; str -> text, ws*, !) {
                         diag!($diag at lineno);
-                        emit!($constr(key, text.into_opt_owned_str()));
+                        emit!($constr(key, text.into_maybe_owned()));
                     }
                 })
             );
@@ -392,7 +394,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                     let $v = line.slice_from(prefix.len());
                     let _ = $v; // removes warning
                     $then;
-                    emit!(BmsUnknown($v.into_opt_owned_str())); // no more matching possible
+                    emit!(BmsUnknown($v.into_maybe_owned())); // no more matching possible
                 }
             });
             ($prefix:tt |$k:ident, $v:ident| $then:expr) => ({ // #<command>xx ...
@@ -409,7 +411,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                         let _ = $v; // ditto
                         $then;
                     }
-                    emit!(BmsUnknown(line.into_opt_owned_str())); // no more matching possible
+                    emit!(BmsUnknown(line.into_maybe_owned())); // no more matching possible
                 }
             })
         )
@@ -478,7 +480,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                 for i in iter::range_step(0, words.len(), 2) {
                     if words[i].len() != 2 { okay = false; break; }
                     match Key::from_str(words[i]) {
-                        Some(key) => { lanes.push((key, words[i+1].into_opt_owned_str())); }
+                        Some(key) => { lanes.push((key, words[i+1].into_maybe_owned())); }
                         None => { okay = false; break; }
                     }
                 }
@@ -535,7 +537,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                     if okay {
                         let mut text = "";
                         if lex!(line; ws, str -> text, ws*, !) {
-                            emit!(BmsExWAV(key, pan, vol, freq, text.into_opt_owned_str()));
+                            emit!(BmsExWAV(key, pan, vol, freq, text.into_maybe_owned()));
                         }
                     }
                 }
@@ -551,7 +553,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
             let mut argb = (0,0,0,0);
             let mut text = "";
             if lex!(line; ARGB -> argb, ws, str -> text, ws*, !) {
-                emit!(BmsExBMP(key, argb, text.into_opt_owned_str()));
+                emit!(BmsExBMP(key, argb, text.into_maybe_owned()));
             }
         })
 
@@ -593,7 +595,7 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                 let linekey = warn_on_partial_key!(linekey);
                 if doloop == 0 || doloop == 1 {
                     emit!(BmsSwBGA(key, fr, time, linekey, doloop == 1,
-                                   argb, pattern.into_opt_owned_str()));
+                                   argb, pattern.into_maybe_owned()));
                 }
             }
         })
@@ -681,11 +683,11 @@ fn each_bms_command_with_flow_(f: &mut Reader, opts: &BmsParserOptions,
                     emit!(BmsShorten(measure, shorten));
                 }
             } else {
-                emit!(BmsData(measure, chan, data.into_opt_owned_str()));
+                emit!(BmsData(measure, chan, data.into_maybe_owned()));
             }
         }
 
-        emit!(BmsUnknown(line.into_opt_owned_str()));
+        emit!(BmsUnknown(line.into_maybe_owned()));
     }
     ret
 }
