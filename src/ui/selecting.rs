@@ -4,7 +4,7 @@
 
 //! Song and pattern selection screen.
 
-use std::{str, cmp, io, os, comm, task, util};
+use std::{str, cmp, io, os, comm, task};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::rand::{rng, Rng};
@@ -365,7 +365,10 @@ impl SelectingScene {
     /// Creates a new `LoadingScene` from the currently selected entry. It will load the BMS file
     /// or use the preloaded data if possible.
     pub fn create_loading_scene(&mut self) -> Option<~Scene:> {
-        let preloaded = util::replace(&mut self.preloaded, PreloadAfter(0));
+        #[cfg(rust_nightly_20140206)] use std::util::replace;
+        #[cfg(not(rust_nightly_20140206))] use std::mem::replace;
+
+        let preloaded = replace(&mut self.preloaded, PreloadAfter(0));
         let PreprocessedBms { bms, infos, keyspec } =
             match preloaded {
                 Preloaded(data) => *data.preproc, // use the preloaded data if possible
