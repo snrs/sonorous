@@ -541,7 +541,7 @@ impl Scene for PlayingScene {
                 // cycles four times per measure, [0,40)
                 let width = if self.player.gauge < 0 {0}
                             else {self.player.gauge * 400 / MAXGAUGE - (beat * 40.0) as int};
-                let width = num::clamp(width, 5, 360);
+                let width = cmp::min(cmp::max(width, 5), 360);
                 let color = if self.player.gauge >= self.player.survival {RGB(0xc0,0,0)}
                             else {RGB(0xc0 - (beat * 160.0) as u8, 0, 0)};
                 d.rect(4.0, H-12.0, 4.0 + width as f32, H-4.0, color);
