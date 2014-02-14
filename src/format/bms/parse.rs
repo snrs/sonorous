@@ -5,8 +5,7 @@
 //! BMS parser.
 
 use std::{str, iter, f64, char};
-#[cfg(rust_nightly_20140206)] use util::std::str::maybe_owned::{MaybeOwned, IntoMaybeOwned};
-#[cfg(not(rust_nightly_20140206))] use std::str::MaybeOwned;
+use std::str::MaybeOwned;
 use std::rand::Rng;
 use encoding::EncodingRef;
 

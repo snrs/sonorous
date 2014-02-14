@@ -24,8 +24,7 @@
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
 
-#[cfg(rust_nightly_20140206)] extern mod extra;
-#[cfg(not(rust_nightly_20140206))] extern mod collections;
+extern mod collections;
 extern mod sync;
 extern mod native;
 

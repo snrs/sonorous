@@ -7,9 +7,7 @@
 use std::vec;
 use std::rc::Rc;
 use std::cell::RefCell;
-#[cfg(rust_nightly_20140206)] use extra::container::Deque;
-#[cfg(rust_nightly_20140206)] use extra::dlist::DList;
-#[cfg(not(rust_nightly_20140206))] use collections::{Deque, DList};
+use collections::{Deque, DList};
 
 use sdl::{event, get_ticks};
 use format::timeline::TimelineInfo;

@@ -188,7 +188,6 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
 #[cfg(test)]
 mod tests {
     use std::rand::rng;
-    use format::bms::diag::BmsMessage;
     use super::Preprocessor;
 
     macro_rules! with_pp(

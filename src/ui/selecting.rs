@@ -369,8 +369,7 @@ impl SelectingScene {
     /// Creates a new `LoadingScene` from the currently selected entry. It will load the BMS file
     /// or use the preloaded data if possible.
     pub fn create_loading_scene(&mut self) -> Option<~Scene:> {
-        #[cfg(rust_nightly_20140206)] use std::util::replace;
-        #[cfg(not(rust_nightly_20140206))] use std::mem::replace;
+        use std::mem::replace;
 
         let preloaded = replace(&mut self.preloaded, PreloadAfter(0));
         let PreprocessedBms { bms, infos, keyspec } =
