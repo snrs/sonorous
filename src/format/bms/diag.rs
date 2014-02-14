@@ -7,9 +7,6 @@
 /// The severity of messages. Every error message has one of the severity assigned.
 #[deriving(Eq,Ord,ToStr,Clone)]
 pub enum Severity {
-    /// Internal use only. This kind of diagnostics is not intended to be visible at all,
-    /// but exists in order to send metadata and callbacks via the diagnostics interface.
-    Internal,
     /// Various notes. This kind of diagnostics does not affect the game play at all but indicates
     /// possible incompatibilities or deprecated features.
     Note,
@@ -65,8 +62,6 @@ pub enum BmsMessage {
     BmsHasIFWithoutWhitespace,
     BmsHasIFEND,
     BmsHasENDNotFollowedByIF,
-
-    BmsUsesEncoding(&'static str, f64),
 }
 
 impl BmsMessage {
@@ -157,8 +152,6 @@ impl BmsMessage {
                 (Note, "#IFEND [sic] will be interpreted as #ENDIF."),
             BmsHasENDNotFollowedByIF =>
                 (Note, "#END not followed by IF will be interpreted as #ENDIF."),
-
-            BmsUsesEncoding(..) => (Internal, ""),
         }
     }
 
@@ -174,31 +167,5 @@ impl ToStr for BmsMessage {
         let (_, msg) = self.severity_and_message();
         msg.to_owned()
     }
-}
-
-/// A standard trait providing a callback for BMS messages.
-pub trait BmsMessageListener {
-    /// A callback function. The line is optional for global messages. The callback may return
-    /// `false` to stop the processing.
-    fn on_message(&mut self, line: Option<uint>, message: BmsMessage) -> bool;
-}
-
-impl<'r> BmsMessageListener for 'r |Option<uint>,BmsMessage| -> bool {
-    fn on_message(&mut self, line: Option<uint>, msg: BmsMessage) -> bool {
-        (*self)(line, msg)
-    }
-}
-
-impl<'r> BmsMessageListener for 'r |Option<uint>,BmsMessage| {
-    fn on_message(&mut self, line: Option<uint>, msg: BmsMessage) -> bool {
-        (*self)(line, msg); true
-    }
-}
-
-/// A built-in listener used for ignoring incoming messages.
-pub struct IgnoringMessageListener;
-
-impl BmsMessageListener for IgnoringMessageListener {
-    fn on_message(&mut self, _line: Option<uint>, _message: BmsMessage) -> bool { true }
 }
 

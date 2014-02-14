@@ -260,7 +260,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
         };
 
     let mut keyspec = ~KeySpec { split: 0, order: ~[], kinds: ~[None, ..NLANES] };
-    let parse_and_add = |keys: &str| -> Option<uint> {
+    let parse_and_add = |keyspec: &mut KeySpec, keys: &str| -> Option<uint> {
         match parse_key_spec(keys) {
             None | Some([]) => None,
             Some(left) => {
@@ -276,7 +276,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
     };
 
     if !leftkeys.is_empty() {
-        match parse_and_add(leftkeys) {
+        match parse_and_add(keyspec, leftkeys) {
             None => { return Err(format!("Invalid key spec for left hand side: {}", leftkeys)); }
             Some(nkeys) => { keyspec.split += nkeys; }
         }
@@ -284,7 +284,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
         return Err(~"No key model is specified using -k or -K");
     }
     if !rightkeys.is_empty() {
-        match parse_and_add(rightkeys) {
+        match parse_and_add(keyspec, rightkeys) {
             None => { return Err(format!("Invalid key spec for right hand side: {}", rightkeys)); }
             Some(nkeys) => { // no split panes except for Couple Play
                 if bms.meta.mode != CouplePlay { keyspec.split += nkeys; }

@@ -428,6 +428,98 @@ impl Player {
         self.beep.play(Some(0), 0);
     }
 
+    /// Returns true if the given lane is previously pressed and now unpressed.
+    /// When the virtual input is mapped to multiple actual inputs
+    /// it can update the internal state but still return false.
+    pub fn is_unpressed(&mut self, lane: Lane, continuous: bool, state: InputState) -> bool {
+        let lane = lane.to_uint();
+        if state == Neutral || (continuous && self.joystate[lane] != state) {
+            if continuous {
+                self.joystate[lane] = state;
+                true
+            } else {
+                if self.keymultiplicity[lane] > 0 {
+                    self.keymultiplicity[lane] -= 1;
+                }
+                (self.keymultiplicity[lane] == 0)
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Returns true if the given lane is previously unpressed and now pressed.
+    /// When the virtual input is mapped to multiple actual inputs
+    /// it can update the internal state but still return false.
+    pub fn is_pressed(&mut self, lane: Lane, continuous: bool, state: InputState) -> bool {
+        let lane = lane.to_uint();
+        if state != Neutral {
+            if continuous {
+                self.joystate[lane] = state;
+                true
+            } else {
+                self.keymultiplicity[lane] += 1;
+                (self.keymultiplicity[lane] == 1)
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Processes the unpress event at given lane:
+    /// checks if we need to issue a MISS grade.
+    pub fn process_unpress(&mut self, lane: Lane) {
+        // if LN grading is in progress and it is not within the threshold then
+        // MISS grade is issued
+        let nextlndone =
+            self.thru[lane.to_uint()].as_ref().and_then(|thru| {
+                thru.find_next_of_type(|obj| {
+                    obj.object_lane() == Some(lane) &&
+                    obj.is_lndone()
+                })
+            });
+        for p in nextlndone.iter() {
+            let delta = (p.loc.vtime - self.cur.loc.vtime) * self.gradefactor;
+            if num::abs(delta) < BAD_CUTOFF {
+                self.nograding[p.index] = true;
+            } else {
+                self.update_grade_to_miss();
+            }
+        }
+        self.thru[lane.to_uint()] = None;
+    }
+
+    /// Processes the press event at given lane:
+    /// plays the closest key sound if any, and grades the closest gradable object if possible.
+    pub fn process_press(&mut self, lane: Lane) {
+        // plays the closest key sound
+        let soundable =
+            self.cur.find_closest_of_type(VirtualTime, |obj| {
+                obj.object_lane() == Some(lane) && obj.is_soundable()
+            });
+        for p in soundable.iter() {
+            for &sref in p.sounds().iter() {
+                self.play_sound(sref, false);
+            }
+        }
+
+        // tries to grade the closest gradable object in the grading area
+        let gradable =
+            self.cur.find_closest_of_type(VirtualTime, |obj| {
+                obj.object_lane() == Some(lane) && obj.is_gradable()
+            });
+        for p in gradable.iter() {
+            if p.index >= self.checked.index && !self.nograding[p.index] && !p.is_lndone() {
+                let dist = (p.loc.vtime - self.cur.loc.vtime) * self.gradefactor;
+                if num::abs(dist) < BAD_CUTOFF {
+                    if p.is_lnstart() { self.thru[lane.to_uint()] = Some(p.clone()); }
+                    self.nograding[p.index] = true;
+                    self.update_grade_from_distance(dist);
+                }
+            }
+        }
+    }
+
     /// Updates the player state. Returns `true` if the caller should keep calling `tick`.
     pub fn tick(&mut self) -> bool {
         let opts_ = self.opts.clone();
@@ -446,9 +538,6 @@ impl Player {
         }
 
         self.now = get_ticks();
-        let mut cur = self.cur.clone();
-        let mut checked = self.checked.clone();
-        let mut thru = self.thru.clone();
         let prev = self.cur.clone();
 
         let curtime = (self.now - self.origintime) as f64 / 1000.0 + self.origin.loc.time;
@@ -456,11 +545,12 @@ impl Player {
             Some(ref reverse) => {
                 assert!(self.bpm.to_f64() < 0.0 && curtime >= reverse.loc.time);
                 let newpos = reverse.loc.pos + self.bpm.sec_to_measure(curtime - reverse.loc.time);
-                cur.seek(ActualPos, newpos - cur.loc.pos);
+                self.cur.seek(ActualPos, newpos - self.cur.loc.pos);
             }
             None => {
                 // apply object-like effects while advancing `self.cur`
-                for p in cur.mut_until(ActualTime, curtime - cur.loc.time) {
+                let mut cur = self.cur.clone();
+                for p in cur.mut_until(ActualTime, curtime - self.cur.loc.time) {
                     match p.data() {
                         BGM(sref) => {
                             self.play_sound_if_nonzero(sref, true);
@@ -487,13 +577,15 @@ impl Player {
                         _ => {}
                     }
                 }
+                self.cur = cur;
             }
         }
 
         // grade objects that have escaped the grading area
         if !opts.is_autoplay() {
-            for p in checked.mut_upto(&cur) {
-                let dist = (cur.loc.vtime - p.loc.vtime) * self.gradefactor;
+            let mut checked = self.checked.clone();
+            for p in checked.mut_upto(&self.cur) {
+                let dist = (self.cur.loc.vtime - p.loc.vtime) * self.gradefactor;
                 if dist < BAD_CUTOFF { break; }
 
                 if !self.nograding[p.index] {
@@ -501,16 +593,17 @@ impl Player {
                         let missable =
                             match p.data() {
                                 Visible(..) | LNStart(..) => true,
-                                LNDone(..) => thru[lane].is_some(),
+                                LNDone(..) => self.thru[lane].is_some(),
                                 _ => false,
                             };
                         if missable {
                             self.update_grade_to_miss();
-                            thru[lane] = None;
+                            self.thru[lane] = None;
                         }
                     }
                 }
             }
+            self.checked = checked;
         }
 
         // process inputs
@@ -537,91 +630,6 @@ impl Player {
 
             if opts.is_exclusive() { continue; }
 
-            // Returns true if the given lane is previously pressed and now unpressed.
-            // When the virtual input is mapped to multiple actual inputs it can update
-            // the internal state but still return false.
-            let is_unpressed = |lane: Lane, continuous: bool, state: InputState| {
-                let lane = lane.to_uint();
-                if state == Neutral || (continuous && self.joystate[lane] != state) {
-                    if continuous {
-                        self.joystate[lane] = state; true
-                    } else {
-                        if self.keymultiplicity[lane] > 0 {
-                            self.keymultiplicity[lane] -= 1;
-                        }
-                        (self.keymultiplicity[lane] == 0)
-                    }
-                } else {
-                    false
-                }
-            };
-
-            // Returns true if the given lane is previously unpressed and now pressed.
-            // When the virtual input is mapped to multiple actual inputs it can update
-            // the internal state but still return false.
-            let is_pressed = |lane: Lane, continuous: bool, state: InputState| {
-                let lane = lane.to_uint();
-                if state != Neutral {
-                    if continuous {
-                        self.joystate[lane] = state; true
-                    } else {
-                        self.keymultiplicity[lane] += 1;
-                        (self.keymultiplicity[lane] == 1)
-                    }
-                } else {
-                    false
-                }
-            };
-
-            let process_unpress = |lane: Lane| {
-                // if LN grading is in progress and it is not within the threshold then
-                // MISS grade is issued
-                for thru in thru[lane.to_uint()].iter() {
-                    let nextlndone = thru.find_next_of_type(|obj| {
-                        obj.object_lane() == Some(lane) && obj.is_lndone()
-                    });
-                    for p in nextlndone.iter() {
-                        let delta = (p.loc.vtime - cur.loc.vtime) * self.gradefactor;
-                        if num::abs(delta) < BAD_CUTOFF {
-                            self.nograding[p.index] = true;
-                        } else {
-                            self.update_grade_to_miss();
-                        }
-                    }
-                }
-                thru[lane.to_uint()] = None;
-            };
-
-            let process_press = |lane: Lane| {
-                // plays the closest key sound
-                let soundable =
-                    cur.find_closest_of_type(VirtualTime, |obj| {
-                        obj.object_lane() == Some(lane) && obj.is_soundable()
-                    });
-                for p in soundable.iter() {
-                    for &sref in p.sounds().iter() {
-                        self.play_sound(sref, false);
-                    }
-                }
-
-                // tries to grade the closest gradable object in the grading area
-                let gradable =
-                    cur.find_closest_of_type(VirtualTime, |obj| {
-                        obj.object_lane() == Some(lane) && obj.is_gradable()
-                    });
-                for p in gradable.iter() {
-                    if p.index >= checked.index && !self.nograding[p.index] && !p.is_lndone() {
-                        let dist = (p.loc.vtime - cur.loc.vtime) * self.gradefactor;
-                        if num::abs(dist) < BAD_CUTOFF {
-                            if p.is_lnstart() { thru[lane.to_uint()] = Some(p.clone()); }
-                            self.nograding[p.index] = true;
-                            self.update_grade_from_distance(dist);
-                        }
-                    }
-                }
-                true
-            };
-
             match (vkey, state) {
                 (SpeedDownInput, Positive) | (SpeedDownInput, Negative) => {
                     let current = self.targetspeed.unwrap_or(self.playspeed);
@@ -639,11 +647,11 @@ impl Player {
                 }
                 (LaneInput(lane), state) => {
                     if !opts.is_autoplay() {
-                        if is_unpressed(lane, continuous, state) {
-                            process_unpress(lane);
+                        if self.is_unpressed(lane, continuous, state) {
+                            self.process_unpress(lane);
                         }
-                        if is_pressed(lane, continuous, state) {
-                            process_press(lane);
+                        if self.is_pressed(lane, continuous, state) {
+                            self.process_press(lane);
                         }
                     }
                 }
@@ -654,17 +662,17 @@ impl Player {
 
         // process bombs
         if !opts.is_autoplay() {
-            for p in prev.upto(&cur) {
+            for p in prev.upto(&self.cur) {
                 match p.data() {
                     Bomb(lane,sref,damage) if self.key_pressed(lane) => {
                         // ongoing long note is not graded twice
-                        thru[lane.to_uint()] = None;
+                        self.thru[lane.to_uint()] = None;
                         for &sref in sref.iter() {
                             self.play_sound(sref, false);
                         }
                         if !self.update_grade_from_damage(damage) {
                             // instant death
-                            self.cur = cur.find_end();
+                            self.cur = self.cur.find_end();
                             return false;
                         }
                     }
@@ -672,10 +680,6 @@ impl Player {
                 }
             }
         }
-
-        self.cur = cur;
-        self.checked = checked;
-        self.thru = thru;
 
         // determines if we should keep playing
         if self.cur.index == self.timeline.borrow().objs.len() {

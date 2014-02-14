@@ -201,7 +201,8 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
     }
 
     let mut map = ::std::hashmap::HashMap::new();
-    let add_mapping = |kind: Option<KeyKind>, input: Input, vinput: VirtualInput| {
+    let add_mapping = |map: &mut KeyMap, kind: Option<KeyKind>,
+                       input: Input, vinput: VirtualInput| {
         if kind.map_or(true, |kind| vinput.active_in_key_spec(kind, keyspec)) {
             map.insert(input, vinput);
         }
@@ -218,7 +219,7 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
                 match parse_input(s) {
                     Some(input) => {
                         for &vinput in vinputs.iter() {
-                            add_mapping(kind, input, vinput);
+                            add_mapping(&mut map, kind, input, vinput);
                         }
                     }
                     None => {
@@ -240,7 +241,7 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
         let envvar2 = format!("ANGOLMOIS_{}{}_KEY", key.to_str(), kind.to_char());
         for s in getenv(envvar).or(getenv(envvar2)).iter() {
             match parse_input(*s) {
-                Some(input) => { add_mapping(Some(kind), input, LaneInput(lane)); }
+                Some(input) => { add_mapping(&mut map, Some(kind), input, LaneInput(lane)); }
                 None => { return Err(format!("Unknown key name in the environment variable {}: {}",
                                              envvar, *s)); }
             }

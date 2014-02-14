@@ -110,30 +110,39 @@ pub fn exename() -> ~str {
 }
 
 /// Dumps the recognized BMS commands. This is used by `-Z dump-bmscommand[-full]` debug options.
-pub fn dump_bmscommand<Listener:format::bms::diag::BmsMessageListener>(
-                                bmspath: &Path, full: bool,
-                                parseropts: &format::bms::parse::BmsParserOptions,
-                                callback: &mut Listener) {
+pub fn dump_bmscommand(bmspath: &Path, full: bool,
+                       parseropts: &format::bms::parse::ParserOptions,
+                       callback: |line: Option<uint>, msg: format::bms::diag::BmsMessage| -> bool) {
     use std::{io, rand};
-    use format::bms::parse::{BmsCommand, BmsUnknown};
-    use format::bms::parse::{each_bms_command_with_flow, each_bms_command};
+    use format::bms::diag::BmsMessage;
+    use format::bms::parse::{BmsUnknown, Parsed, Command, Message, Encoding};
+    use format::bms::parse::{Parser, PreprocessingParser};
 
     let mut f = match io::File::open(bmspath) {
         Ok(f) => f,
         Err(err) => die!("Couldn't load BMS file: {}", err)
     };
-    let blk = |_lineno: uint, cmd: BmsCommand| {
-        match cmd {
-            BmsUnknown(..) => {}
-            cmd => { util::console::printoutln(cmd.to_str()); }
+
+    // Rust: this cannot be iter_command that receives Iterator<Parsed<'r>> due to the lifetime
+    //       problem. I don't know why...
+    fn print_command<'r>(parsed: Parsed<'r>, callback: |Option<uint>, BmsMessage| -> bool) {
+        match parsed {
+            Command(_lineno, BmsUnknown(..)) => {}
+            Command(_lineno, cmd) => { util::console::printoutln(cmd.to_str()); }
+            Message(lineno, msg) => { callback(lineno, msg); }
+            Encoding(..) => {}
         }
-        true
-    };
+    }
+
     if full {
-        each_bms_command_with_flow(&mut f, parseropts, callback, blk);
+        for parsed in Parser::new(&mut f, parseropts).iter() {
+            print_command(parsed, |line, msg| callback(line, msg));
+        }
     } else {
         let mut r = rand::rng();
-        each_bms_command(&mut f, &mut r, parseropts, callback, blk);
+        for parsed in PreprocessingParser::new(&mut f, &mut r, parseropts).iter() {
+            print_command(parsed, |line, msg| callback(line, msg));
+        }
     }
 }
 
@@ -162,11 +171,9 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         let screen = Rc::new(RefCell::new(init_video(false, opts.fullscreen)));
         scene = SelectingScene::new(screen, bmspath, wrap_opts(opts)) as ~Scene:
     } else {
-        let mut callback = |line, msg| print_diag(line, msg);
-
         if opts.debug_dumpbmscommand || opts.debug_dumpbmscommandfull {
             dump_bmscommand(bmspath, opts.debug_dumpbmscommandfull,
-                            &opts.loader_options().parser, &mut callback);
+                            &opts.loader_options().parser, print_diag);
             ui::common::exit(0);
         }
 
@@ -174,7 +181,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         let mut r = rand::rng();
         let preproc = match io::File::open(bmspath) {
             Ok(mut f) => preprocess_bms(bmspath, &mut f, opts,
-                                        &mut r, &opts.loader_options(), &mut callback),
+                                        &mut r, &opts.loader_options(), print_diag),
             Err(err) => Err(err.to_str()),
         };
         let PreprocessedBms { bms, infos, keyspec } = match preproc {

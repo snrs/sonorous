@@ -6,7 +6,7 @@
 
 use std::{char, str, hashmap};
 use encoding::label::encoding_from_whatwg_label;
-use format::bms::load::BmsLoaderOptions;
+use format::bms::load::LoaderOptions;
 
 /// Game play modes.
 #[deriving(Eq,Clone)]
@@ -104,8 +104,8 @@ impl Options {
     pub fn has_screen(&self) -> bool { !self.is_exclusive() || self.has_bga() }
 
     /// Returns loader options.
-    pub fn loader_options(&self) -> BmsLoaderOptions {
-        let mut loaderopts = BmsLoaderOptions::new();
+    pub fn loader_options(&self) -> LoaderOptions {
+        let mut loaderopts = LoaderOptions::new();
         loaderopts.parser.force_encoding =
             self.encoding.as_ref().and_then(|s| encoding_from_whatwg_label(*s));
         loaderopts

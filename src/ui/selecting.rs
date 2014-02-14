@@ -8,7 +8,7 @@ use std::{str, cmp, io, os, comm, task};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::rand::{rng, Rng};
-use std::comm::{SharedChan, Port};
+use std::comm::{Chan, Port};
 use sync::RWArc;
 
 use sdl::{event, get_ticks};
@@ -44,10 +44,10 @@ pub struct PreprocessedBms {
 }
 
 /// Loads and preprocesses the BMS file from given options. Frontend routines should use this.
-pub fn preprocess_bms<R:Rng,Listener:bms::diag::BmsMessageListener>(
-                                bmspath: &Path, f: &mut Reader, opts: &Options, r: &mut R,
-                                loaderopts: &bms::load::BmsLoaderOptions,
-                                callback: &mut Listener) -> Result<~PreprocessedBms,~str> {
+pub fn preprocess_bms<'r,R:Rng>(
+        bmspath: &Path, f: &mut Reader, opts: &Options, r: &mut R,
+        loaderopts: &bms::load::LoaderOptions, callback: bms::load::Callback<'r>)
+                                -> Result<~PreprocessedBms,~str> {
     let bms = if_ok!(bms::load::load_bms(f, r, loaderopts, callback));
     let mut bms = bms.with_bmspath(bmspath);
     let keyspec = if_ok!(key_spec(&bms, opts.preset.clone(),
@@ -155,7 +155,7 @@ pub struct SelectingScene {
     /// A port for receiving worker messages.
     port: Port<Message>,
     /// A shared channel to which workers send messages.
-    chan: SharedChan<Message>,
+    chan: Chan<Message>,
     /// A shared cell, set to false when the scene is deactivated.
     keepgoing: RWArc<bool>,
 }
@@ -189,13 +189,14 @@ fn spawn_worker_task(name: ~str, body: proc(), on_error: proc()) {
 }
 
 /// Prints a diagnostic message to the screen.
-pub fn print_diag(line: Option<uint>, msg: bms::diag::BmsMessage) {
-    if msg.severity() == bms::diag::Internal { return; }
+/// This can be directly used as a parser message callback.
+pub fn print_diag(line: Option<uint>, msg: bms::diag::BmsMessage) -> bool {
     let atline = match line {
         Some(line) => format!(" at line {}", line),
         None => ~"",
     };
     warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
+    true
 }
 
 /// The maximum number of entries displayed in one screen.
@@ -208,7 +209,7 @@ impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
     pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> ~SelectingScene {
         let root = os::make_absolute(root);
-        let (port, chan) = SharedChan::new();
+        let (port, chan) = Chan::new();
         ~SelectingScene {
             screen: screen, opts: opts, root: root,
             files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
@@ -224,7 +225,7 @@ impl SelectingScene {
         let keepgoing = self.keepgoing.clone();
         spawn_worker_task(~"scanner", proc() {
             fn recur(search: &mut SearchContext, root: Path,
-                     chan: &SharedChan<Message>, keepgoing: &RWArc<bool>) -> bool {
+                     chan: &Chan<Message>, keepgoing: &RWArc<bool>) -> bool {
                 if !keepgoing.read(|v| *v) { return false; }
 
                 let (dirs, files) = {
@@ -252,7 +253,7 @@ impl SelectingScene {
         assert!(self.keepgoing.read(|&v| v));
         self.keepgoing.write(|v| { *v = false; });
         self.keepgoing = RWArc::new(true);
-        let (port, chan) = SharedChan::new();
+        let (port, chan) = Chan::new();
         self.port = port;
         self.chan = chan;
 
@@ -291,13 +292,16 @@ impl SelectingScene {
             let load_with_reader = |mut f| {
                 let mut r = rng();
                 let mut diags = ~[];
-                let mut callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
-                    diags.push((line, msg));
-                };
-
                 let loaderopts = opts.borrow().loader_options();
-                match preprocess_bms(&bmspath, &mut f, opts.borrow(),
-                                     &mut r, &loaderopts, &mut callback) {
+
+                let preproc = {
+                    let callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
+                        diags.push((line, msg));
+                        true
+                    };
+                    preprocess_bms(&bmspath, &mut f, opts.borrow(), &mut r, &loaderopts, callback)
+                };
+                match preproc {
                     Ok(preproc) => {
                         let banner = preproc.bms.meta.banner.clone();
                         let basepath = preproc.bms.meta.basepath.clone();
@@ -385,10 +389,9 @@ impl SelectingScene {
                         }
                     };
                     let mut r = rng();
-                    let mut callback = |line, msg| print_diag(line, msg);
                     let opts = self.opts.borrow();
                     let ret = preprocess_bms(path, &mut f as &mut Reader, opts, &mut r,
-                                             &opts.loader_options(), &mut callback);
+                                             &opts.loader_options(), print_diag);
                     match ret {
                         Ok(preproc) => *preproc,
                         Err(err) => { warn!("{}", err); return None; }
@@ -652,7 +655,6 @@ impl Scene for SelectingScene {
                             bms::diag::Fatal => RGB(0xff,0x40,0x40),
                             bms::diag::Warning => RGB(0xff,0xff,0x40),
                             bms::diag::Note => RGB(0x40,0xff,0xff),
-                            bms::diag::Internal => unreachable!(),
                         };
                         d.string(4.0, top, 1.0, LeftAligned, text, color);
                         top += 18.0;

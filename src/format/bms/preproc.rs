@@ -92,20 +92,18 @@ struct Block {
 }
 
 /// A generic BMS preprocessor. `T` is normally a BMS command, but there is no restriction.
-pub struct Preprocessor<'r,T,R,Listener> {
+pub struct Preprocessor<'r,T,R> {
     /// The current block informations.
     blocks: ~[Block],
     /// Random number generator.
     r: &'r mut R,
-    /// Message callback.
-    callback: &'r mut Listener,
 }
 
-impl<'r,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'r,T,R,Listener> {
-    /// Creates a new preprocessor with given RNG and message callback.
-    pub fn new(r: &'r mut R, callback: &'r mut Listener) -> Preprocessor<'r,T,R,Listener> {
+impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
+    /// Creates a new preprocessor with given RNG.
+    pub fn new(r: &'r mut R) -> Preprocessor<'r,T,R> {
         let blocks = ~[Block { val: None, state: Outside, skip: false }];
-        Preprocessor { blocks: blocks, r: r, callback: callback }
+        Preprocessor { blocks: blocks, r: r }
     }
 
     /// Returns true if any command which appears at this position should be ignored.
@@ -115,16 +113,19 @@ impl<'r,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'r,T,R,List
     }
 
     /// Adds the non-flow command (or any appropriate data) into the preprocessor.
+    /// `messages` will have zero or more messages inserted.
     /// `result` will have zero or more preprocessed commands (or any appropriate data) inserted.
-    pub fn feed_other(&mut self, cmd: T, result: &mut ~[T]) {
+    pub fn feed_other(&mut self, cmd: T, _messages: &mut ~[BmsMessage], result: &mut ~[T]) {
         if !self.inactive() {
             result.push(cmd);
         }
     }
 
     /// Adds the flow command into the preprocessor.
+    /// `messages` will have zero or more messages inserted.
     /// `result` will have zero or more preprocessed commands (or any appropriate data) inserted.
-    pub fn feed_flow(&mut self, lineno: Option<uint>, flow: &BmsFlowCommand, _result: &mut ~[T]) {
+    pub fn feed_flow(&mut self, _lineno: Option<uint>, flow: &BmsFlowCommand,
+                     messages: &mut ~[BmsMessage], _result: &mut ~[T]) {
         let inactive = self.inactive();
         match *flow {
             BmsRandom(val) | BmsSetRandom(val) => {
@@ -172,14 +173,15 @@ impl<'r,T:Send+Clone,R:Rng,Listener:BmsMessageListener> Preprocessor<'r,T,R,List
                 last.state = Outside;
             }
             BmsSwitch(..) | BmsSetSwitch(..) | BmsEndSw | BmsCase(..) | BmsSkip | BmsDef => {
-                self.callback.on_message(lineno, BmsHasUnimplementedFlow);
+                messages.push(BmsHasUnimplementedFlow);
             }
         }
     }
 
-    /// Terminates (and consumes) the preprocessor.
+    /// Terminates the preprocessor.
+    /// `messages` will have zero or more messages inserted.
     /// `result` will have zero or more preprocessed commands (or any appropriate data) inserted.
-    pub fn finish(self, _result: &mut ~[T]) {
+    pub fn finish(&mut self, _messages: &mut ~[BmsMessage], _result: &mut ~[T]) {
     }
 }
 
@@ -190,22 +192,25 @@ mod tests {
     use super::Preprocessor;
 
     macro_rules! with_pp(
-        ($pp:ident $blk:expr) => ({
+        (|$pp:ident| $blk:expr) => ({
             let mut r = rng();
-            let mut callback: |Option<uint>, BmsMessage| = |_, _| fail!("unexpected");
-            let mut $pp = Preprocessor::new(&mut r, &mut callback);
+            let mut $pp = Preprocessor::new(&mut r);
             $blk;
         })
     )
 
     #[test]
     fn test_no_flow() {
-        with_pp!(pp {
+        with_pp!(|pp| {
+            let mut messages = ~[];
             let mut out = ~[];
-            pp.feed_other(42, &mut out);
+            pp.feed_other(42, &mut messages, &mut out);
+            assert_eq!(messages.as_slice(), []);
             assert_eq!(out.as_slice(), [42]);
+            messages.clear();
             out.clear();
-            pp.finish(&mut out);
+            pp.finish(&mut messages, &mut out);
+            assert_eq!(messages.as_slice(), []);
             assert_eq!(out.as_slice(), []);
         })
     }

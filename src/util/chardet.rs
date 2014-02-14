@@ -43,6 +43,32 @@ use std::vec;
 use std::num::{Round, ln, exp};
 use util::maybe_owned::{MaybeOwnedVec, IntoMaybeOwnedVec};
 
+/// An iterator returned by `CharClass::classes`.
+pub struct CharClasses {
+    seen: ~[u64],
+    index: uint,
+}
+
+impl Iterator<uint> for CharClasses {
+    fn next(&mut self) -> Option<uint> {
+        let limit = self.seen.len() * 64;
+        let mut i = self.index;
+        while i < limit {
+            if (self.seen[i/64] >> (i%64)) & 1 == 1 {
+                self.index = i + 1;
+                return Some(i);
+            }
+            i += 1;
+        }
+        self.index = i;
+        None
+    }
+
+    fn size_hint(&self) -> (uint, Option<uint>) {
+        (0, Some(64 * self.seen.len() - self.index))
+    }
+}
+
 /// Character classes definitions for each language.
 pub trait CharClass {
     /// Number of character classes. The class #0 is always reserved for U+FFFD.
@@ -56,18 +82,19 @@ pub trait CharClass {
     /// See also `Trainer::add_default`.
     fn default_freq(&self, cc: uint) -> (f64,f64);
 
-    /// Loops over character classes present in given string. Currently returns distinct classes.
-    fn each_class(&self, s: &str, blk: |uint|) {
+    /// Returns an iterator over character classes present in given string.
+    /// Currently returns distinct classes.
+    fn classes(&self, s: &str) -> CharClasses {
         let mut seen = vec::from_elem((self.num_classes() + 63) / 64, 0u64);
         for c in s.chars() {
             match self.from_char(c) {
                 Some(cls) if (seen[cls/64] >> (cls%64)) & 1 == 0 => {
                     seen[cls/64] |= 1 << (cls%64);
-                    blk(cls);
                 }
                 _ => {}
             }
         }
+        CharClasses { seen: seen, index: 0 }
     }
 }
 
@@ -187,10 +214,10 @@ impl<CC:CharClass> Trainer<CC> {
     pub fn train(&mut self, s: &str, positive: bool) {
         let posw = if positive {1.0} else {0.0};
         let negw = if positive {0.0} else {1.0};
-        self.cc.each_class(s, |cls| {
+        for cls in self.cc.classes(s) {
             let (pos, neg) = self.weights[cls];
             self.weights[cls] = (pos + posw, neg + negw);
-        });
+        }
     }
 
     /// Scales the frequencies with given factor.
@@ -250,9 +277,9 @@ impl<CC:CharClass> Classifier<CC> {
     /// Bigger the value, unlikely the string being encoded in given encoding.
     pub fn raw_confidence(&self, s: &str) -> i32 {
         let mut confidence = 0;
-        self.cc.each_class(s, |cls| {
+        for cls in self.cc.classes(s) {
             confidence += self.logprobs.as_slice()[cls];
-        });
+        }
         confidence
     }
 
