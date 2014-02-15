@@ -19,7 +19,7 @@
 #[crate_type = "bin"];
 
 #[no_uv];
-#[feature(macro_rules, globs)];
+#[feature(macro_rules, globs, link_args)];
 
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
@@ -34,6 +34,13 @@ extern mod sdl_mixer;
 extern mod opengles;
 extern mod encoding;
 extern mod sqlite3;
+
+#[doc(hidden)] mod _linkhacks {
+    // this forces `-lc` to be appended to the end of linker arguments.
+    // it is important since `-lc` is no longer implied by recent rustc due to `-nodefaultlibs`,
+    // thus `-lsqlite3` should be before `-lc` in order to use libc's symbols.
+    #[cfg(not(target_os = "win32"))] #[link_args="-lc"] extern {}
+}
 
 #[macro_escape] pub mod util {
     /*!
