@@ -5,7 +5,9 @@ LIB = libsqlite3.a
 
 AR ?= ar
 CC ?= gcc
-CFLAGS ?= -Os -fPIC
+# 20140215 temporary fix to avoid the travis build failure
+#CFLAGS ?= -Os -fPIC
+CFLAGS ?= -Os -fPIC -DSQLITE_DISABLE_LFS
 
 .PHONY: all clean
 
