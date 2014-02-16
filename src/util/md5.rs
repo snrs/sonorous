@@ -388,7 +388,7 @@ impl<'r> ToHex for &'r [u8] {
 
 #[cfg(test)]
 mod tests {
-    extern mod extra;
+    extern crate extra;
     use super::{MD5, ToHex};
 
     #[test]

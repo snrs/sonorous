@@ -24,16 +24,16 @@
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
 
-extern mod collections;
-extern mod sync;
-extern mod native;
+extern crate collections;
+extern crate sync;
+extern crate native;
 
-extern mod sdl;
-extern mod sdl_image;
-extern mod sdl_mixer;
-extern mod opengles;
-extern mod encoding;
-extern mod sqlite3;
+extern crate sdl;
+extern crate sdl_image;
+extern crate sdl_mixer;
+extern crate opengles;
+extern crate encoding;
+extern crate sqlite3;
 
 #[doc(hidden)] mod _linkhacks {
     // this forces `-lc` to be appended to the end of linker arguments.
