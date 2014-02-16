@@ -8,13 +8,16 @@
 
 //! Abstracted graphical screen.
 
+use std::rc::Rc;
 use std::vec::MutableCloneableVector;
 use sdl::video;
-use gfx::gl::{VertexBuffer, Texture2D, FrameBuffer};
-use gfx::draw::{ProgramForShades, ProgramForTextures, ShadedDrawing, TexturedDrawing};
-use gfx::bmfont::{Font, FontDrawingUtils, ShadedFontDrawing};
 use gl = opengles::gl2;
-use opengles::gl2::{GLint, GLfloat, GLsizei};
+
+use gfx::color::Blend;
+use gfx::gl::{VertexBuffer, Texture2D, FrameBuffer};
+use gfx::draw::{ProgramForShades, ShadedDrawing, ShadedDrawingTraits};
+use gfx::draw::{ProgramForTextures, TexturedDrawing, TexturedDrawingTraits};
+use gfx::bmfont::{Font, FontDrawingUtils, Alignment};
 
 #[cfg(target_os="win32")] use opengles::egl;
 #[cfg(target_os="win32")] use ext::sdl::syswm;
@@ -137,13 +140,13 @@ pub struct Screen {
     /// OpenGL program for textured triangles.
     program_for_textures: ProgramForTextures,
     /// The last viewport set via `set_viewport`.
-    last_viewport: (GLint, GLint, GLsizei, GLsizei),
+    last_viewport: (gl::GLint, gl::GLint, gl::GLsizei, gl::GLsizei),
     /// The last projection matrix set via `set_projection_*`.
-    last_projection: [GLfloat, ..16],
+    last_projection: [gl::GLfloat, ..16],
     /// The last local transform matrix set via `set_local_transform`.
-    last_local_transform: [GLfloat, ..9],
+    last_local_transform: [gl::GLfloat, ..9],
     /// Shared bitmap font.
-    font: Font,
+    font: Rc<Font>,
 }
 
 impl Screen {
@@ -182,17 +185,18 @@ impl Screen {
                                   program_for_shades: program_for_shades,
                                   program_for_textures: program_for_textures,
                                   last_viewport: (0, 0, 0, 0), last_projection: [0.0, ..16],
-                                  last_local_transform: [0.0, ..9], font: Font::new() };
+                                  last_local_transform: [0.0, ..9],
+                                  font: Rc::new(Font::new()) };
         screen.set_local_transform([1.0, 0.0, 0.0,
                                     0.0, 1.0, 0.0,
                                     0.0, 0.0, 1.0]);
-        screen.set_viewport(0, 0, width as GLsizei, height as GLsizei);
+        screen.set_viewport(0, 0, width as gl::GLsizei, height as gl::GLsizei);
         screen.set_projection_ortho(0.0, width as f32, 0.0, height as f32);
         Ok(screen)
     }
 
     /// Sets the local transform matrix. `matrix` should be a 3x3 row-major matrix.
-    pub fn set_local_transform(&mut self, matrix: &[GLfloat]) {
+    pub fn set_local_transform(&mut self, matrix: &[gl::GLfloat]) {
         assert!(matrix.len() == 9);
         self.program_for_shades.bind();
         self.program_for_shades.local_transform.set_matrix_3f(false, matrix);
@@ -202,13 +206,14 @@ impl Screen {
     }
 
     /// Sets the viewport, which translates [-1,1]x[-1,1] coordinates into the window coordinates.
-    pub fn set_viewport(&mut self, left: GLint, top: GLint, width: GLsizei, height: GLsizei) {
+    pub fn set_viewport(&mut self, left: gl::GLint, top: gl::GLint,
+                        width: gl::GLsizei, height: gl::GLsizei) {
         gl::viewport(left, top, width, height);
         self.last_viewport = (left, top, width, height);
     }
 
     /// Sets the projection matrix. `matrix` should be a 4x4 row-major matrix.
-    pub fn set_projection(&mut self, matrix: &[GLfloat]) {
+    pub fn set_projection(&mut self, matrix: &[gl::GLfloat]) {
         assert!(matrix.len() == 16);
         self.program_for_shades.bind();
         self.program_for_shades.projection.set_matrix_4f(false, matrix);
@@ -242,7 +247,9 @@ impl Screen {
     }
 
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
-    pub fn swap_buffers(&self) { self.glstate.swap_buffers(); }
+    pub fn swap_buffers(&self) {
+        self.glstate.swap_buffers();
+    }
 
     /// Clears the whole screen.
     pub fn clear(&self) {
@@ -254,63 +261,142 @@ impl Screen {
     pub fn scissor(&self, x: int, y: int, w: uint, h: uint, f: ||) {
         assert!(!gl::is_enabled(gl::SCISSOR_TEST));
         gl::enable(gl::SCISSOR_TEST);
-        gl::scissor(x as GLint, y as GLint, w as GLsizei, h as GLsizei);
+        gl::scissor(x as gl::GLint, y as gl::GLint, w as gl::GLsizei, h as gl::GLsizei);
         f();
         gl::disable(gl::SCISSOR_TEST);
     }
 
     /// Draws shaded primitives to the screen. The block receives a mutable reference to
     /// `util::gl::ShadedDrawing`, to which it should add points.
-    pub fn draw_shaded_prim(&self, prim: gl::GLenum, f: |&mut ShadedDrawing|) {
+    pub fn draw_shaded_prim(&mut self, prim: gl::GLenum, f: |&mut ShadedDrawing|) {
         let mut drawing = ShadedDrawing::new(prim);
         f(&mut drawing);
-        drawing.draw_prim(&self.program_for_shades, &self.vertexbuf);
+        drawing.draw_to(self);
     }
 
     /// Same as `draw_shaded_prim` but with a default font.
-    pub fn draw_shaded_prim_with_font(&self, prim: gl::GLenum, f: |&mut ShadedFontDrawing|) {
-        let mut drawing = ShadedDrawing::new(prim);
-        drawing.with_font(&self.font, f);
-        drawing.draw_prim(&self.program_for_shades, &self.vertexbuf);
+    pub fn draw_shaded_prim_with_font(&mut self, prim: gl::GLenum, f: |&mut ShadedFontDrawing|) {
+        let mut drawing = ShadedFontDrawing::new(prim, self.font.clone());
+        f(&mut drawing);
+        drawing.draw_to(self);
     }
 
     /// Draws shaded triangles to the screen. The block receives a mutable reference to
     /// `util::gl::ShadedDrawing`, to which it should add points.
-    pub fn draw_shaded(&self, f: |&mut ShadedDrawing|) {
+    pub fn draw_shaded(&mut self, f: |&mut ShadedDrawing|) {
         self.draw_shaded_prim(gl::TRIANGLES, f)
     }
 
     /// Same as `draw_shaded` but with a default font.
-    pub fn draw_shaded_with_font(&self, f: |&mut ShadedFontDrawing|) {
+    pub fn draw_shaded_with_font(&mut self, f: |&mut ShadedFontDrawing|) {
         self.draw_shaded_prim_with_font(gl::TRIANGLES, f)
     }
 
     /// Draws textured primitives to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
-    pub fn draw_textured_prim(&self, prim: gl::GLenum, texture: &Texture2D,
+    pub fn draw_textured_prim(&mut self, prim: gl::GLenum, texture: &Texture2D,
                               f: |&mut TexturedDrawing|) {
         let mut drawing = TexturedDrawing::new(prim, texture);
         f(&mut drawing);
-        drawing.draw_prim(&self.program_for_textures, &self.vertexbuf, texture);
+        drawing.draw_texture_to(self, texture);
     }
 
     /// Draws textured triangles to the screen. The block receives a mutable reference to
     /// `util::gl::TexturedDrawing`, to which it should add points.
-    pub fn draw_textured(&self, texture: &Texture2D, f: |&mut TexturedDrawing|) {
+    pub fn draw_textured(&mut self, texture: &Texture2D, f: |&mut TexturedDrawing|) {
         self.draw_textured_prim(gl::TRIANGLES, texture, f)
     }
 
     /// Renders to given frame buffer. The frame buffer should be complete.
     /// The viewport is temporarily reset to dimensions of the frame buffer in given block.
-    pub fn render_to_framebuffer(&mut self, framebuf: &FrameBuffer, f: |&Screen|) {
+    pub fn render_to_framebuffer(&mut self, framebuf: &FrameBuffer, f: |&mut Screen|) {
         assert!(framebuf.complete());
         self.locally(|screen| {
             framebuf.bind();
-            screen.set_viewport(0, 0, framebuf.width as GLsizei, framebuf.height as GLsizei);
+            screen.set_viewport(0, 0, framebuf.width as gl::GLsizei,
+                                      framebuf.height as gl::GLsizei);
             screen.set_projection_ortho(0.0, framebuf.width as f32, framebuf.height as f32, 0.0);
             f(screen);
             FrameBuffer::unbind();
         })
+    }
+}
+
+/// Things that can be drawn to the screen at a time.
+/// This trait implies the knowledge about the internals of screen (e.g. shaders).
+pub trait ScreenDraw {
+    /// Draws the thing into the screen.
+    fn draw_to(self, screen: &mut Screen);
+}
+
+/// Same to `ScreenDraw` but expects the texture.
+pub trait ScreenTexturedDraw {
+    /// Draws the thing into the screen with given texture.
+    fn draw_texture_to(self, screen: &mut Screen, texture: &Texture2D);
+}
+
+/// Analogue to `ShadedDrawing` with font drawing interfaces.
+pub struct ShadedFontDrawing {
+    drawing: ShadedDrawing,
+    font: Rc<Font>,
+}
+
+impl ShadedFontDrawing {
+    /// Creates a new state.
+    pub fn new(prim: gl::GLenum, font: Rc<Font>) -> ShadedFontDrawing {
+        assert!(prim == gl::TRIANGLES, "only triangles are supported for ShadedFontDrawing");
+        ShadedFontDrawing { drawing: ShadedDrawing::new(prim), font: font }
+    }
+
+    /// Draws a glyph with given position and color (possibly gradient). This method is
+    /// distinct from `glyph` since the glyph #95 is used for the tick marker
+    /// (character code -1 in C).
+    pub fn glyph<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32, glyph: uint, color: ColorT) {
+        self.drawing.glyph(self.font.borrow(), x, y, zoom, glyph, color)
+    }
+
+    /// Draws a character with given position and color.
+    pub fn char<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32, c: char, color: ColorT) {
+        self.drawing.char(self.font.borrow(), x, y, zoom, c, color)
+    }
+
+    /// Draws a string with given position, alignment and color.
+    pub fn string<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32,
+                                align: Alignment, s: &str, color: ColorT) {
+        self.drawing.string(self.font.borrow(), x, y, zoom, align, s, color)
+    }
+}
+
+impl ShadedDrawingTraits for ShadedFontDrawing {
+    fn point_rgba(&mut self, x: f32, y: f32, rgba: (u8,u8,u8,u8)) {
+        self.drawing.point_rgba(x, y, rgba)
+    }
+    fn line_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
+                 rgba1: (u8,u8,u8,u8), rgba2: (u8,u8,u8,u8)) {
+        self.drawing.line_rgba(x1, y1, x2, y2, rgba1, rgba2)
+    }
+    fn triangle_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32,
+                     rgba1: (u8,u8,u8,u8), rgba2: (u8,u8,u8,u8), rgba3: (u8,u8,u8,u8)) {
+        self.drawing.triangle_rgba(x1, y1, x2, y2, x3, y3, rgba1, rgba2, rgba3)
+    }
+    fn rect_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, rgba11: (u8,u8,u8,u8),
+                 rgba12: (u8,u8,u8,u8), rgba21: (u8,u8,u8,u8), rgba22: (u8,u8,u8,u8)) {
+        self.drawing.rect_rgba(x1, y1, x2, y2, rgba11, rgba12, rgba21, rgba22)
+    }
+    fn draw_prim(self, program: &ProgramForShades, vertexbuf: &VertexBuffer) {
+        self.drawing.draw_prim(program, vertexbuf);
+    }
+}
+
+impl<T:ShadedDrawingTraits> ScreenDraw for T {
+    fn draw_to(self, screen: &mut Screen) {
+        self.draw_prim(&screen.program_for_shades, &screen.vertexbuf);
+    }
+}
+
+impl<T:TexturedDrawingTraits> ScreenTexturedDraw for T {
+    fn draw_texture_to(self, screen: &mut Screen, texture: &Texture2D) {
+        self.draw_prim(&screen.program_for_textures, &screen.vertexbuf, texture);
     }
 }
 

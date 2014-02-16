@@ -171,22 +171,6 @@ impl ShadedDrawing {
     pub fn new(prim: GLenum) -> ShadedDrawing {
         ShadedDrawing { prim: prim, vertices: ~[] }
     }
-
-    /// Draws specified primitives. The suitable program and scratch VBO should be supplied.
-    pub fn draw_prim(self, program: &ProgramForShades, vertexbuf: &VertexBuffer) {
-        program.bind();
-        vertexbuf.bind();
-
-        // TODO there is no `offsetof` or similar
-        let rowsize = mem::size_of::<(f32,f32,u8,u8,u8,u8)>() as GLint;
-        let coloroffset = mem::size_of::<(f32,f32)>() as GLuint;
-        program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
-        program.color.define_pointer_u8(4, true, rowsize, coloroffset);
-
-        let ShadedDrawing { prim, vertices } = self;
-        vertexbuf.upload(vertices, gl::DYNAMIC_DRAW);
-        gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
-    }
 }
 
 /// Common trait for shaded rendering interface.
@@ -242,6 +226,9 @@ pub trait ShadedDrawingTraits {
         let rgba = to_rgba(c);
         self.rect_rgba(x1, y1, x2, y2, rgba, rgba, rgba, rgba);
     }
+
+    /// Draws specified primitives. The suitable program and scratch VBO should be supplied.
+    fn draw_prim(self, program: &ProgramForShades, vertexbuf: &VertexBuffer);
 }
 
 impl ShadedDrawingTraits for ShadedDrawing {
@@ -273,6 +260,21 @@ impl ShadedDrawingTraits for ShadedDrawing {
                                     (x2, y2, r22, g22, b22, a22), (x2, y1, r21, g21, b21, a21)]);
         }
     }
+
+    fn draw_prim(self, program: &ProgramForShades, vertexbuf: &VertexBuffer) {
+        program.bind();
+        vertexbuf.bind();
+
+        // TODO there is no `offsetof` or similar
+        let rowsize = mem::size_of::<(f32,f32,u8,u8,u8,u8)>() as GLint;
+        let coloroffset = mem::size_of::<(f32,f32)>() as GLuint;
+        program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
+        program.color.define_pointer_u8(4, true, rowsize, coloroffset);
+
+        let ShadedDrawing { prim, vertices } = self;
+        vertexbuf.upload(vertices, gl::DYNAMIC_DRAW);
+        gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
+    }
 }
 
 /// A state for non-immediate textured rendering. This is not intended for the general use, see
@@ -291,28 +293,6 @@ impl TexturedDrawing {
         let height_recip = 1.0 / (texture.height as f32);
         TexturedDrawing { width_recip: width_recip, height_recip: height_recip,
                           prim: prim, vertices: ~[] }
-    }
-
-    /// Draws specified primitives with given texture. The suitable program and scratch VBO
-    /// should be supplied.
-    pub fn draw_prim(self, program: &ProgramForTextures,
-                     vertexbuf: &VertexBuffer, texture: &Texture2D) {
-        program.bind();
-        vertexbuf.bind();
-
-        // TODO there is no `offsetof` or similar
-        let rowsize = mem::size_of::<(f32,f32,f32,f32,u8,u8,u8,u8)>() as GLint;
-        let texoffset = mem::size_of::<(f32,f32)>() as GLuint;
-        let coloroffset = texoffset + mem::size_of::<(f32,f32)>() as GLuint;
-        program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
-        program.texture_coord.define_pointer_f32(2, false, rowsize, texoffset);
-        program.color.define_pointer_u8(4, true, rowsize, coloroffset);
-        program.sampler.set_1i(0);
-        texture.bind(0);
-
-        let TexturedDrawing { prim, vertices, .. } = self;
-        vertexbuf.upload(vertices, gl::DYNAMIC_DRAW);
-        gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }
 
@@ -371,6 +351,11 @@ pub trait TexturedDrawingTraits {
     fn rect(&mut self, x1: f32, y1: f32, x2: f32, y2: f32) {
         self.rect_st(x1, y1, x2, y2, (0.0, 0.0), (1.0, 1.0));
     }
+
+    /// Draws specified primitives with given texture. The suitable program and scratch VBO
+    /// should be supplied.
+    fn draw_prim(self, program: &ProgramForTextures,
+                 vertexbuf: &VertexBuffer, texture: &Texture2D);
 }
 
 impl TexturedDrawingTraits for TexturedDrawing {
@@ -392,6 +377,26 @@ impl TexturedDrawingTraits for TexturedDrawing {
             self.vertices.push_all([(x1, y1, s1, t1, r, g, b, a), (x1, y2, s1, t2, r, g, b, a),
                                     (x2, y2, s2, t2, r, g, b, a), (x2, y1, s2, t1, r, g, b, a)]);
         }
+    }
+
+    fn draw_prim(self, program: &ProgramForTextures,
+                 vertexbuf: &VertexBuffer, texture: &Texture2D) {
+        program.bind();
+        vertexbuf.bind();
+
+        // TODO there is no `offsetof` or similar
+        let rowsize = mem::size_of::<(f32,f32,f32,f32,u8,u8,u8,u8)>() as GLint;
+        let texoffset = mem::size_of::<(f32,f32)>() as GLuint;
+        let coloroffset = texoffset + mem::size_of::<(f32,f32)>() as GLuint;
+        program.vertex_position.define_pointer_f32(2, false, rowsize, 0);
+        program.texture_coord.define_pointer_f32(2, false, rowsize, texoffset);
+        program.color.define_pointer_u8(4, true, rowsize, coloroffset);
+        program.sampler.set_1i(0);
+        texture.bind(0);
+
+        let TexturedDrawing { prim, vertices, .. } = self;
+        vertexbuf.upload(vertices, gl::DYNAMIC_DRAW);
+        gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }
 

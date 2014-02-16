@@ -5,7 +5,8 @@
 //! Skin-related facilities. For now it contains various utilities for rendering.
 
 use gfx::color::Blend;
-use gfx::bmfont::{NCOLUMNS, ShadedFontDrawing, Alignment, LeftAligned, Centered, RightAligned};
+use gfx::bmfont::{NCOLUMNS, Alignment, LeftAligned, Centered, RightAligned};
+use gfx::screen::{ShadedFontDrawing};
 
 /// Extensions to `ShadedFontDrawing`.
 pub trait ShadedFontDrawingAdditions {
@@ -15,7 +16,7 @@ pub trait ShadedFontDrawingAdditions {
                                               color: ColorT, zerocolor: ZeroColorT);
 }
 
-impl<'r> ShadedFontDrawingAdditions for ShadedFontDrawing<'r> {
+impl ShadedFontDrawingAdditions for ShadedFontDrawing {
     fn numeral<ColorT:Blend,ZeroColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32,
                                               align: Alignment, s: &str,
                                               color: ColorT, zerocolor: ZeroColorT) {

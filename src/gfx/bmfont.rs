@@ -239,12 +239,6 @@ impl Font {
     }
 }
 
-/// Analogue to `ShadedDrawing` with font drawing interfaces.
-pub struct ShadedFontDrawing<'r> {
-    drawing: &'r mut ShadedDrawing,
-    font: &'r Font,
-}
-
 /// Extensions to `ShadedDrawing` that can be used to render bitmap fonts.
 pub trait FontDrawingUtils {
     /// Draws a glyph with given position and color (possibly gradient). This method is
@@ -260,9 +254,6 @@ pub trait FontDrawingUtils {
     /// Draws a string with given position, alignment and color.
     fn string<ColorT:Blend>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
                             align: Alignment, s: &str, color: ColorT);
-
-    /// Creates a proxy drawing with a given font.
-    fn with_font(&mut self, font: &Font, f: |&mut ShadedFontDrawing|);
 }
 
 impl FontDrawingUtils for ShadedDrawing {
@@ -356,49 +347,6 @@ impl FontDrawingUtils for ShadedDrawing {
             self.char(font, x, y, zoom, c, color.clone());
             x += NCOLUMNS as f32 * zoom;
         }
-    }
-
-    fn with_font(&mut self, font: &Font, f: |&mut ShadedFontDrawing|) {
-        let mut drawing = ShadedFontDrawing { drawing: self, font: font };
-        f(&mut drawing)
-    }
-}
-
-impl<'r> ShadedFontDrawing<'r> {
-    /// Draws a glyph with given position and color (possibly gradient). This method is
-    /// distinct from `glyph` since the glyph #95 is used for the tick marker
-    /// (character code -1 in C).
-    pub fn glyph<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32, glyph: uint, color: ColorT) {
-        self.drawing.glyph(self.font, x, y, zoom, glyph, color)
-    }
-
-    /// Draws a character with given position and color.
-    pub fn char<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32, c: char, color: ColorT) {
-        self.drawing.char(self.font, x, y, zoom, c, color)
-    }
-
-    /// Draws a string with given position, alignment and color.
-    pub fn string<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32,
-                                align: Alignment, s: &str, color: ColorT) {
-        self.drawing.string(self.font, x, y, zoom, align, s, color)
-    }
-}
-
-impl<'r> ShadedDrawingTraits for ShadedFontDrawing<'r> {
-    fn point_rgba(&mut self, x: f32, y: f32, rgba: (u8,u8,u8,u8)) {
-        self.drawing.point_rgba(x, y, rgba)
-    }
-    fn line_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
-                 rgba1: (u8,u8,u8,u8), rgba2: (u8,u8,u8,u8)) {
-        self.drawing.line_rgba(x1, y1, x2, y2, rgba1, rgba2)
-    }
-    fn triangle_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32,
-                     rgba1: (u8,u8,u8,u8), rgba2: (u8,u8,u8,u8), rgba3: (u8,u8,u8,u8)) {
-        self.drawing.triangle_rgba(x1, y1, x2, y2, x3, y3, rgba1, rgba2, rgba3)
-    }
-    fn rect_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, rgba11: (u8,u8,u8,u8),
-                 rgba12: (u8,u8,u8,u8), rgba21: (u8,u8,u8,u8), rgba22: (u8,u8,u8,u8)) {
-        self.drawing.rect_rgba(x1, y1, x2, y2, rgba11, rgba12, rgba21, rgba22)
     }
 }
 
