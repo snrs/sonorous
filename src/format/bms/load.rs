@@ -253,8 +253,8 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             &Some((_, ref mut slice)) => {
                 slice.sx = cmp::max(slice.sx, 0);
                 slice.sy = cmp::max(slice.sy, 0);
-                slice.w = cmp::min(cmp::max(slice.w, 0), canvassize.n0());
-                slice.h = cmp::min(cmp::max(slice.h, 0), canvassize.n1());
+                slice.w = cmp::min(cmp::max(slice.w, 0), canvassize.val0());
+                slice.h = cmp::min(cmp::max(slice.h, 0), canvassize.val1());
             }
             &None => {}
         }
