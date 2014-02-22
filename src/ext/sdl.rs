@@ -45,7 +45,7 @@ pub mod syswm {
             hglrc: INVALID_HANDLE_VALUE as HANDLE,
         };
         unsafe {
-            if ll::SDL_GetWMInfo(::std::ptr::to_mut_unsafe_ptr(&mut wminfo)) == 0 {
+            if ll::SDL_GetWMInfo(&mut wminfo) == 0 {
                 None
             } else {
                 Some(wminfo)

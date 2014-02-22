@@ -113,7 +113,8 @@ pub fn get_path_from_dialog() -> Option<Path> {
                     Some(idx) => buf.slice(0, idx),
                     None => buf.as_slice()
                 };
-                Some(Path::new(str::from_utf16(path)))
+                // path may result in an invaild UTF-16 path (but valid UCS-2 one)
+                str::from_utf16(path).map(Path::new)
             } else {
                 None
             }
