@@ -45,7 +45,7 @@ use std::vec::bytes;
 use std::vec::bytes::MutableByteVector;
 
 /// A fast integer type which is at least 32 bits long.
-pub type u32plus = u32;
+#[allow(non_camel_case_types)] pub type u32plus = u32;
 
 /// Internal MD5 state that processes the raw data block (64 bytes long).
 struct MD5State {

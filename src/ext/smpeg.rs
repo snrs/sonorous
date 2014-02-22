@@ -14,6 +14,8 @@ use sdl::video::Surface;
 pub use self::ll::{SMPEGstatus, SMPEG_ERROR, SMPEG_STOPPED, SMPEG_PLAYING};
 
 pub mod ll {
+    #[allow(non_camel_case_types)];
+
     use std::libc::{c_void, c_int, c_char, c_float, c_double};
     use sdl::video::ll::{SDL_RWops, SDL_Surface};
     use sdl::audio::ll::SDL_AudioSpec;
