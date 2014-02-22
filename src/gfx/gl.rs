@@ -385,7 +385,7 @@ impl Texture2D {
     pub fn from_prepared_surface(prepared: &PreparedSurface,
                                  xwrap: bool, ywrap: bool) -> Result<Texture2D,~str> {
         let (width, height) = prepared.as_surface().get_size();
-        let texture = if_ok!(Texture2D::new(width as uint, height as uint));
+        let texture = try!(Texture2D::new(width as uint, height as uint));
         texture.upload_surface(prepared, xwrap, ywrap);
         Ok(texture)
     }
@@ -396,7 +396,7 @@ impl Texture2D {
     pub fn from_owned_surface(surface: ~video::Surface,
                               xwrap: bool, ywrap: bool) -> Result<Texture2D,~str> {
         let (width, height) = surface.get_size();
-        let texture = if_ok!(Texture2D::new(width as uint, height as uint));
+        let texture = try!(Texture2D::new(width as uint, height as uint));
         match PreparedSurface::from_owned_surface(surface) {
             Ok(prepared) => {
                 texture.upload_surface(&prepared, xwrap, ywrap);

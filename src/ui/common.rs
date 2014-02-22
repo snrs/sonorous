@@ -39,14 +39,12 @@ pub fn warn(s: ~str) {
     printerrln(format!("*** Warning: {}", s));
 }
 
-// Exits with a formatted error message.
-//
-// Rust: this comment cannot be a doc comment (yet).
+/// Exits with a formatted error message.
 macro_rules! die(
     ($($e:expr),+) => (::ui::common::die(format!($($e),+)))
 )
 
-// Prints a formatted warning message.
+/// Prints a formatted warning message.
 macro_rules! warn(
     ($($e:expr),+) => (::ui::common::warn(format!($($e),+)))
 )

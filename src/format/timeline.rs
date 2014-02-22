@@ -93,12 +93,12 @@ impl<S:Clone,I:Clone> Timeline<S,I> {
 impl<S:ToStr,I:ToStr> Timeline<S,I> {
     /// Dumps the timeline to the writer for the debugging purpose.
     pub fn dump(&self, writer: &mut Writer) -> fmt::Result {
-        if_ok!(writeln!(writer, "********  ********  ********  ********  SetBPM({})",
-                        self.initbpm.to_f64()));
+        try!(writeln!(writer, "********  ********  ********  ********  SetBPM({})",
+                      self.initbpm.to_f64()));
         for obj in self.objs.iter() {
-            if_ok!(writeln!(writer, "{:8.3}  {:8.3}  {:8.3}  {:8.3}  {}",
-                            obj.loc.vpos, obj.loc.pos, obj.loc.vtime, obj.loc.time,
-                            obj.data.to_str()));
+            try!(writeln!(writer, "{:8.3}  {:8.3}  {:8.3}  {:8.3}  {}",
+                          obj.loc.vpos, obj.loc.pos, obj.loc.vtime, obj.loc.time,
+                          obj.data.to_str()));
         }
         Ok(())
     }

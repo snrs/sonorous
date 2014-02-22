@@ -166,17 +166,17 @@ impl Screen {
             videoflags.push(video::OpenGL);
         }
 
-        let screen = if_ok!(video::set_video_mode(width as int, height as int, 32,
-                                                  surfaceflags, videoflags));
-        let glstate = if_ok!(GLState::new());
+        let screen = try!(video::set_video_mode(width as int, height as int, 32,
+                                                surfaceflags, videoflags));
+        let glstate = try!(GLState::new());
 
         gl::enable(gl::BLEND);
         gl::blend_func(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         gl::clear_color(0.0, 0.0, 0.0, 1.0);
 
         // initialize shaders
-        let program_for_shades = if_ok!(ProgramForShades::new());
-        let program_for_textures = if_ok!(ProgramForTextures::new());
+        let program_for_shades = try!(ProgramForShades::new());
+        let program_for_textures = try!(ProgramForTextures::new());
         program_for_textures.bind();
         program_for_textures.sampler.set_1i(0);
 

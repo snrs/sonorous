@@ -48,10 +48,10 @@ pub fn preprocess_bms<'r,R:Rng>(
         bmspath: &Path, f: &mut Reader, opts: &Options, r: &mut R,
         loaderopts: &bms::load::LoaderOptions, callback: bms::load::Callback<'r>)
                                 -> Result<~PreprocessedBms,~str> {
-    let bms = if_ok!(bms::load::load_bms(f, r, loaderopts, callback));
+    let bms = try!(bms::load::load_bms(f, r, loaderopts, callback));
     let mut bms = bms.with_bmspath(bmspath);
-    let keyspec = if_ok!(key_spec(&bms, opts.preset.clone(),
-                                  opts.leftkeys.clone(), opts.rightkeys.clone()));
+    let keyspec = try!(key_spec(&bms, opts.preset.clone(),
+                                opts.leftkeys.clone(), opts.rightkeys.clone()));
     keyspec.filter_timeline(&mut bms.timeline);
     let infos = bms.timeline.analyze();
     for &modf in opts.modf.iter() {

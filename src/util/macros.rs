@@ -10,4 +10,9 @@
 
 #[macro_escape];
 
+/// Immediately returns on `Err`, otherwise returns the `Ok` value.
+/// This is a copy of the `try!` macro from libstd (the naming is not yet settled).
+macro_rules! try(
+    ($e:expr) => (match $e { Ok(e) => e, Err(e) => return Err(e) })
+)
 

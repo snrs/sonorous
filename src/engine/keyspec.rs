@@ -262,7 +262,8 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
     let mut keyspec = ~KeySpec { split: 0, order: ~[], kinds: ~[None, ..NLANES] };
     let parse_and_add = |keyspec: &mut KeySpec, keys: &str| -> Option<uint> {
         match parse_key_spec(keys) {
-            None | Some([]) => None,
+            None => None,
+            Some(ref left) if left.is_empty() => None,
             Some(left) => {
                 let mut err = false;
                 for &(lane,kind) in left.iter() {

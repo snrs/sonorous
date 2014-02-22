@@ -40,10 +40,8 @@
  */
 // Rust: - there is no `std::libc::sscanf` due to the varargs. maybe regex support will make
 //         this obsolete in the future, but not now.
-//       - multiple statements do not expand correctly. (#4375)
 //       - it is desirable to have a matcher only accepts an integer literal or string literal,
 //         not a generic expression.
-//       - no hygienic macro yet. possibly observable names from `$e` should be escaped for now.
 //       - it would be more useful to generate bindings for parsed result. this is related to
 //         many issues in general.
 

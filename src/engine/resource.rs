@@ -106,7 +106,7 @@ pub enum LoadedSoundResource {
 impl LoadedSoundResource {
     /// Loads a sound resource.
     pub fn new(path: &Path) -> Result<LoadedSoundResource,~str> {
-        let res = if_ok!(Chunk::from_wav(path));
+        let res = try!(Chunk::from_wav(path));
         Ok(LoadedSound(res))
     }
 
@@ -177,11 +177,11 @@ impl LoadedImageResource {
         /// setting a color key if required.
         fn to_display_format(surface: ~Surface) -> Result<PreparedSurface,~str> {
             let surface = if unsafe {(*(*surface.raw).format).Amask} != 0 {
-                let surface = if_ok!(surface.display_format_alpha());
+                let surface = try!(surface.display_format_alpha());
                 surface.set_alpha([video::SrcAlpha, video::RLEAccel], 255);
                 surface
             } else {
-                let surface = if_ok!(surface.display_format());
+                let surface = try!(surface.display_format());
                 surface.set_color_key([video::SrcColorKey, video::RLEAccel], RGB(0,0,0));
                 surface
             };
@@ -194,8 +194,8 @@ impl LoadedImageResource {
         let ext = path.extension().and_then(str::from_utf8);
         if ext.unwrap_or_default().eq_ignore_ascii_case("mpg") {
             if load_movie {
-                let movie = if_ok!(MPEG::from_path(path));
-                let surface = if_ok!(PreparedSurface::new(BGAW, BGAH, false));
+                let movie = try!(MPEG::from_path(path));
+                let surface = try!(PreparedSurface::new(BGAW, BGAH, false));
                 movie.enable_video(true);
                 movie.set_loop(true);
                 movie.set_display(surface.as_surface());
@@ -204,8 +204,8 @@ impl LoadedImageResource {
                 Ok(NoLoadedImage)
             }
         } else {
-            let surface = if_ok!(sdl_image::load(path));
-            let prepared = if_ok!(to_display_format(surface));
+            let surface = try!(sdl_image::load(path));
+            let prepared = try!(to_display_format(surface));
 
             // PreparedSurface may destroy SDL_SRCALPHA, which is still required for alpha blitting.
             // for RGB images, it is effectively no-op as per-surface alpha is fully opaque.
