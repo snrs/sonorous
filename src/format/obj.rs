@@ -591,7 +591,7 @@ impl<T:Clone> Index<ObjAxis,T> for ObjLoc<T> {
  *
  * The following table illustrates various situations possible with this model.
  *
- * ~~~~
+ * ~~~~ {.notrust}
  * vpos    pos     vtime   time    data
  * ------  ------  ------  ------  ----------------
  * -inf    -inf    -inf    -inf    SetBPM(120) (not actual object, derived from `timeline.initbpm`)
