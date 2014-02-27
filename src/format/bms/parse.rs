@@ -4,7 +4,7 @@
 
 //! BMS parser.
 
-use std::{str, iter, f64, char};
+use std::{str, iter, f64, char, fmt};
 use std::str::MaybeOwned;
 use std::rand::Rng;
 use encoding::EncodingRef;
@@ -133,42 +133,51 @@ impl<'r> BmsCommand<'r> {
     }
 }
 
-impl<'r> ToStr for BmsCommand<'r> {
+impl<'r> fmt::Show for BmsCommand<'r> {
     /// Returns a reconstructed line for given BMS command.
-    fn to_str(&self) -> ~str {
-        fn argb_to_str((a,r,g,b): ARGB) -> ~str { format!("{},{},{},{}", a, r, g, b) }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        #[allow(non_camel_case_types)];
+
+        struct fmt_argb(ARGB);
+        impl fmt::Show for fmt_argb {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                let fmt_argb((a,r,g,b)) = *self;
+                write!(f.buf, "{},{},{},{}", a, r, g, b)
+            }
+        }
 
         match *self {
-            BmsUnknown(ref s) => format!("\\#{}", *s),
-            BmsTitle(ref s) => format!("\\#TITLE {}", *s),
-            BmsSubtitle(ref s) => format!("\\#SUBTITLE {}", *s),
-            BmsGenre(ref s) => format!("\\#GENRE {}", *s),
-            BmsArtist(ref s) => format!("\\#ARTIST {}", *s),
-            BmsSubartist(ref s) => format!("\\#SUBARTIST {}", *s),
-            BmsMaker(ref s) => format!("\\#MAKER {}", *s),
-            BmsComment(ref s) => format!("\\#COMMENT {}", *s),
-            BmsStageFile(ref s) => format!("\\#STAGEFILE {}", *s),
-            BmsBanner(ref s) => format!("\\#BANNER {}", *s),
-            BmsPathWAV(ref s) => format!("\\#PATH_WAV {}", *s),
-            BmsBPM(BPM(bpm)) => format!("\\#BPM {}", bpm),
-            BmsExBPM(key, BPM(bpm)) => format!("\\#BPM{} {}", key.to_str(), bpm),
-            BmsPlayer(v) => format!("\\#PLAYER {}", v),
+            BmsUnknown(ref s) => write!(f.buf, "\\#{}", *s),
+            BmsTitle(ref s) => write!(f.buf, "\\#TITLE {}", *s),
+            BmsSubtitle(ref s) => write!(f.buf, "\\#SUBTITLE {}", *s),
+            BmsGenre(ref s) => write!(f.buf, "\\#GENRE {}", *s),
+            BmsArtist(ref s) => write!(f.buf, "\\#ARTIST {}", *s),
+            BmsSubartist(ref s) => write!(f.buf, "\\#SUBARTIST {}", *s),
+            BmsMaker(ref s) => write!(f.buf, "\\#MAKER {}", *s),
+            BmsComment(ref s) => write!(f.buf, "\\#COMMENT {}", *s),
+            BmsStageFile(ref s) => write!(f.buf, "\\#STAGEFILE {}", *s),
+            BmsBanner(ref s) => write!(f.buf, "\\#BANNER {}", *s),
+            BmsPathWAV(ref s) => write!(f.buf, "\\#PATH_WAV {}", *s),
+            BmsBPM(BPM(bpm)) => write!(f.buf, "\\#BPM {}", bpm),
+            BmsExBPM(key, BPM(bpm)) => write!(f.buf, "\\#BPM{} {}", key, bpm),
+            BmsPlayer(v) => write!(f.buf, "\\#PLAYER {}", v),
             BmsLanes(ref lanes) => {
-                let specs: ~[~str] = lanes.iter().map(|&(lane,ref spec)| {
-                    format!(" {} {}", lane.to_str(), *spec)
-                }).collect();
-                format!("\\#SNRS:LANES{}", specs.concat())
+                try!(write!(f.buf, "\\#SNRS:LANES"));
+                for &(lane, ref spec) in lanes.iter() {
+                    try!(write!(f.buf, " {} {}", lane, *spec));
+                }
+                Ok(())
             },
-            BmsPlayLevel(v) => format!("\\#PLAYLEVEL {}", v),
-            BmsDifficulty(v) => format!("\\#DIFFICULTY {}", v),
-            BmsRank(v) => format!("\\#RANK {}", v),
-            BmsDefExRank(v) => format!("\\#DEFEXRANK {}", v),
-            BmsExRank(key, v) => format!("\\#EXRANK {} {}", key.to_str(), v),
-            BmsTotal(v) => format!("\\#TOTAL {}", v),
-            BmsLNType(lntype) => format!("\\#LNTYPE {}", lntype),
-            BmsLNObj(key) => format!("\\#LNOBJ {}", key.to_str()),
-            BmsWAV(key, ref s) => format!("\\#WAV{} {}", key.to_str(), *s),
-            BmsWAVCmd(cmd, key, v) => format!("\\#WAVCMD {:02} {}{}", cmd, key.to_str(), v),
+            BmsPlayLevel(v) => write!(f.buf, "\\#PLAYLEVEL {}", v),
+            BmsDifficulty(v) => write!(f.buf, "\\#DIFFICULTY {}", v),
+            BmsRank(v) => write!(f.buf, "\\#RANK {}", v),
+            BmsDefExRank(v) => write!(f.buf, "\\#DEFEXRANK {}", v),
+            BmsExRank(key, v) => write!(f.buf, "\\#EXRANK {} {}", key, v),
+            BmsTotal(v) => write!(f.buf, "\\#TOTAL {}", v),
+            BmsLNType(lntype) => write!(f.buf, "\\#LNTYPE {}", lntype),
+            BmsLNObj(key) => write!(f.buf, "\\#LNOBJ {}", key),
+            BmsWAV(key, ref s) => write!(f.buf, "\\#WAV{} {}", key, *s),
+            BmsWAVCmd(cmd, key, v) => write!(f.buf, "\\#WAVCMD {:02} {}{}", cmd, key, v),
             BmsExWAV(_key, None, None, None, ref _s) => fail!(~"unsupported"),
             BmsExWAV(key, pan, vol, freq, ref s) => {
                 let mut flags = ~"";
@@ -185,39 +194,39 @@ impl<'r> ToStr for BmsCommand<'r> {
                     flags.push_char('f');
                     opts.push_str(format!(" {}", freq.unwrap()));
                 }
-                format!("\\#EXWAV{} {}{} {}", key.to_str(), flags, opts, *s)
+                write!(f.buf, "\\#EXWAV{} {}{} {}", key, flags, opts, *s)
             },
-            BmsVolWAV(v) => format!("\\#VOLWAV {}", v),
-            BmsMIDIFile(ref s) => format!("\\#MIDIFILE {}", *s),
-            BmsBMP(key, ref s) => format!("\\#BMP{} {}", key.to_str(), *s),
+            BmsVolWAV(v) => write!(f.buf, "\\#VOLWAV {}", v),
+            BmsMIDIFile(ref s) => write!(f.buf, "\\#MIDIFILE {}", *s),
+            BmsBMP(key, ref s) => write!(f.buf, "\\#BMP{} {}", key, *s),
             BmsExBMP(key, argb, ref s) =>
-                format!("\\#EXBMP{} {} {}", key.to_str(), argb_to_str(argb), *s),
-            BmsBackBMP(ref s) => format!("\\#BACKBMP {}", *s),
+                write!(f.buf, "\\#EXBMP{} {} {}", key, fmt_argb(argb), *s),
+            BmsBackBMP(ref s) => write!(f.buf, "\\#BACKBMP {}", *s),
             BmsBGA(dst, src, ImageSlice { sx, sy, dx, dy, w, h }) =>
-                format!("\\#BGA{} {} {} {} {} {} {} {}",
-                     dst.to_str(), src.to_str(), sx, sy, sx + w, sy + h, dx, dy),
-            BmsPoorBGA(poorbga) => format!("\\#POORBGA {}", poorbga),
+                write!(f.buf, "\\#BGA{} {} {} {} {} {} {} {}",
+                     dst, src, sx, sy, sx + w, sy + h, dx, dy),
+            BmsPoorBGA(poorbga) => write!(f.buf, "\\#POORBGA {}", poorbga),
             BmsSwBGA(key, fr, time, line, doloop, argb, ref pattern) =>
-                format!("\\#SWBGA{} {}:{}:{}:{}:{} {}",
-                     key.to_str(), fr, time, line.to_str(), if doloop {1} else {0},
-                     argb_to_str(argb), *pattern),
-            BmsARGB(key, argb) => format!("\\#ARGB{} {}", key.to_str(), argb_to_str(argb)),
-            BmsCharFile(ref s) => format!("\\#CHARFILE {}", *s),
-            BmsVideoFile(ref s) => format!("\\#VIDEOFILE {}", *s),
-            BmsMovie(ref s) => format!("\\#MOVIE {}", *s),
-            BmsCanvasSize(w, h) => format!("\\#SNRS:CANVASSIZE {} {}", w, h),
+                write!(f.buf, "\\#SWBGA{} {}:{}:{}:{}:{} {}", key, fr, time, line,
+                       if doloop {1} else {0}, fmt_argb(argb), *pattern),
+            BmsARGB(key, argb) => write!(f.buf, "\\#ARGB{} {}", key, fmt_argb(argb)),
+            BmsCharFile(ref s) => write!(f.buf, "\\#CHARFILE {}", *s),
+            BmsVideoFile(ref s) => write!(f.buf, "\\#VIDEOFILE {}", *s),
+            BmsMovie(ref s) => write!(f.buf, "\\#MOVIE {}", *s),
+            BmsCanvasSize(w, h) => write!(f.buf, "\\#SNRS:CANVASSIZE {} {}", w, h),
             BmsStop(key, Measures(dur)) =>
-                format!("\\#STOP{} {}", key.to_str(), (dur * 192.0) as int),
+                write!(f.buf, "\\#STOP{} {}", key, (dur * 192.0) as int),
             BmsStop(..) => fail!(~"unsupported"),
-            BmsStp(pos, Seconds(dur)) => format!("\\#STP {:07.3} {}", pos, (dur * 1000.0) as int),
+            BmsStp(pos, Seconds(dur)) =>
+                write!(f.buf, "\\#STP {:07.3} {}", pos, (dur * 1000.0) as int),
             BmsStp(..) => fail!(~"unsupported"),
-            BmsText(key, ref s) => format!("\\#TEXT{} {}", key.to_str(), *s),
-            BmsOption(ref opt) => format!("\\#OPTION {}", *opt),
-            BmsChangeOption(key, ref opt) => format!("\\#CHANGEOPTION{} {}", key.to_str(), *opt),
-            BmsShorten(measure, shorten) => format!("\\#{:03}02:{}", measure, shorten),
+            BmsText(key, ref s) => write!(f.buf, "\\#TEXT{} {}", key, *s),
+            BmsOption(ref opt) => write!(f.buf, "\\#OPTION {}", *opt),
+            BmsChangeOption(key, ref opt) => write!(f.buf, "\\#CHANGEOPTION{} {}", key, *opt),
+            BmsShorten(measure, shorten) => write!(f.buf, "\\#{:03}02:{}", measure, shorten),
             BmsData(measure, chan, ref data) =>
-                format!("\\#{:03}{}:{}", measure, chan.to_str(), *data),
-            BmsFlow(ref flowcmd) => flowcmd.to_str(),
+                write!(f.buf, "\\#{:03}{}:{}", measure, chan, *data),
+            BmsFlow(ref flowcmd) => flowcmd.fmt(f),
         }
     }
 }

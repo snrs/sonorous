@@ -8,19 +8,20 @@
 
 //! Utilities for searching files.
 
-use std::{str, io, hashmap};
+use std::{str, io};
 use std::rc::Rc;
+use collections::HashMap;
 
 /// Context for searching files.
 pub struct SearchContext {
     /// Cached return values of `get_entries`.
-    get_entries_cache: hashmap::HashMap<Path,(Rc<~[Path]>,Rc<~[Path]>)>,
+    get_entries_cache: HashMap<Path,(Rc<~[Path]>,Rc<~[Path]>)>,
 }
 
 impl SearchContext {
     /// Creates a fresh search context.
     pub fn new() -> SearchContext {
-        SearchContext { get_entries_cache: hashmap::HashMap::new() }
+        SearchContext { get_entries_cache: HashMap::new() }
     }
 
     /// Returns a list of immediate subdirectories (i.e. without `.` and `..`) and files

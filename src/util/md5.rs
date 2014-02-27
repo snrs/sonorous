@@ -89,7 +89,7 @@ impl MD5State {
         macro_rules! step(($f:ident: $a:expr, $b:expr, $c:expr, $d:expr,
                            $x:expr, $t:expr, $s:expr) => ({
             $a += mix!($f: $b, $c, $d) + $x + $t;
-            $a = (($a << $s) | (($a & 0xffffffff) >> (32 - $s)));
+            $a = ($a << $s) | (($a & 0xffffffff) >> (32 - $s));
             $a += $b;
         }))
 

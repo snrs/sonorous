@@ -216,8 +216,8 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
 
     let preset = match preset.map(|s| s.to_ascii_lower()) {
         None | Some(~"bms") | Some(~"bme") | Some(~"bml") => {
-            let isbme = (present[8] || present[9] || present[36+8] || present[36+9]);
-            let haspedal = (present[7] || present[36+7]);
+            let isbme = present[8] || present[9] || present[36+8] || present[36+9];
+            let haspedal = present[7] || present[36+7];
             let nkeys = match bms.meta.mode {
                 CouplePlay | DoublePlay => if isbme {~"14"} else {~"10"},
                 _                       => if isbme {~"7" } else {~"5" }
@@ -225,7 +225,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
             if haspedal {nkeys + "/fp"} else {nkeys}
         },
         Some(~"pms") => {
-            let isbme = (present[6] || present[7] || present[8] || present[9]);
+            let isbme = present[6] || present[7] || present[8] || present[9];
             if isbme {~"9-bme"} else {~"9"}
         },
         Some(preset) => preset

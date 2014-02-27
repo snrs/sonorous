@@ -31,6 +31,8 @@
  * command memo](http://hitkey.nekokan.dyndns.info/cmds.htm).
  */
 
+use std::fmt;
+
 use format::obj::*;
 use format::timeline::Timeline;
 use format::pointer::Pointer;
@@ -80,12 +82,12 @@ impl ImageRef {
     }
 }
 
-impl ToStr for SoundRef {
-    fn to_str(&self) -> ~str { self.as_key().to_str() }
+impl fmt::Show for SoundRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.as_key().fmt(f) }
 }
 
-impl ToStr for ImageRef {
-    fn to_str(&self) -> ~str { self.as_key().to_str() }
+impl fmt::Show for ImageRef {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.as_key().fmt(f) }
 }
 
 /// Default BPM. This value comes from the original BMS specification.

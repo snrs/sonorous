@@ -62,7 +62,7 @@ impl Scene for PlayResultScene {
             static WHITE: Color = RGB(0xff,0xff,0xff);
             static GRAY:  Color = RGB(0x80,0x80,0x80);
 
-            let cleared = (self.player.gauge >= self.player.survival);
+            let cleared = self.player.gauge >= self.player.survival;
             d.rect(0.0, 20.0, SCREENW as f32, 120.0, WHITE);
             d.string(SCREENW as f32 * 0.5, 38.0, 4.0, Centered,
                      if cleared {"CLEARED!"} else {"FAILED..."}, RGB(0,0,0));

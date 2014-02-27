@@ -8,14 +8,13 @@
 
 //! Optionally owned containers, similar to `std::str::MaybeOwned`.
 
+use std::{fmt, hash};
 use std::clone::{Clone, DeepClone};
 use std::cmp::{Eq, TotalEq, Ord, TotalOrd, Equiv};
 use std::cmp::Ordering;
 use std::container::Container;
 use std::default::Default;
 use std::vec::Vector;
-use std::to_str::ToStr;
-use std::to_bytes::{IterBytes, Cb};
 
 /// A vector that can hold either `&'r [T]` or `~[T]`.
 pub enum MaybeOwnedVec<'r,T> {
@@ -69,9 +68,9 @@ impl<'r,T> Vector<T> for MaybeOwnedVec<'r,T> {
     }
 }
 
-impl<'r,T:ToStr> ToStr for MaybeOwnedVec<'r,T> {
+impl<'r,T:fmt::Show> fmt::Show for MaybeOwnedVec<'r,T> {
     #[inline]
-    fn to_str(&self) -> ~str { self.as_slice().to_str() }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.as_slice().fmt(f) }
 }
 
 impl<'r,T:Eq> Eq for MaybeOwnedVec<'r,T> {
@@ -154,8 +153,8 @@ impl<T> Default for MaybeOwnedVec<'static,T> {
     fn default() -> MaybeOwnedVec<'static,T> { VecSlice(&'static []) }
 }
 
-impl<'r,T:IterBytes> IterBytes for MaybeOwnedVec<'r,T> {
+impl<'r,T:hash::Hash> hash::Hash for MaybeOwnedVec<'r,T> {
     #[inline]
-    fn iter_bytes(&self, lsb0: bool, f: Cb) -> bool { self.as_slice().iter_bytes(lsb0, f) }
+    fn hash(&self, state: &mut hash::sip::SipState) { self.as_slice().hash(state) }
 }
 

@@ -4,6 +4,7 @@
 
 //! BMS preprocessor.
 
+use std::fmt;
 use std::rand::Rng;
 
 use format::bms::diag::*;
@@ -26,23 +27,23 @@ pub enum BmsFlowCommand {
     BmsDef,                                     // #DEF
 }
 
-impl ToStr for BmsFlowCommand {
+impl fmt::Show for BmsFlowCommand {
     /// Returns a reconstructed line for given BMS flow command.
-    fn to_str(&self) -> ~str {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            BmsRandom(val) => format!("\\#RANDOM {}", val),
-            BmsSetRandom(val) => format!("\\#SETRANDOM {}", val),
-            BmsEndRandom => ~"#ENDRANDOM",
-            BmsIf(val) => format!("\\#IF {}", val),
-            BmsElseIf(val) => format!("\\#ELSEIF {}", val),
-            BmsElse => ~"#ELSE",
-            BmsEndIf => ~"#ENDIF",
-            BmsSwitch(val) => format!("\\#SWITCH {}", val),
-            BmsSetSwitch(val) => format!("\\#SETSWITCH {}", val),
-            BmsEndSw => ~"#ENDSW",
-            BmsCase(val) => format!("\\#CASE {}", val),
-            BmsSkip => ~"#SKIP",
-            BmsDef => ~"#DEF",
+            BmsRandom(val) => write!(f.buf, "\\#RANDOM {}", val),
+            BmsSetRandom(val) => write!(f.buf, "\\#SETRANDOM {}", val),
+            BmsEndRandom => write!(f.buf, "\\#ENDRANDOM"),
+            BmsIf(val) => write!(f.buf, "\\#IF {}", val),
+            BmsElseIf(val) => write!(f.buf, "\\#ELSEIF {}", val),
+            BmsElse => write!(f.buf, "\\#ELSE"),
+            BmsEndIf => write!(f.buf, "\\#ENDIF"),
+            BmsSwitch(val) => write!(f.buf, "\\#SWITCH {}", val),
+            BmsSetSwitch(val) => write!(f.buf, "\\#SETSWITCH {}", val),
+            BmsEndSw => write!(f.buf, "\\#ENDSW"),
+            BmsCase(val) => write!(f.buf, "\\#CASE {}", val),
+            BmsSkip => write!(f.buf, "\\#SKIP"),
+            BmsDef => write!(f.buf, "\\#DEF"),
         }
     }
 }

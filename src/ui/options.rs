@@ -4,8 +4,10 @@
 
 //! Global game options.
 
-use std::{char, str, hashmap};
+use std::{char, str};
+use collections::HashMap;
 use encoding::label::encoding_from_whatwg_label;
+
 use format::bms::load::LoaderOptions;
 
 /// Game play modes.
@@ -128,7 +130,7 @@ pub enum ParsingResult {
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
 pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult {
-    let longargs: hashmap::HashMap<~str,char> = (~[
+    let longargs: HashMap<~str,char> = (~[
         (~"--help", 'h'), (~"--version", 'V'), (~"--speed", 'a'),
         (~"--autoplay", 'v'), (~"--exclusive", 'x'), (~"--sound-only", 'X'),
         (~"--windowed", 'w'), (~"--no-fullscreen", 'w'),

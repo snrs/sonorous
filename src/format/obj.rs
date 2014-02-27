@@ -4,6 +4,8 @@
 
 //! Game play elements ("objects") and object-like effects.
 
+use std::fmt;
+
 /// A game play element mapped to the single input element (for example, button) and the screen
 /// area (henceforth "lane").
 #[deriving(Eq,Clone)]
@@ -21,7 +23,7 @@ impl Lane {
 }
 
 /// BGA layers.
-#[deriving(Eq,ToStr,Clone)]
+#[deriving(Eq,Show,Clone)]
 pub enum BGALayer {
     /// The lowest layer. BMS channel #04.
     Layer1 = 0,
@@ -39,7 +41,7 @@ pub static NLAYERS: uint = 4;
 
 /// Beats per minute. Used as a conversion factor between the time position and actual time
 /// in BMS.
-#[deriving(Eq,ToStr,Clone)]
+#[deriving(Eq,Show,Clone)]
 pub struct BPM(f64);
 
 impl BPM {
@@ -58,7 +60,7 @@ impl BPM {
 
 /// A duration from the particular point. It may be specified in measures or seconds. Used in
 /// the `Stop` object.
-#[deriving(Eq,ToStr,Clone)]
+#[deriving(Eq,Show,Clone)]
 pub enum Duration { Seconds(f64), Measures(f64) }
 
 impl Duration {
@@ -80,7 +82,7 @@ impl Duration {
 /// A damage value upon the MISS grade. Normally it is specified in percents of the full gauge
 /// (as in `MAXGAUGE`), but sometimes it may cause an instant death. Used in the `Bomb` object
 /// (normal note objects have a fixed value).
-#[deriving(Eq,ToStr,Clone)]
+#[deriving(Eq,Show,Clone)]
 pub enum Damage { GaugeDamage(f64), InstantDeath }
 
 /**
@@ -91,13 +93,13 @@ pub enum Damage { GaugeDamage(f64), InstantDeath }
  * but not the lower-right corner. The region is clipped to make the upper-left corner has
  * non-negative coordinates and the size of the region doesn't exceed the canvas dimension.
  */
-#[deriving(Eq,ToStr,Clone)]
+#[deriving(Eq,Show,Clone)]
 pub struct ImageSlice {
     sx: int, sy: int, dx: int, dy: int, w: int, h: int,
 }
 
 /// A reference to the BGA target, i.e. something that can be displayed in a single BGA layer.
-#[deriving(Eq,ToStr,Clone)]
+#[deriving(Eq,Show,Clone)]
 pub enum BGARef<ImageRef> {
     /// Fully transparent image.
     BlankBGA,
@@ -172,49 +174,61 @@ pub enum ObjData<SoundRef,ImageRef> {
     End,
 }
 
-impl<S:ToStr,I:ToStr> ToStr for ObjData<S,I> {
-    fn to_str(&self) -> ~str {
-        fn lane_to_str(lane: Lane) -> ~str {
-            let lane = lane.to_uint();
-            format!("{}:{:02}", lane / 36 + 1, lane % 36)
+impl<S:fmt::Show,I:fmt::Show> fmt::Show for ObjData<S,I> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        #[allow(non_camel_case_types)];
+
+        struct fmt_lane(Lane);
+        impl fmt::Show for fmt_lane {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                let fmt_lane(lane) = *self;
+                let lane = lane.to_uint();
+                write!(f.buf, "{}:{:02}", lane / 36 + 1, lane % 36)
+            }
         }
-        fn to_str_or_default<T:ToStr>(v: &Option<T>, default: &str) -> ~str {
-            match *v { Some(ref v) => v.to_str(), None => default.to_owned() }
+
+        struct fmt_or_default<'r,T>(&'r Option<T>, &'r str);
+        impl<'r,T:fmt::Show> fmt::Show for fmt_or_default<'r,T> {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                match *self {
+                    fmt_or_default(&Some(ref v), _) => v.fmt(f),
+                    fmt_or_default(&None, default) => default.fmt(f),
+                }
+            }
         }
 
         match *self {
-            Deleted => ~"Deleted",
+            Deleted => write!(f.buf, "Deleted"),
             Visible(lane,ref sref) =>
-                format!("Visible({},{})", lane_to_str(lane), to_str_or_default(sref, "--")),
+                write!(f.buf, "Visible({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
             Invisible(lane,ref sref) =>
-                format!("Invisible({},{})", lane_to_str(lane), to_str_or_default(sref, "--")),
+                write!(f.buf, "Invisible({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
             LNStart(lane,ref sref) =>
-                format!("LNStart({},{})", lane_to_str(lane), to_str_or_default(sref, "--")),
+                write!(f.buf, "LNStart({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
             LNDone(lane,ref sref) =>
-                format!("LNDone({},{})", lane_to_str(lane), to_str_or_default(sref, "--")),
+                write!(f.buf, "LNDone({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
             Bomb(lane,ref sref,damage) =>
-                format!("Bomb({},{},{})", lane_to_str(lane), to_str_or_default(sref, "--"),
-                                          damage.to_str()),
+                write!(f.buf, "Bomb({},{},{})", fmt_lane(lane), fmt_or_default(sref, "--"), damage),
             BGM(ref sref) =>
-                format!("BGM({})", sref.to_str()),
+                write!(f.buf, "BGM({})", sref),
             SetBGA(layer,BlankBGA) =>
-                format!("SetBGA({},--)", layer.to_str()),
+                write!(f.buf, "SetBGA({},--)", layer),
             SetBGA(layer,ImageBGA(ref iref)) =>
-                format!("SetBGA({},{})", layer.to_str(), iref.to_str()),
+                write!(f.buf, "SetBGA({},{})", layer, iref),
             SetBGA(layer,SlicedImageBGA(ref iref,~ImageSlice{sx,sy,dx,dy,w,h})) =>
-                format!("SetBGA({},{}:{}+{}+{}x{}:{}+{}+{}x{})",
-                        layer.to_str(), iref.to_str(), sx, sy, w, h, dx, dy, w, h),
+                write!(f.buf, "SetBGA({},{}:{}+{}+{}x{}:{}+{}+{}x{})",
+                              layer, iref, sx, sy, w, h, dx, dy, w, h),
             SetBPM(BPM(bpm)) =>
-                format!("SetBPM({})", bpm),
+                write!(f.buf, "SetBPM({})", bpm),
             Stop(Seconds(secs)) =>
-                format!("Stop({}s)", secs),
+                write!(f.buf, "Stop({}s)", secs),
             Stop(Measures(measures)) =>
-                format!("Stop({})", measures),
-            StopEnd => ~"StopEnd",
+                write!(f.buf, "Stop({})", measures),
+            StopEnd => write!(f.buf, "StopEnd"),
             SetMeasureFactor(factor) =>
-                format!("SetMeasureFactor({})", factor),
-            MeasureBar => ~"MeasureBar",
-            End => ~"End",
+                write!(f.buf, "SetMeasureFactor({})", factor),
+            MeasureBar => write!(f.buf, "MeasureBar"),
+            End => write!(f.buf, "End"),
         }
     }
 }
@@ -512,7 +526,7 @@ impl<S:Clone,I:Clone,T:WithObjData<S,I>+Clone> ObjConvOps<S,I> for T {
 }
 
 /// Axes available to the objects. See `Obj` for more information.
-#[deriving(Eq,ToStr,Clone)]
+#[deriving(Eq,Show,Clone)]
 pub enum ObjAxis {
     /// Virtual position.
     VirtualPos  = 0,
@@ -525,7 +539,7 @@ pub enum ObjAxis {
 }
 
 /// Object location per axis.
-#[deriving(Eq,ToStr,Clone)]
+#[deriving(Eq,Show,Clone)]
 pub struct ObjLoc<T> {
     /// Virtual position in measures.
     vpos: T,
@@ -592,7 +606,7 @@ impl<T:Clone> Index<ObjAxis,T> for ObjLoc<T> {
  * 6.00    5.50    +inf    +inf    MeasureBar
  * ~~~~
  */
-#[deriving(Eq,ToStr,Clone)]
+#[deriving(Eq,Show,Clone)]
 pub struct Obj<SoundRef,ImageRef> {
     /// Object location.
     loc: ObjLoc<f64>,

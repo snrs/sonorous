@@ -4,7 +4,7 @@
 
 //! Common types for BMS format.
 
-use std::str;
+use std::{str, fmt};
 use format::obj::Lane;
 
 /// Two-letter alphanumeric identifier used for virtually everything, including resource
@@ -89,12 +89,12 @@ impl Key {
     }
 }
 
-impl ToStr for Key {
+impl fmt::Show for Key {
     /// Returns a two-letter representation of alphanumeric key.
-    fn to_str(&self) -> ~str {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let Key(v) = *self;
         assert!(self.is_valid());
-        format!("{}{}", BASE36_MAP[v / 36] as char, BASE36_MAP[v % 36] as char)
+        write!(f.buf, "{}{}", BASE36_MAP[v / 36] as char, BASE36_MAP[v % 36] as char)
     }
 }
 
@@ -181,15 +181,15 @@ impl PartialKey {
     }
 }
 
-impl ToStr for PartialKey {
+impl fmt::Show for PartialKey {
     /// Returns an one- or two-letter representation of alphanumeric key.
-    fn to_str(&self) -> ~str {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let PartialKey(v) = *self;
         assert!(self.is_valid());
         if v < 0 {
-            format!("{}", BASE36_MAP[-v - 1] as char)
+            write!(f.buf, "{}", BASE36_MAP[-v - 1] as char)
         } else {
-            format!("{}{}", BASE36_MAP[v / 36] as char, BASE36_MAP[v % 36] as char)
+            write!(f.buf, "{}{}", BASE36_MAP[v / 36] as char, BASE36_MAP[v % 36] as char)
         }
     }
 }

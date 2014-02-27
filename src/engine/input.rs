@@ -4,9 +4,10 @@
 
 //! Mapping from actual inputs to virtual inputs.
 
-use std::to_bytes;
-
+use std::hash;
+use collections::HashMap;
 use sdl::event;
+
 use format::obj::Lane;
 use format::bms::Key;
 use engine::keyspec::*;
@@ -24,17 +25,13 @@ pub enum Input {
     QuitInput,
 }
 
-impl IterBytes for Input {
-    fn iter_bytes(&self, lsb0: bool, f: to_bytes::Cb) -> bool {
+impl hash::Hash for Input {
+    fn hash(&self, state: &mut hash::sip::SipState) {
         match *self {
-            KeyInput(key) =>
-                0u8.iter_bytes(lsb0, |b| f(b)) && (key as uint).iter_bytes(lsb0, |b| f(b)),
-            JoyAxisInput(axis) =>
-                1u8.iter_bytes(lsb0, |b| f(b)) && axis.iter_bytes(lsb0, |b| f(b)),
-            JoyButtonInput(button) =>
-                2u8.iter_bytes(lsb0, |b| f(b)) && button.iter_bytes(lsb0, |b| f(b)),
-            QuitInput =>
-                3u8.iter_bytes(lsb0, |b| f(b))
+            KeyInput(key) => { 0u8.hash(state); (key as uint).hash(state); }
+            JoyAxisInput(axis) => { 1u8.hash(state); axis.hash(state); }
+            JoyButtonInput(button) => { 2u8.hash(state); button.hash(state); }
+            QuitInput => { 3u8.hash(state); }
         }
     }
 }
@@ -164,7 +161,7 @@ static KEYSETS: &'static [KeySet] = &[
 ];
 
 /// An input mapping, i.e. a mapping from the actual input to the virtual input.
-pub type KeyMap = ::std::hashmap::HashMap<Input,VirtualInput>;
+pub type KeyMap = HashMap<Input,VirtualInput>;
 
 /// Reads an input mapping from the environment variables.
 pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<KeyMap,~str> {
@@ -200,7 +197,7 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
         }
     }
 
-    let mut map = ::std::hashmap::HashMap::new();
+    let mut map = HashMap::new();
     let add_mapping = |map: &mut KeyMap, kind: Option<KeyKind>,
                        input: Input, vinput: VirtualInput| {
         if kind.map_or(true, |kind| vinput.active_in_key_spec(kind, keyspec)) {

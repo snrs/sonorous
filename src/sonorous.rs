@@ -217,7 +217,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         } else {
             screen = None;
             // in this case we explicitly ignore keymaps
-            keymap = ~std::hashmap::HashMap::new();
+            keymap = ~collections::HashMap::new();
         }
 
         scene = if opts.is_exclusive() {

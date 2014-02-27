@@ -396,7 +396,7 @@ impl<S,I> Pointer<S,I> {
     /// the pointer is set to given pointer. In any case the pointer doesn't change during the loop.
     pub fn mut_upto<'r>(&'r mut self, end: &Pointer<S,I>) -> MutUptoIterator<'r,S,I> {
         assert!(has_same_timeline(self, end));
-        let donotupdate = (self.index > end.index || self.loc > end.loc);
+        let donotupdate = self.index > end.index || self.loc > end.loc;
         MutUptoIterator { ptr: self, finished: donotupdate, lastloc: None,
                           cur: self.index, end: end.index, endloc: end.loc.clone() }
     }
@@ -406,7 +406,7 @@ impl<S,I> Pointer<S,I> {
     /// the pointer points to the last returned object. Otherwise the location is set to given
     /// position. In any case the pointer doesn't change during the loop.
     pub fn mut_until<'r>(&'r mut self, axis: ObjAxis, delta: f64) -> MutUntilIterator<'r,S,I> {
-        let donotupdate = (delta <= 0.0);
+        let donotupdate = delta <= 0.0;
         let pos = self.loc[axis] + delta;
         MutUntilIterator { ptr: self, finished: donotupdate, lastloc: None,
                            cur: self.index, axis: axis, endpos: pos }

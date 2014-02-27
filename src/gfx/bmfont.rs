@@ -263,8 +263,8 @@ impl FontDrawingUtils for ShadedDrawing {
         assert!(self.prim == gl::TRIANGLES);
         let zoom = zoom * 0.5;
         for &polygon in font.polygons[glyph].iter() {
-            let flat1 = (polygon.x11 == polygon.xm1 && polygon.xm1 == polygon.x21);
-            let flat2 = (polygon.x12 == polygon.xm2 && polygon.xm2 == polygon.x22);
+            let flat1 = polygon.x11 == polygon.xm1 && polygon.xm1 == polygon.x21;
+            let flat2 = polygon.x12 == polygon.xm2 && polygon.xm2 == polygon.x22;
             let x11 = x + polygon.x11 as f32 * zoom;
             let x12 = x + polygon.x12 as f32 * zoom;
             let x21 = x + polygon.x21 as f32 * zoom;

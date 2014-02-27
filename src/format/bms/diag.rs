@@ -4,8 +4,10 @@
 
 //! Diagnostics for BMS format.
 
+use std::fmt;
+
 /// The severity of messages. Every error message has one of the severity assigned.
-#[deriving(Eq,Ord,ToStr,Clone)]
+#[deriving(Eq,Ord,Show,Clone)]
 pub enum Severity {
     /// Various notes. This kind of diagnostics does not affect the game play at all but indicates
     /// possible incompatibilities or deprecated features.
@@ -162,10 +164,10 @@ impl BmsMessage {
     }
 }
 
-impl ToStr for BmsMessage {
-    fn to_str(&self) -> ~str {
+impl fmt::Show for BmsMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (_, msg) = self.severity_and_message();
-        msg.to_owned()
+        write!(f.buf, "{}", msg)
     }
 }
 
