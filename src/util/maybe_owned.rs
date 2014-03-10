@@ -9,7 +9,7 @@
 //! Optionally owned containers, similar to `std::str::MaybeOwned`.
 
 use std::{fmt, hash};
-use std::clone::{Clone, DeepClone};
+use std::clone::Clone;
 use std::cmp::{Eq, TotalEq, Ord, TotalOrd, Equiv};
 use std::cmp::Ordering;
 use std::container::Container;
@@ -133,16 +133,6 @@ impl<'r,T:Clone> Clone for MaybeOwnedVec<'r,T> {
     fn clone(&self) -> MaybeOwnedVec<'r,T> {
         match *self {
             OwnedVec(ref v) => OwnedVec(v.clone()),
-            VecSlice(v) => VecSlice(v),
-        }
-    }
-}
-
-impl<'r,T:DeepClone> DeepClone for MaybeOwnedVec<'r,T> {
-    #[inline]
-    fn deep_clone(&self) -> MaybeOwnedVec<'r,T> {
-        match *self {
-            OwnedVec(ref v) => OwnedVec(v.deep_clone()),
             VecSlice(v) => VecSlice(v),
         }
     }
