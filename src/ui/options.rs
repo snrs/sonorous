@@ -4,11 +4,12 @@
 
 //! Global game options.
 
-use std::{char, str};
+use std::{char, str, io, os};
 use collections::HashMap;
 use encoding::label::encoding_from_whatwg_label;
 
 use format::bms::load::LoaderOptions;
+use engine::skin::ast::Skin;
 
 /// Game play modes.
 #[deriving(Eq,Clone)]
@@ -79,6 +80,8 @@ pub struct Options {
     playspeed: f64,
     /// A character encoding *name* forced to the loader.
     encoding: Option<~str>,
+    /// A root path to the skin.
+    skinroot: Path,
 
     /// If set, prints the recognized BMS commands after parsing and exits.
     debug_dumpbmscommandfull: bool,
@@ -112,6 +115,24 @@ impl Options {
             self.encoding.as_ref().and_then(|s| encoding_from_whatwg_label(*s));
         loaderopts
     }
+
+    /// Parses and returns the skin data.
+    pub fn load_skin(&self, name: &str) -> Result<Skin,~str> {
+        use serialize::json::from_reader;
+        use engine::skin::ast::from_json;
+        let mut f = match io::File::open(&self.skinroot.join(name)) {
+            Ok(f) => f,
+            Err(err) => { return Err(err.to_str()); }
+        };
+        let json = match from_reader(&mut f) {
+            Ok(json) => json,
+            Err(err) => { return Err(err.to_str()); }
+        };
+        match from_json::<Skin>(json) {
+            Some(skin) => Ok(skin),
+            None => Err(~"skin parsing failed"),
+        }
+    }
 }
 
 /// A return value from `parse_opts`.
@@ -139,7 +160,7 @@ pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult 
         (~"--random", 'r'), (~"--random-ex", 'R'), (~"--preset", 'k'),
         (~"--key-spec", 'K'), (~"--bga", ' '), (~"--no-bga", 'B'),
         (~"--movie", ' '), (~"--no-movie", 'M'), (~"--joystick", 'j'),
-        (~"--encoding", 'E'), (~"--debug", 'Z'),
+        (~"--encoding", 'E'), (~"--skin-root", 'Y'), (~"--debug", 'Z'),
     ]).move_iter().collect();
 
     let nargs = args.len();
@@ -156,6 +177,7 @@ pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult 
     let mut rightkeys = None;
     let mut playspeed = 1.0;
     let mut encoding = None;
+    let mut skinroot = os::self_exe_path().unwrap_or(Path::new(".")).join_many(["res", "skin"]);
     let mut debug_dumpbmscommandfull = false;
     let mut debug_dumpbmscommand = false;
     let mut debug_dumptimeline = false;
@@ -251,10 +273,17 @@ pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult 
                             None => { return Error(format!("Invalid encoding name: {}", arg)); }
                         }
                     }
+                    'Y' => {
+                        let arg = fetch_arg!('Y');
+                        match Path::new_opt(arg) {
+                            Some(path) => { skinroot = path; }
+                            None => { return Error(format!("Invalid skin path: {}", arg)); }
+                        }
+                    }
                     'Z' => match fetch_arg!('Z') {
-                        &"dump-bmscommand-full" => { debug_dumpbmscommandfull = true; }
-                        &"dump-bmscommand" => { debug_dumpbmscommand = true; }
-                        &"dump-timeline" => { debug_dumptimeline = true; }
+                        "dump-bmscommand-full" => { debug_dumpbmscommandfull = true; }
+                        "dump-bmscommand" => { debug_dumpbmscommand = true; }
+                        "dump-timeline" => { debug_dumptimeline = true; }
                         arg => { return Error(format!("Unknown debugging option: -Z {}", arg)); }
                     },
                     ' ' => {} // for ignored long options
@@ -285,6 +314,7 @@ pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult 
             leftkeys: leftkeys, rightkeys: rightkeys,
             playspeed: playspeed,
             encoding: encoding,
+            skinroot: skinroot,
             debug_dumpbmscommandfull: debug_dumpbmscommandfull,
             debug_dumpbmscommand: debug_dumpbmscommand,
             debug_dumptimeline: debug_dumptimeline,

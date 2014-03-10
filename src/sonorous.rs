@@ -19,12 +19,13 @@
 #[crate_type = "bin"];
 
 #[no_uv];
-#[feature(macro_rules, globs, link_args)];
+#[feature(macro_rules, struct_variant, globs, link_args)];
 
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
 
 extern crate collections;
+extern crate serialize;
 extern crate sync;
 extern crate native;
 
@@ -96,6 +97,7 @@ pub mod engine {
 #[macro_escape] pub mod ui {
     //! User interface. Most user interaction is implemented via the `Scene` interface.
     pub mod common;
+    pub mod hooks;
     pub mod options;
     pub mod init;
     pub mod scene;
@@ -270,6 +272,8 @@ Options:
   -M, --no-movie          Do not load and show the BGA movie
   -j N, --joystick N      Enables the joystick with index N (normally 0)
   -E ENCODING             Forces the use of specified encoding
+  -Y PATH, --skin-root PATH
+                          Sets the skin lookup path (default: <root>/res/skin)
   -Z OPTION               Enables the specified debugging option
 
 Environment Variables:

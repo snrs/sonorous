@@ -24,150 +24,239 @@ pub enum Severity {
 
 /// Messages for BMS format.
 #[deriving(Eq,Clone)]
-pub enum BmsMessage {
-    BmsHasNegativeInitBPM,
-    BmsHasZeroInitBPM,
-    BmsHasNegativeSTOPDuration,
-    BmsHasNegativeSTPDuration,
-
-    BmsHasNoTITLE,
-    BmsHasEmptyTITLE,
-    BmsHasMultipleTITLEs,
-    BmsUsesCouplePlay,
-    BmsUsesBattlePlay,
-    BmsHasInvalidLNTYPE,
-    BmsHasZeroLNOBJ,
-    BmsHasMultipleLNOBJs,
-    BmsHasUnimplementedFlow,
-
-    BmsUsesLegacyEncoding,
-    BmsHasFullWidthSharp,
-    BmsHasOneDigitAlphanumericKey,
-    BmsHasNoARTIST,
-    BmsHasEmptyARTIST,
-    BmsHasMultipleARTISTs,
-    BmsHasNoGENRE,
-    BmsHasEmptyGENRE,
-    BmsHasMultipleGENREs,
-    BmsHasGENLE,
-    BmsHasEmptyPath,
-    BmsHasInvalidPLAYER,
-    BmsHasNegativePLAYLEVEL,
-    BmsHasDIFFICULTYOutOfRange,
-    BmsHasEXBPM,
-    BmsHasNonpositiveBPM,
-    BmsUsesLNTYPE2,
-    BmsHasUnknownWAVCMD,
-    BmsHasSONG,
-    BmsHasRONDAM,
-    BmsHasRANDOMWithoutWhitespace,
-    BmsHasIFWithoutWhitespace,
-    BmsHasIFEND,
-    BmsHasENDNotFollowedByIF,
-}
-
-impl BmsMessage {
-    /// Returns a tuple of severity and string representation of the message.
-    pub fn severity_and_message(&self) -> (Severity, &'static str) {
-        match *self {
-            BmsHasNegativeInitBPM =>
-                (Fatal, "Initial #BPM cannot be negative. This line will be ignored."),
-            BmsHasZeroInitBPM =>
-                (Fatal, "Initial #BPM cannot be zero. This line will be ignored."),
-            BmsHasNegativeSTOPDuration =>
-                (Fatal, "#STOP duration cannot be negative. This #STOP will be ignored."),
-            BmsHasNegativeSTPDuration =>
-                (Fatal, "#STP duration cannot be negative. This line will be ignored."),
-
-            BmsHasNoTITLE =>
-                (Warning, "#TITLE is missing."),
-            BmsHasEmptyTITLE =>
-                (Warning, "#TITLE is empty."),
-            BmsHasMultipleTITLEs =>
-                (Warning, "There are multiple #TITLE commands. Only the last such line will \
-                           be used."),
-            BmsUsesCouplePlay =>
-                (Warning, "Support for Couple Play (#PLAYER 2) is limited."),
-            BmsUsesBattlePlay =>
-                (Warning, "Battle Play (#PLAYER 4) is not supported, and will be treated as \
-                           Single Play."),
-            BmsHasInvalidLNTYPE =>
-                (Warning, "Invalid #LNTYPE value will be ignored."),
-            BmsHasZeroLNOBJ =>
-                (Warning, "#LNOBJ 00 is invalid and will be ignored."),
-            BmsHasMultipleLNOBJs =>
-                (Warning, "There are multiple #LNOBJ commands. Only the last such line will \
-                           be used."),
-            BmsHasUnimplementedFlow =>
-                (Warning, "#SWITCH and related flow commands are not yet implemented \
-                           and may malfunction."),
-
-            BmsUsesLegacyEncoding =>
-                (Note, "The file is encoded in the legacy CJK encodings. \
-                        Their continued use is discouraged."),
-            BmsHasFullWidthSharp =>
-                (Note, "# should be a half-width letter for the compatibility."),
-            BmsHasOneDigitAlphanumericKey =>
-                (Note, "One-digit alphanumeric key is assumed to be prepended by 0 digit."),
-            BmsHasNoARTIST =>
-                (Note, "#ARTIST is missing."),
-            BmsHasEmptyARTIST =>
-                (Note, "#ARTIST is empty."),
-            BmsHasMultipleARTISTs =>
-                (Note, "There are multiple #ARTIST commands. Only the last such line will \
-                        be used."),
-            BmsHasNoGENRE =>
-                (Note, "#GENRE is missing."),
-            BmsHasEmptyGENRE =>
-                (Note, "#GENRE is empty."),
-            BmsHasMultipleGENREs =>
-                (Note, "There are multiple #GENRE commands. Only the last such line will \
-                        be used."),
-            BmsHasGENLE =>
-                (Note, "#GENLE [sic] will be interpreted as #GENRE."),
-            BmsHasEmptyPath =>
-                (Note, "Empty path will be ignored."),
-            BmsHasInvalidPLAYER =>
-                (Note, "Invalid #PLAYER value will be ignored."),
-            BmsHasNegativePLAYLEVEL =>
-                (Note, "#PLAYLEVEL should be non-negative for the compatibility."),
-            BmsHasDIFFICULTYOutOfRange =>
-                (Note, "#DIFFICULTY should be between 1 and 5 for the compatibility."),
-            BmsHasEXBPM =>
-                (Note, "#EXBPMxx is a temporary measure, you should use #BPMxx instead."),
-            BmsHasNonpositiveBPM =>
-                (Note, "Non-positive BPM is not portable and its use is discouraged."),
-            BmsUsesLNTYPE2 =>
-                (Note, "#LNTYPE 2 is deprecated, you should use #LNTYPE 1 (implied) or \
-                        #LNOBJ instead."),
-            BmsHasUnknownWAVCMD =>
-                (Note, "Invalid #WAVCMD command will be ignored."),
-            BmsHasSONG =>
-                (Note, "#SONG is deprecated, you should use #TEXT instead."),
-            BmsHasRONDAM =>
-                (Note, "#RONDAM [sic] will be interpreted as #RANDOM."),
-            BmsHasRANDOMWithoutWhitespace =>
-                (Note, "#RANDOM should be followed by one or more whitespace."),
-            BmsHasIFWithoutWhitespace =>
-                (Note, "#IF should be followed by one or more whitespace."),
-            BmsHasIFEND =>
-                (Note, "#IFEND [sic] will be interpreted as #ENDIF."),
-            BmsHasENDNotFollowedByIF =>
-                (Note, "#END not followed by IF will be interpreted as #ENDIF."),
-        }
-    }
-
-    /// Returns the severity of the message.
-    pub fn severity(&self) -> Severity {
-        let (severity, _) = self.severity_and_message();
-        severity
-    }
+pub struct BmsMessage {
+    /// The severity of message.
+    severity: Severity,
+    /// The internal identifier.
+    id: &'static str,
+    /// The string representation of the message.
+    message: &'static str,
 }
 
 impl fmt::Show for BmsMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (_, msg) = self.severity_and_message();
-        write!(f.buf, "{}", msg)
+        write!(f.buf, "{}", self.message)
     }
 }
+
+pub static BmsHasNegativeInitBPM: BmsMessage = BmsMessage {
+    severity: Fatal,
+    id: "neg-init-bpm",
+    message: "Initial #BPM cannot be negative. This line will be ignored.",
+};
+
+pub static BmsHasZeroInitBPM: BmsMessage = BmsMessage {
+    severity: Fatal,
+    id: "zero-init-bpm",
+    message: "Initial #BPM cannot be zero. This line will be ignored.",
+};
+
+pub static BmsHasNegativeSTOPDuration: BmsMessage = BmsMessage {
+    severity: Fatal,
+    id: "neg-stop-duration",
+    message: "#STOP duration cannot be negative. This #STOP will be ignored.",
+};
+
+pub static BmsHasNegativeSTPDuration: BmsMessage = BmsMessage {
+    severity: Fatal,
+    id: "neg-stp-duration",
+    message: "#STP duration cannot be negative. This line will be ignored.",
+};
+
+pub static BmsHasNoTITLE: BmsMessage = BmsMessage {
+    severity: Warning,
+    id: "no-title",
+    message: "#TITLE is missing.",
+};
+
+pub static BmsHasEmptyTITLE: BmsMessage = BmsMessage {
+    severity: Warning,
+    id: "empty-title",
+    message: "#TITLE is empty.",
+};
+
+pub static BmsHasMultipleTITLEs: BmsMessage = BmsMessage {
+    severity: Warning,
+    id: "multiple-title",
+    message: "There are multiple #TITLE commands. Only the last such line will be used.",
+};
+
+pub static BmsUsesCouplePlay: BmsMessage = BmsMessage {
+    severity: Warning,
+    id: "couple-play",
+    message: "Support for Couple Play (#PLAYER 2) is limited.",
+};
+
+pub static BmsUsesBattlePlay: BmsMessage = BmsMessage {
+    severity: Warning,
+    id: "battle-play",
+    message: "Battle Play (#PLAYER 4) is not supported, and will be treated as Single Play.",
+};
+
+pub static BmsHasInvalidLNTYPE: BmsMessage = BmsMessage {
+    severity: Warning,
+    id: "invalid-lntype",
+    message: "Invalid #LNTYPE value will be ignored.",
+};
+
+pub static BmsHasZeroLNOBJ: BmsMessage = BmsMessage {
+    severity: Warning,
+    id: "zero-lnobj",
+    message: "#LNOBJ 00 is invalid and will be ignored.",
+};
+
+pub static BmsHasMultipleLNOBJs: BmsMessage = BmsMessage {
+    severity: Warning,
+    id: "multiple-lnobj",
+    message: "There are multiple #LNOBJ commands. Only the last such line will be used.",
+};
+
+pub static BmsHasUnimplementedFlow: BmsMessage = BmsMessage {
+    severity: Warning,
+    id: "unimplemented-flow",
+    message: "#SWITCH and related flow commands are not yet implemented and may malfunction.",
+};
+
+pub static BmsUsesLegacyEncoding: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "legacy-encoding",
+    message: "The file is encoded in the legacy CJK encodings. Their continued use is discouraged.",
+};
+
+pub static BmsHasFullWidthSharp: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "full-width-sharp",
+    message: "# should be a half-width letter for the compatibility.",
+};
+
+pub static BmsHasOneDigitAlphanumericKey: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "one-digit-key",
+    message: "One-digit alphanumeric key is assumed to be prepended by 0 digit.",
+};
+
+pub static BmsHasNoARTIST: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "no-artist",
+    message: "#ARTIST is missing.",
+};
+
+pub static BmsHasEmptyARTIST: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "empty-artist",
+    message: "#ARTIST is empty.",
+};
+
+pub static BmsHasMultipleARTISTs: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "multiple-artist",
+    message: "There are multiple #ARTIST commands. Only the last such line will be used.",
+};
+
+pub static BmsHasNoGENRE: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "no-genre",
+    message: "#GENRE is missing.",
+};
+
+pub static BmsHasEmptyGENRE: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "empty-genre",
+    message: "#GENRE is empty.",
+};
+
+pub static BmsHasMultipleGENREs: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "multiple-genre",
+    message: "There are multiple #GENRE commands. Only the last such line will be used.",
+};
+
+pub static BmsHasGENLE: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "genle",
+    message: "#GENLE [sic] will be interpreted as #GENRE.",
+};
+
+pub static BmsHasEmptyPath: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "empty-path",
+    message: "Empty path will be ignored.",
+};
+
+pub static BmsHasInvalidPLAYER: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "invalid-player",
+    message: "Invalid #PLAYER value will be ignored.",
+};
+
+pub static BmsHasNegativePLAYLEVEL: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "neg-playlevel",
+    message: "#PLAYLEVEL should be non-negative for the compatibility.",
+};
+
+pub static BmsHasDIFFICULTYOutOfRange: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "difficulty-out-of-range",
+    message: "#DIFFICULTY should be between 1 and 5 for the compatibility.",
+};
+
+pub static BmsHasEXBPM: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "exbpm",
+    message: "#EXBPMxx is a temporary measure, you should use #BPMxx instead.",
+};
+
+pub static BmsHasNonpositiveBPM: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "nonpos-bpm",
+    message: "Non-positive BPM is not portable and its use is discouraged.",
+};
+pub static BmsUsesLNTYPE2: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "lntype2",
+    message: "#LNTYPE 2 is deprecated, you should use #LNTYPE 1 (implied) or #LNOBJ instead.",
+};
+
+pub static BmsHasUnknownWAVCMD: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "unknown-wavcmd",
+    message: "Invalid #WAVCMD command will be ignored.",
+};
+
+pub static BmsHasSONG: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "song",
+    message: "#SONG is deprecated, you should use #TEXT instead.",
+};
+
+pub static BmsHasRONDAM: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "rondam",
+    message: "#RONDAM [sic] will be interpreted as #RANDOM.",
+};
+
+pub static BmsHasRANDOMWithoutWhitespace: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "rondam-no-ws",
+    message: "#RANDOM should be followed by one or more whitespace.",
+};
+
+pub static BmsHasIFWithoutWhitespace: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "if-no-ws",
+    message: "#IF should be followed by one or more whitespace.",
+};
+
+pub static BmsHasIFEND: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "ifend",
+    message: "#IFEND [sic] will be interpreted as #ENDIF.",
+};
+
+pub static BmsHasENDNotFollowedByIF: BmsMessage = BmsMessage {
+    severity: Note,
+    id: "end-without-if",
+    message: "#END not followed by IF will be interpreted as #ENDIF.",
+};
 

@@ -2,11 +2,15 @@
 // Copyright (c) 2005, 2007, 2009, 2012, 2013, 2014, Kang Seonghoon.
 // See README.md and LICENSE.txt for details.
 
-//! Skin-related facilities. For now it contains various utilities for rendering.
+//! Skin engine.
 
 use gfx::color::Blend;
 use gfx::bmfont::{NCOLUMNS, Alignment, LeftAligned, Centered, RightAligned};
 use gfx::screen::{ShadedFontDrawing};
+
+pub mod ast;
+pub mod hook;
+pub mod render;
 
 /// Extensions to `ShadedFontDrawing`.
 pub trait ShadedFontDrawingAdditions {

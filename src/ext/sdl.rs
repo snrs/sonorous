@@ -13,7 +13,7 @@ pub mod syswm {
     use std::libc::{HANDLE, INVALID_HANDLE_VALUE};
 
     pub mod ll {
-        #[warn(non_camel_case_types)];
+        #[allow(non_camel_case_types)];
 
         use std::libc::{HANDLE, c_int};
 

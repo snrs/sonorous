@@ -5,6 +5,7 @@
 //! Song and pattern selection screen.
 
 use std::{str, cmp, io, os, comm, task};
+use std::str::MaybeOwned;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::rand::{rng, Rng};
@@ -12,23 +13,22 @@ use std::comm::{Chan, Port};
 use sync::RWArc;
 
 use sdl::{event, get_ticks};
-use gl = opengles::gl2;
 use format::timeline::TimelineInfo;
 use format::bms;
 use format::bms::Bms;
 use util::filesearch::SearchContext;
 use util::envelope::Envelope;
 use util::md5::{MD5, ToHex};
-use gfx::color::{Color, RGB};
 use gfx::gl::{PreparedSurface, Texture2D};
 use gfx::draw::{ShadedDrawingTraits, TexturedDrawingTraits};
-use gfx::bmfont::{LeftAligned, RightAligned};
 use gfx::screen::Screen;
 use engine::input::read_keymap;
 use engine::keyspec::{KeySpec, key_spec};
 use engine::resource::{SearchContextAdditions, LoadedImageResource, LoadedImage};
 use engine::player::apply_modf;
-use ui::init::{SCREENW, SCREENH};
+use engine::skin::ast::Skin;
+use engine::skin::hook::Hook;
+use engine::skin::render::Renderer;
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PushScene, PopScene, Exit};
 use ui::options::Options;
 use ui::loading::LoadingScene;
@@ -85,14 +85,12 @@ pub struct PreloadedData {
     /// the selection screen only.
     preproc: ~PreprocessedBms,
     /// A banner texture, if any.
-    banner: Option<Texture2D>,
+    banner: Option<Rc<Texture2D>>,
     /// A tentatively calculated duration of the BMS file in seconds. This is tentative because
     /// we don't know lengths of key sounds and BGMs yet.
     duration: f64,
     /// A list of diagnostic messages returned during the loading.
     messages: ~[(Option<uint>,bms::diag::BmsMessage)],
-    /// Metadata string.
-    brief: ~str,
 }
 
 impl PreloadedData {
@@ -101,22 +99,7 @@ impl PreloadedData {
                messages: ~[(Option<uint>,bms::diag::BmsMessage)]) -> PreloadedData {
         let originoffset = preproc.infos.originoffset;
         let duration = preproc.bms.timeline.duration(originoffset, |_| 0.0);
-
-        let duration_ = (duration * 10.0) as uint;
-        let difficultyname = preproc.bms.meta.difficulty.and_then(|d| d.name());
-        let brief = format!("{:02}:{:02}.{} | Level {level} | BPM {bpm:.2}{hasbpmchange} | \
-                             {nnotes, plural, =1{# note} other{# notes}} \
-                             [{nkeys}KEY{haslongnote}{difficulty}]",
-                            duration_/600, duration_/10%60, duration_%10,
-                            level = preproc.bms.meta.playlevel,
-                            bpm = preproc.bms.timeline.initbpm.to_f64(),
-                            hasbpmchange = if preproc.infos.hasbpmchange {"?"} else {""},
-                            nnotes = preproc.infos.nnotes, nkeys = preproc.keyspec.nkeys(),
-                            haslongnote = if preproc.infos.haslongnote {"-LN"} else {""},
-                            difficulty = difficultyname.map_or(~"", |name| ~" " + name));
-
-        PreloadedData { preproc: preproc, banner: None, duration: duration, messages: messages,
-                        brief: brief }
+        PreloadedData { preproc: preproc, banner: None, duration: duration, messages: messages }
     }
 }
 
@@ -134,16 +117,27 @@ pub enum PreloadingState {
     PreloadFailed(~str),
 }
 
+/// The scanned entry.
+pub struct Entry {
+    /// A path to loaded file.
+    path: Path,
+    /// MD5 hash. Only present when it has been read.
+    hash: Option<[u8, ..16]>,
+}
+
 /// Song/pattern selection scene context. Used when the directory path is specified.
 pub struct SelectingScene {
     /// Display screen.
     screen: Rc<RefCell<Screen>>,
     /// Game play options.
     opts: Rc<Options>,
+    /// Parsed skin data.
+    skin: Rc<Skin>,
+
     /// The root path of the scanner.
     root: Path,
-    /// A list of paths to loaded files, and MD5 hashes of them if read.
-    files: ~[(Path, Option<[u8, ..16]>)],
+    /// A list of scanned entries.
+    files: ~[Entry],
     /// Set to true when the scanner finished scanning.
     filesdone: bool,
     /// The index of the topmost entry visible on the screen.
@@ -164,8 +158,8 @@ pub struct SelectingScene {
 fn is_bms_file(path: &Path) -> bool {
     use std::ascii::StrAsciiExt;
     match path.extension().and_then(str::from_utf8) {
-        Some(ext) => match ext.to_ascii_lower() {
-            ~"bms" | ~"bme" | ~"bml" | ~"pms" => true,
+        Some(ext) => match ext.to_ascii_lower().as_slice() {
+            "bms" | "bme" | "bml" | "pms" => true,
             _ => false
         },
         _ => false
@@ -189,7 +183,7 @@ pub fn print_diag(line: Option<uint>, msg: bms::diag::BmsMessage) -> bool {
         Some(line) => format!(" at line {}", line),
         None => ~"",
     };
-    warn!("[{}{}] {}", msg.severity().to_str(), atline, msg.to_str());
+    warn!("[{}{}] {}", msg.severity, atline, msg);
     true
 }
 
@@ -202,10 +196,14 @@ static PRELOAD_DELAY: uint = 300;
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
     pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> ~SelectingScene {
+        let skin = match opts.borrow().load_skin("selecting.json") {
+            Ok(skin) => skin,
+            Err(err) => die!("{}", err),
+        };
         let root = os::make_absolute(root);
         let (port, chan) = Chan::new();
         ~SelectingScene {
-            screen: screen, opts: opts, root: root,
+            screen: screen, opts: opts, skin: Rc::new(skin), root: root,
             files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
             port: port, chan: chan, keepgoing: RWArc::new(true),
         }
@@ -332,8 +330,7 @@ impl SelectingScene {
     /// Returns a `Path` to the currently selected entry if any.
     pub fn current<'r>(&'r self) -> Option<&'r Path> {
         if self.offset < self.files.len() {
-            let (ref path, _) = self.files[self.offset];
-            Some(path)
+            Some(&self.files[self.offset].path)
         } else {
             None
         }
@@ -481,7 +478,7 @@ impl Scene for SelectingScene {
                         self.preloaded = PreloadAfter(0);
                     }
                     for path in paths.move_iter() {
-                        self.files.push((path, None));
+                        self.files.push(Entry { path: path, hash: None });
                     }
                 }
                 comm::Data(NoMoreFiles) => {
@@ -493,8 +490,7 @@ impl Scene for SelectingScene {
                 }
                 comm::Data(BmsHashRead(bmspath,hash)) => {
                     if !self.is_current(&bmspath) { continue; }
-                    let (_, ref mut hash0) = self.files[self.offset];
-                    *hash0 = Some(hash);
+                    self.files[self.offset].hash = Some(hash);
                 }
                 comm::Data(BmsLoaded(bmspath,preproc,messages)) => {
                     if !self.is_current(&bmspath) { continue; }
@@ -506,7 +502,7 @@ impl Scene for SelectingScene {
                         Preloaded(ref mut data) if data.banner.is_none() => {
                             let prepared = prepared.unwrap();
                             match Texture2D::from_prepared_surface(&prepared, false, false) {
-                                Ok(tex) => { data.banner = Some(tex); }
+                                Ok(tex) => { data.banner = Some(Rc::new(tex)); }
                                 Err(_err) => { warn!("failed to load image \\#BANNER ({})",
                                                      imgpath.to_str()); }
                             }
@@ -540,145 +536,17 @@ impl Scene for SelectingScene {
 
         screen.clear();
 
-        static META_TOP: f32 = NUMENTRIES as f32 * 20.0;
-
-        static WHITE:     Color = RGB(0xff,0xff,0xff);
-        static LIGHTGRAY: Color = RGB(0xc0,0xc0,0xc0);
-        static GRAY:      Color = RGB(0x80,0x80,0x80);
-        static BLACK:     Color = RGB(0,0,0);
-
-        // prints the banner first, so that the overflowing title etc. can overlap (for now)
-        match self.preloaded {
-            Preloaded(ref data) => {
-                let x1 = SCREENW as f32 - 302.0; let y1 = META_TOP + 24.0;
-                let x2 = SCREENW as f32 - 2.0;   let y2 = META_TOP + 104.0;
-                if data.banner.is_some() {
-                    screen.draw_textured(data.banner.get_ref(), |d| {
-                        d.rect(x1, y1, x2, y2);
-                    });
-                } else {
-                    screen.draw_shaded_prim(gl::LINES, |d| {
-                        d.line(x1, y1, x1, y2, WHITE); d.line(x1, y1, x2, y1, WHITE);
-                        d.line(x1, y1, x2, y2, WHITE); d.line(x1, y2, x2, y1, WHITE);
-                        d.line(x1, y2, x2, y2, WHITE); d.line(x2, y1, x2, y2, WHITE);
-                    });
-                }
-            }
-            _ => {}
-        }
-
+        // TODO should move this to the skin too
         screen.draw_shaded_with_font(|d| {
+            use gfx::color::RGB;
             let top = cmp::min(self.scrolloffset, self.files.len());
-            let bottom = cmp::min(self.scrolloffset + NUMENTRIES, self.files.len());
-            let windowedfiles = self.files.slice(top, bottom);
-
-            let mut y = 0.0;
-            for (i, &(ref path, ref hash)) in windowedfiles.iter().enumerate() {
-                let path = path.path_relative_from(&self.root).unwrap_or_else(|| path.clone());
-                if self.scrolloffset + i == self.offset { // inverted
-                    d.rect(10.0, y, SCREENW as f32, y + 20.0, WHITE);
-                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.display().to_str(), BLACK);
-                } else {
-                    d.string(12.0, y + 2.0, 1.0, LeftAligned, path.display().to_str(), WHITE);
-                }
-                for hash in hash.iter() {
-                    d.string(SCREENW as f32 - 4.0, y + 2.0, 1.0, RightAligned, hash.to_hex(), GRAY);
-                }
-                y += 20.0;
-            }
-            let pixelsperslot = (META_TOP - 4.0) / cmp::max(NUMENTRIES, self.files.len()) as f32;
+            let pixelsperslot =
+                (NUMENTRIES as f32 * 20.0 - 4.0) / cmp::max(NUMENTRIES, self.files.len()) as f32;
             d.rect(2.0, 2.0 + top as f32 * pixelsperslot,
-                   7.0, 2.0 + (top + NUMENTRIES) as f32 * pixelsperslot, LIGHTGRAY);
-            d.rect(0.0, META_TOP + 1.0, SCREENW as f32, META_TOP + 2.0, WHITE);
-
-            // preloaded data if any
-            match self.preloaded {
-                NothingToPreload | PreloadAfter(..) => {}
-                Preloading(..) => {
-                    d.string(4.0, META_TOP + 4.0, 1.0, LeftAligned,
-                             "loading...", LIGHTGRAY);
-                }
-                Preloaded(ref data) => {
-                    let meta = &data.preproc.bms.meta;
-
-                    let mut top = META_TOP + 4.0;
-                    let genre = meta.genre.as_ref().map_or("", |s| s.as_slice());
-                    d.string(4.0, top, 1.0, LeftAligned, genre, LIGHTGRAY);
-                    top += 18.0;
-                    let title = meta.title.as_ref().map_or("", |s| s.as_slice());
-                    if !title.is_empty() {
-                        d.string(6.0, top + 2.0, 2.0, LeftAligned, title, GRAY);
-                        d.string(4.0, top, 2.0, LeftAligned, title, WHITE);
-                    } else {
-                        d.string(4.0, top, 2.0, LeftAligned, "(no title)", GRAY);
-                    }
-                    top += 36.0;
-                    for subtitle in meta.subtitles.iter() {
-                        if subtitle.is_empty() { continue; }
-                        d.string(21.0, top + 1.0, 1.0, LeftAligned, *subtitle, GRAY);
-                        d.string(20.0, top, 1.0, LeftAligned, *subtitle, WHITE);
-                        top += 18.0;
-                    }
-                    let artist = meta.artist.as_ref().map_or("", |s| s.as_slice());
-                    if !artist.is_empty() {
-                        d.string(4.0, top, 1.0, LeftAligned, artist, WHITE);
-                        top += 18.0;
-                    }
-                    for subartist in meta.subartists.iter() {
-                        if subartist.is_empty() { continue; }
-                        d.string(20.0, top, 1.0, LeftAligned, *subartist, WHITE);
-                        top += 18.0;
-                    }
-                    for comment in meta.comments.iter() {
-                        if comment.is_empty() { continue; }
-                        d.string(4.0, top, 1.0, LeftAligned,
-                                 format!("> {}", *comment), RGB(0x80,0xff,0x80));
-                        top += 18.0;
-                    }
-                    for &(line, msg) in data.messages.iter() {
-                        if top > SCREENH as f32 { break; }
-
-                        let atline = match line {
-                            Some(line) => format!(" (line {})", line),
-                            None => ~"",
-                        };
-                        let text = format!("* {}: {}{}", msg.severity().to_str(),
-                                           msg.to_str(), atline);
-                        let color = match msg.severity() {
-                            bms::diag::Fatal => RGB(0xff,0x40,0x40),
-                            bms::diag::Warning => RGB(0xff,0xff,0x40),
-                            bms::diag::Note => RGB(0x40,0xff,0xff),
-                        };
-                        d.string(4.0, top, 1.0, LeftAligned, text, color);
-                        top += 18.0;
-
-                        if msg == bms::diag::BmsUsesLegacyEncoding {
-                            let (encname, confidence) = meta.encoding;
-                            d.string(4.0, top, 1.0, LeftAligned,
-                                     format!("  (Detected \"{}\" encoding with confidence {:.2}%)",
-                                             encname, confidence * 100.0),
-                                     RGB(0x20,0x80,0x80));
-                            top += 18.0;
-                        }
-                    }
-
-                    d.string(SCREENW as f32 - 2.0, META_TOP + 4.0, 1.0, RightAligned,
-                             data.brief, GRAY);
-                }
-                PreloadFailed(ref err) => {
-                    d.string(4.0, META_TOP + 4.0, 1.0, LeftAligned,
-                             format!("error: {}", *err), LIGHTGRAY);
-                }
-            }
-
-            // status bar will overwrite any overflowing messages
-            d.rect(0.0, SCREENH as f32 - 20.0, SCREENW as f32, SCREENH as f32, WHITE);
-            d.string(2.0, SCREENH as f32 - 18.0, 1.0, LeftAligned,
-                     format!("Up/Down/PgUp/PgDn/Home/End: Select   \
-                              Enter: {}   F5: Refresh   Esc: Quit",
-                             if self.opts.borrow().is_autoplay() {"Autoplay"} else {"Play"}),
-                     RGB(0,0,0));
+                   7.0, 2.0 + (top + NUMENTRIES) as f32 * pixelsperslot, RGB(0xc0,0xc0,0xc0));
         });
+
+        Renderer::render(screen, self.skin.clone().borrow(), self);
 
         screen.swap_buffers();
     }
@@ -689,5 +557,143 @@ impl Scene for SelectingScene {
     }
 
     fn consume(~self) -> ~Scene: { fail!("unreachable"); }
+}
+
+////////////////////////////////////////////////////////////////////////
+// hooks
+
+impl Hook for PreprocessedBms {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+        self.bms.scalar_hook(id)
+            .or_else(|| self.infos.scalar_hook(id))
+            .or_else(|| self.keyspec.scalar_hook(id))
+    }
+
+    fn texture_hook<'a>(&'a self, id: &str) -> Option<&'a Rc<Texture2D>> {
+        self.bms.texture_hook(id)
+            .or_else(|| self.infos.texture_hook(id))
+            .or_else(|| self.keyspec.texture_hook(id))
+    }
+
+    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+        self.bms.run_block_hook(id, parent, &body) ||
+            self.infos.run_block_hook(id, parent, &body) ||
+            self.keyspec.run_block_hook(id, parent, &body)
+    }
+}
+
+impl Hook for (Option<uint>, bms::diag::BmsMessage) {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+        let (lineno, ref msg) = *self;
+        match id {
+            "msg.line" =>
+                lineno.map(|v| v.to_str().into_maybe_owned()),
+            "msg.text" =>
+                Some(msg.message.into_maybe_owned()),
+            _ => None,
+        }
+    }
+
+    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+        let (lineno, ref msg) = *self;
+        match id {
+            "msg" => { body(parent, msg.id); }
+            "msg.line" => { lineno.is_some() && body(parent, ""); }
+            "msg.severity" => match msg.severity {
+                bms::diag::Note    => { body(parent, "note"); }
+                bms::diag::Warning => { body(parent, "warning"); }
+                bms::diag::Fatal   => { body(parent, "fatal"); }
+            },
+            _ => { return false; }
+        }
+        true
+    }
+}
+
+impl Hook for PreloadedData {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+        match id {
+            "meta.duration" => {
+                let dur = (self.duration * 10.0) as uint;
+                Some(format!("{:02}:{:02}.{}", dur/600, dur/10%60, dur%10).into_maybe_owned())
+            },
+            _ => self.preproc.scalar_hook(id)
+        }
+    }
+
+    fn texture_hook<'a>(&'a self, id: &str) -> Option<&'a Rc<Texture2D>> {
+        match id {
+            "meta.banner" => match self.banner {
+                Some(ref tex) => Some(tex),
+                None => None,
+            },
+            _ => self.preproc.texture_hook(id)
+        }
+    }
+
+    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+        match id {
+            "messages" => {
+                // TODO 20 messages limit is arbitrary, should really be handled by skin
+                self.messages.iter().take(20).advance(|msg| body(&parent.delegate(msg), ""));
+            }
+            "meta.banner" => { self.banner.is_some() && body(parent, ""); }
+            _ => { return self.preproc.run_block_hook(id, parent, &body); }
+        }
+        true
+    }
+}
+
+impl Hook for SelectingScene {
+    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+        match id {
+            "autoplay" => { self.opts.borrow().is_autoplay() && body(parent, ""); }
+            "scanning" => { self.filesdone || body(parent, ""); }
+            "entries" => {
+                let top = cmp::min(self.scrolloffset, self.files.len());
+                let bottom = cmp::min(self.scrolloffset + NUMENTRIES, self.files.len());
+                for (i, entry) in self.files.slice(top, bottom).iter().enumerate() {
+                    let inverted = self.scrolloffset + i == self.offset;
+                    if !body(&(self, inverted, entry), "") { break; }
+                }
+            }
+            "preload" => match self.preloaded {
+                NothingToPreload | PreloadAfter(..) => {}
+                Preloading => { body(parent, "loading"); }
+                Preloaded(ref data) => { body(&parent.delegate(data), "loaded"); }
+                PreloadFailed(ref err) => {
+                    body(&parent.add_text("preload.error", *err), "failed");
+                }
+            },
+            _ => { return false; }
+        }
+        true
+    }
+}
+
+impl<'a> Hook for (&'a SelectingScene, bool, &'a Entry) {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+        let (scene, _inverted, entry) = *self;
+        match id {
+            "entry.path" => {
+                let path = entry.path.path_relative_from(&scene.root)
+                                     .unwrap_or_else(|| entry.path.clone());
+                Some(path.display().to_str().into_maybe_owned())
+            },
+            "entry.hash" =>
+                entry.hash.map(|h| h.to_hex().into_maybe_owned()),
+            _ => scene.scalar_hook(id)
+        }
+    }
+
+    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+        let (scene, inverted, entry) = *self;
+        match id {
+            "entry.hash" => { entry.hash.is_some() && body(parent, ""); }
+            "entry.inverted" => { inverted && body(parent, ""); }
+            _ => { return scene.run_block_hook(id, parent, &body); }
+        }
+        true
+    }
 }
 

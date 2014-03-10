@@ -1,0 +1,138 @@
+{"nodes": [
+    "entries",
+    [
+        {"$displace": [10,0]},
+        {"$$": "entries", "$then": [
+            {"$$": "entry.inverted", "$then": [
+                {"$rect": null, "at": [[0,0], [800,20]], "color": "white"},
+                {"$text": {"$": "entry.path"}, "at": [2,2], "size": 16, "color": "black"}
+            ], "$else": [
+                {"$text": {"$": "entry.path"}, "at": [2,2], "size": 16, "color": "white"}
+            ]},
+            {"$$": "entry.hash", "$then": [
+                {"$text": {"$": "entry.hash"},
+                 "at": [786,2], "size": 16, "color": "gray", "anchor": "right"}
+            ]},
+            {"$displace": [0,20]}
+        ], "$else": [
+            {"$$": "scanning", "$then": [], "$else": [
+                {"$text": "No BMS file found.", "at": [2,2], "size": 16, "color": "gray"}
+            ]}
+        ]}
+    ],
+    {"$rect": null, "at": [[0,301], [800,302]], "color": "white"},
+
+    "preloaded data if any",
+    [
+        {"$displace": [0,300]},
+        {"$$": "preload", "loading": [
+            {"$text": "loading...", "at": [4,4], "size": 16, "color": "silver"}
+        ], "loaded": [[
+            "prints the banner first, so that the overflowing title etc. can overlap (for now)",
+            {"$$": "meta.banner", "$then": [
+                {"$rect": "meta.banner", "at": [[498,24], [798,104]]}
+            ], "$else": [
+                {"$line": null, "from": [498, 24], "to": [498,104], "color": "white"},
+                {"$line": null, "from": [498, 24], "to": [798, 24], "color": "white"},
+                {"$line": null, "from": [498, 24], "to": [798,104], "color": "white"},
+                {"$line": null, "from": [498,104], "to": [798, 24], "color": "white"},
+                {"$line": null, "from": [498,104], "to": [798,104], "color": "white"},
+                {"$line": null, "from": [798, 24], "to": [798,104], "color": "white"}
+            ]},
+
+            {"$text": [{"$": "meta.duration"},
+                       " | Level ", {"$": "meta.playlevel"},
+                       " | BPM ", {"$": "timeline.initbpm"},
+                                  {"$$": "timeline.bpmchange", "$then": "?"},
+                       " | ", {"$": "timeline.#notes"},
+                              {"$$text": "timeline.#notes", "1": " note", "$default": " notes"},
+                       " [", {"$": "meta.#keys"}, "KEY",
+                             {"$$": "timeline.longnote", "$then": "-LN"},
+                             {"$$": "meta.difficulty",
+                              "beginner": " BEGINNER", "normal": " NORMAL", "hard": " HARD",
+                              "extra": " EXTRA", "insane": " INSANE"}, "]"],
+             "at": [798,4], "size": 16, "color": "gray", "anchor": "right"},
+
+            {"$$": "meta.genre", "$then": [
+                {"$text": {"$": "meta.genre"}, "at": [4,4], "size": 16, "color": "silver"}
+            ]},
+            {"$displace": [0,18]},
+
+            {"$$": "meta.title", "$then": [
+                {"$text": {"$": "meta.title"}, "at": [6,6], "size": 32, "color": "gray"},
+                {"$text": {"$": "meta.title"}, "at": [4,4], "size": 32, "color": "white"}
+            ], "$else": [
+                {"$text": "(no title)", "at": [4,4], "size": 32, "color": "gray"}
+            ]},
+            {"$displace": [0,36]},
+
+            {"$$": "meta.subtitle", "$then": [
+                {"$$len": "meta.subtitle", "$then": [
+                    {"$text": {"$": "meta.subtitle"}, "at": [21,5], "size": 16, "color": "gray"},
+                    {"$text": {"$": "meta.subtitle"}, "at": [20,4], "size": 16, "color": "white"},
+                    {"$displace": [0,18]}
+                ]}
+            ]},
+
+            {"$$": "meta.artist", "$then": [
+                {"$text": {"$": "meta.artist"}, "at": [4,4], "size": 16, "color": "white"},
+                {"$displace": [0,18]}
+            ]},
+
+            {"$$": "meta.subartist", "$then": [
+                {"$$len": "meta.subartist", "$then": [
+                    {"$text": {"$": "meta.subartist"}, "at": [20,4], "size": 16, "color": "white"},
+                    {"$displace": [0,18]}
+                ]}
+            ]},
+
+            {"$$": "meta.comment", "$then": [
+                {"$$len": "meta.comment", "$then": [
+                    {"$text": ["> ", {"$": "meta.comment"}],
+                     "at": [4,4], "size": 16, "color": "#80ff80"},
+                    {"$displace": [0,18]}
+                ]}
+            ]},
+
+            {"$$": "messages", "$then": [
+                {"$$": "msg.severity",
+                 "fatal": [
+                    {"$text": ["* Fatal: ", {"$": "msg.text"},
+                               {"$$": "msg.line", "$then": [" (line ", {"$": "msg.line"}, ")"]}],
+                     "at": [4,4], "size": 16, "color": "#ff4040"}
+                 ],
+                 "warning": [
+                    {"$text": ["* Warning: ", {"$": "msg.text"},
+                               {"$$": "msg.line", "$then": [" (line ", {"$": "msg.line"}, ")"]}],
+                     "at": [4,4], "size": 16, "color": "#ffff40"}
+                 ],
+                 "note": [
+                    {"$text": ["* Note: ", {"$": "msg.text"},
+                               {"$$": "msg.line", "$then": [" (line ", {"$": "msg.line"}, ")"]}],
+                     "at": [4,4], "size": 16, "color": "#40ffff"}
+                 ]},
+                {"$displace": [0,18]},
+                {"$$": "msg",
+                 "legacy-encoding": [
+                    {"$text": ["  (Detected \"", {"$": "meta.encoding"}, "\" encoding ",
+                               "with confidence ", {"$": "meta.encoding.confidence"}, ")"],
+                     "at": [4,4], "size": 16, "color": "#208080"},
+                    {"$displace": [0,18]}
+                 ],
+                 "$default": []}
+            ]}
+        ]], "failed": [
+            {"$text": ["error: ", {"$": "preload.error"}],
+             "at": [4,4], "size": 16, "color": "silver"}
+        ]}
+    ],
+
+    "status bar, will overwrite any overflowing messages",
+    {"$rect": null, "at": [[0,580], [800,600]], "color": "white"},
+    {"$text": ["Up/Down/PgUp/PgDn/Home/End: Select   Enter: ",
+               {"$$": "autoplay", "$then": "Autoplay", "$else": "Play"},
+               "   F5: Refresh   Esc: Quit"],
+     "at": [2,598], "size": 16, "color": "black", "anchor": [0,1]},
+
+    "/* vim: set syn=javascript: */"
+]}
