@@ -25,7 +25,7 @@ use ui::viewing::BGACanvas;
 use ui::playresult::PlayResultScene;
 
 /// An appearance for each lane.
-struct LaneStyle {
+pub struct LaneStyle {
     /// The left position of the lane in the final screen.
     left: uint,
     /// The left position of the lane in the object sprite.
@@ -354,8 +354,8 @@ impl Scene for PlayingScene {
         let mut screen_ = screen__.borrow_mut();
         let screen = screen_.get();
 
-        let W = SCREENW as f32;
-        let H = SCREENH as f32;
+        static W: f32 = SCREENW as f32;
+        static H: f32 = SCREENH as f32;
 
         let beat = self.player.cur.loc.vpos * 4.0 % 1.0;
 

@@ -111,7 +111,7 @@ pub mod builder {
 
     /// An object data with virtual position. Easier than a tuple to deal with.
     #[deriving(Clone)]
-    struct ObjDataWithVpos<SoundRef,ImageRef> {
+    pub struct ObjDataWithVpos<SoundRef,ImageRef> {
         vpos: f64,
         data: ObjData<SoundRef,ImageRef>
     }

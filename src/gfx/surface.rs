@@ -165,7 +165,7 @@ impl<W:ToInt16+Clone,H:ToInt16+Clone> Wh for (W,H) {
 /// Constructs an `sdl::Rect` from given point coordinates. Fills `w` and `h` fields to 0
 /// as expected by the second `sdl::Rect` argument from `SDL_BlitSurface`.
 #[inline(always)]
-fn rect_from_xy<XY:Xy>(xy: XY) -> Rect {
+pub fn rect_from_xy<XY:Xy>(xy: XY) -> Rect {
     let (x, y) = xy.xy();
     Rect { x: x, y: y, w: 0, h: 0 }
 }
@@ -173,7 +173,7 @@ fn rect_from_xy<XY:Xy>(xy: XY) -> Rect {
 /// Constructs an `sdl::Rect` from given point coordinates and optional rectangular area.
 /// `rect_from_xywh(xy, ())` equals to `rect_from_xy(xy)`.
 #[inline(always)]
-fn rect_from_xywh<XY:Xy,WH:WhOpt>(xy: XY, wh: WH) -> Rect {
+pub fn rect_from_xywh<XY:Xy,WH:WhOpt>(xy: XY, wh: WH) -> Rect {
     let (x, y) = xy.xy();
     let (w, h) = wh.wh_opt().unwrap_or((0, 0));
     Rect { x: x, y: y, w: w, h: h }

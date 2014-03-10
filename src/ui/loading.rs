@@ -261,8 +261,8 @@ impl Scene for LoadingScene {
 
         screen.clear();
 
-        let W = SCREENW as f32;
-        let H = SCREENH as f32;
+        static W: f32 = SCREENW as f32;
+        static H: f32 = SCREENH as f32;
 
         screen.draw_shaded_with_font(|d| {
             d.string(W/2.0, H/2.0-16.0, 2.0, Centered, "loading bms file...",

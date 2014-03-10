@@ -11,6 +11,8 @@
 #[cfg(target_os = "win32")];
 
 pub mod ll {
+    #[warn(non_camel_case_types)];
+
     use std::libc::{c_int, c_uint, c_void};
     use std::libc::{BOOL, CHAR, WORD, DWORD, HANDLE, LPCSTR, LPWSTR, LPCWSTR};
 

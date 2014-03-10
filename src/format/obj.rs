@@ -606,12 +606,17 @@ impl<T:Clone> Index<ObjAxis,T> for ObjLoc<T> {
  * 6.00    5.50    +inf    +inf    MeasureBar
  * ~~~~
  */
-#[deriving(Eq,Show,Clone)]
+#[deriving(Show,Clone)]
 pub struct Obj<SoundRef,ImageRef> {
     /// Object location.
     loc: ObjLoc<f64>,
     /// Associated object data.
     data: ObjData<SoundRef,ImageRef>
+}
+
+impl<S:Clone,I:Clone> Eq for Obj<S,I> {
+    fn eq(&self, other: &Obj<S,I>) -> bool { self.loc == other.loc }
+    fn ne(&self, other: &Obj<S,I>) -> bool { self.loc != other.loc }
 }
 
 impl<S:Clone,I:Clone> Ord for Obj<S,I> {

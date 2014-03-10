@@ -95,9 +95,9 @@ struct Block {
 /// A generic BMS preprocessor. `T` is normally a BMS command, but there is no restriction.
 pub struct Preprocessor<'r,T,R> {
     /// The current block informations.
-    blocks: ~[Block],
+    priv blocks: ~[Block],
     /// Random number generator.
-    r: &'r mut R,
+    priv r: &'r mut R,
 }
 
 impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {

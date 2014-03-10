@@ -80,7 +80,7 @@ enum Message {
 }
 
 /// Preloaded game data.
-struct PreloadedData {
+pub struct PreloadedData {
     /// A part of the game data necessary for initializing `Player`. Anything else is used for
     /// the selection screen only.
     preproc: ~PreprocessedBms,
@@ -121,7 +121,7 @@ impl PreloadedData {
 }
 
 /// The state of preloaded game data.
-enum PreloadingState {
+pub enum PreloadingState {
     /// The selected entry cannot be used for preloading or the entry does not exist.
     NothingToPreload,
     /// The selected entry should be preloaded after given timestamp (as per `sdl::get_ticks()`).
@@ -153,11 +153,11 @@ pub struct SelectingScene {
     /// Preloaded game data or preloading state if any.
     preloaded: PreloadingState,
     /// A port for receiving worker messages.
-    port: Port<Message>,
+    priv port: Port<Message>,
     /// A shared channel to which workers send messages.
-    chan: Chan<Message>,
+    priv chan: Chan<Message>,
     /// A shared cell, set to false when the scene is deactivated.
-    keepgoing: RWArc<bool>,
+    priv keepgoing: RWArc<bool>,
 }
 
 /// Returns true if the path should be parsed as a BMS file.
