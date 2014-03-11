@@ -36,7 +36,7 @@
  *
  *             "the block does not group the clipping region changes,",
  *             "so this command will apply to the next iteration.",
- *             {"$clip": [[0,36],["100%","100%"]]}
+ *             {"$cliptop": 36}
  *         ], "$else": [
  *             "this gets rendered only when the `$then` block is never called.",
  *             {"$text": "Oops, no images.", "at": [0,0], "size": 16, "color": "gray"}
@@ -639,6 +639,42 @@ impl FromJson for Node {
                         _ => None,
                     };
                 }
+
+                // {"$cliptop":    h} = {"$clip": [[0,h],["100%","100%"]]}
+                // {"$clipbottom": h} = {"$clip": [[0,0],["100%","100%-h"]]}
+                // {"$clipleft":   w} = {"$clip": [[w,0],["100%","100%"]]}
+                // {"$clipright":  w} = {"$clip": [[0,0],["100%-w","100%"]]}
+                macro_rules! clip_to(
+                    ($key:expr, $num_to_rect:expr) => ({
+                        let clipto = map.pop(&~$key);
+                        if clipto.is_some() {
+                            let v = from_json(clipto.unwrap());
+                            if !map.is_empty() { return None; }
+                            return match v {
+                                Some(v) => Some(Clip { at: $num_to_rect(v) }),
+                                _ => None,
+                            };
+                        }
+                    })
+                )
+                fn invert(e: Expr) -> Expr {
+                    match e {
+                        ENum(v) => ERatioNum(1.0, -v),
+                        ERatioNum(r, v) => ERatioNum(1.0-r, -v),
+                    }
+                }
+                clip_to!("$cliptop",
+                         |h| Rect { p: Pos { x: ENum(0.0), y: h },
+                                    q: Pos { x: ERatioNum(1.0,0.0), y: ERatioNum(1.0,0.0) } })
+                clip_to!("$clipbottom",
+                         |h| Rect { p: Pos { x: ENum(0.0), y: ENum(0.0) },
+                                    q: Pos { x: ERatioNum(1.0,0.0), y: invert(h) } })
+                clip_to!("$clipleft",
+                         |w| Rect { p: Pos { x: w, y: ENum(0.0) },
+                                    q: Pos { x: ERatioNum(1.0,0.0), y: ERatioNum(1.0,0.0) } })
+                clip_to!("$clipright",
+                         |w| Rect { p: Pos { x: ENum(0.0), y: ENum(0.0) },
+                                    q: Pos { x: invert(w), y: ERatioNum(1.0,0.0) } })
 
                 // {"$$": "even?", ...} etc. (delegated to Block)
                 from_json(j::Object(map)).map(Block)

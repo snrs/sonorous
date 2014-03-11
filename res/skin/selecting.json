@@ -13,7 +13,7 @@
                 {"$text": {"$": "entry.hash"},
                  "at": ["100%-4",2], "size": 16, "color": "gray", "anchor": "right"}
             ]},
-            {"$clip": [[0,20], ["100%","100%"]]}
+            {"$cliptop": 20}
         ], "$else": [
             {"$$": "scanning", "$then": [], "$else": [
                 {"$text": "No BMS file found.", "at": [2,2], "size": 16, "color": "gray"}
@@ -59,7 +59,7 @@
             {"$$": "meta.genre", "$then": [
                 {"$text": {"$": "meta.genre"}, "at": [4,4], "size": 16, "color": "silver"}
             ]},
-            {"$clip": [[0,18], ["100%","100%"]]},
+            {"$cliptop": 18},
 
             {"$$": "meta.title", "$then": [
                 {"$text": {"$": "meta.title"}, "at": [6,6], "size": 32, "color": "gray"},
@@ -67,25 +67,25 @@
             ], "$else": [
                 {"$text": "(no title)", "at": [4,4], "size": 32, "color": "gray"}
             ]},
-            {"$clip": [[0,36], ["100%","100%"]]},
+            {"$cliptop": 36},
 
             {"$$": "meta.subtitle", "$then": [
                 {"$$len": "meta.subtitle", "$then": [
                     {"$text": {"$": "meta.subtitle"}, "at": [21,5], "size": 16, "color": "gray"},
                     {"$text": {"$": "meta.subtitle"}, "at": [20,4], "size": 16, "color": "white"},
-                    {"$clip": [[0,18], ["100%","100%"]]}
+                    {"$cliptop": 18}
                 ]}
             ]},
 
             {"$$": "meta.artist", "$then": [
                 {"$text": {"$": "meta.artist"}, "at": [4,4], "size": 16, "color": "white"},
-                {"$clip": [[0,18], ["100%","100%"]]}
+                {"$cliptop": 18}
             ]},
 
             {"$$": "meta.subartist", "$then": [
                 {"$$len": "meta.subartist", "$then": [
                     {"$text": {"$": "meta.subartist"}, "at": [20,4], "size": 16, "color": "white"},
-                    {"$clip": [[0,18], ["100%","100%"]]}
+                    {"$cliptop": 18}
                 ]}
             ]},
 
@@ -93,7 +93,7 @@
                 {"$$len": "meta.comment", "$then": [
                     {"$text": ["> ", {"$": "meta.comment"}],
                      "at": [4,4], "size": 16, "color": "#80ff80"},
-                    {"$clip": [[0,18], ["100%","100%"]]}
+                    {"$cliptop": 18}
                 ]}
             ]},
 
@@ -114,13 +114,13 @@
                                {"$$": "msg.line", "$then": [" (line ", {"$": "msg.line"}, ")"]}],
                      "at": [4,4], "size": 16, "color": "#40ffff"}
                  ]},
-                {"$clip": [[0,18], ["100%","100%"]]},
+                {"$cliptop": 18},
                 {"$$": "msg",
                  "legacy-encoding": [
                     {"$text": ["  (Detected \"", {"$": "meta.encoding"}, "\" encoding ",
                                "with confidence ", {"$": "meta.encoding.confidence"}, ")"],
                      "at": [4,4], "size": 16, "color": "#208080"},
-                    {"$clip": [[0,18], ["100%","100%"]]}
+                    {"$cliptop": 18}
                  ],
                  "$default": []}
             ]}
