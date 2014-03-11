@@ -14,11 +14,12 @@ use gfx::gl::Texture2D;
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
 use gfx::bmfont::{NCOLUMNS, NROWS, FontDrawingUtils, LeftAligned};
 use gfx::screen::{Screen, ShadedFontDrawing, ScreenDraw, ScreenTexturedDraw};
+use engine::skin::ast::{Expr, ENum, ERatioNum, Pos, Rect};
 use engine::skin::ast::{Gen, HookGen, TextGen, TextLenGen};
 use engine::skin::ast::{Block, CondBlock, MultiBlock};
 use engine::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
 use engine::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
-                        Text, Group, Displace};
+                        Text, Group, Clip};
 use engine::skin::ast::{Skin};
 use engine::skin::hook::Hook;
 
@@ -39,12 +40,16 @@ enum ActiveDraw<'a> {
 pub struct Renderer<'a> {
     /// Screen reference.
     priv screen: &'a mut Screen,
+    /// The active draw call.
+    priv draw: ActiveDraw<'a>,
     /// Left coordinate of the clipping region.
     priv dx: f32,
     /// Top coordinate of the clipping region.
     priv dy: f32,
-    /// The active draw call.
-    priv draw: ActiveDraw<'a>,
+    /// The width of the clipping region.
+    priv w: f32,
+    /// The height of the clipping region.
+    priv h: f32,
 }
 
 impl<'a> Renderer<'a> {
@@ -57,7 +62,24 @@ impl<'a> Renderer<'a> {
     }
 
     fn new(screen: &'a mut Screen) -> Renderer<'a> {
-        Renderer { screen: screen, dx: 0.0, dy: 0.0, draw: ToBeDrawn }
+        Renderer { screen: screen, draw: ToBeDrawn,
+                   dx: 0.0, dy: 0.0, w: screen.width as f32, h: screen.height as f32 }
+    }
+
+    fn expr(_hook: &Hook, pos: &Expr, reference: f32) -> f32 {
+        match *pos {
+            ENum(v) => v,
+            ERatioNum(r, v) => r * reference + v,
+        }
+    }
+
+    fn pos(&self, hook: &Hook, pos: &Pos) -> (f32, f32) {
+        (self.dx + Renderer::expr(hook, &pos.x, self.w),
+         self.dy + Renderer::expr(hook, &pos.y, self.h))
+    }
+
+    fn rect(&self, hook: &Hook, rect: &Rect) -> ((f32, f32), (f32, f32)) {
+        (self.pos(hook, &rect.p), self.pos(hook, &rect.q))
     }
 
     fn gen(hook: &Hook, gen: &Gen, body: |&Hook, &str| -> bool) -> bool {
@@ -214,32 +236,40 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    fn nodes(&mut self, hook: &Hook, nodes: &[Node]) {
+    fn nodes(&mut self, hook: &Hook, nodes: &[Node]) -> bool {
         for node in nodes.iter() {
             match *node {
                 Nothing => {}
                 Debug(ref msg) => {
-                    debug!("skin debug: dx={} dy={} msg={}", self.dx, self.dy, *msg);
+                    debug!("skin debug: dx={} dy={} w={} y={} msg={}",
+                           self.dx, self.dy, self.w, self.h, *msg);
                 }
                 ColoredLine { ref from, ref to, ref color } => {
-                    self.shaded_lines().line(from.x + self.dx, from.y + self.dy,
-                                             to.x + self.dx, to.y + self.dy, *color);
+                    let (x1, y1) = self.pos(hook, from);
+                    let (x2, y2) = self.pos(hook, to);
+                    self.shaded_lines().line(x1, y1, x2, y2, *color);
                 }
                 ColoredRect { ref at, ref color } => {
-                    self.shaded().rect(at.p.x + self.dx, at.p.y + self.dy,
-                                       at.q.x + self.dx, at.q.y + self.dy, *color);
+                    let ((x1, y1), (x2, y2)) = self.rect(hook, at);
+                    self.shaded().rect(x1, y1, x2, y2, *color);
                 }
                 TexturedRect { ref tex, ref at, ref rgba, ref clip } => {
+                    let ((x1, y1), (x2, y2)) = self.rect(hook, at);
                     match (hook.texture_hook(tex.as_slice()), *clip) {
                         (Some(tex), Some(ref clip)) => {
-                            self.textured(tex).rect_area_rgba(at.p.x + self.dx, at.p.y + self.dy,
-                                                              at.q.x + self.dx, at.q.y + self.dy,
-                                                              clip.p.x, clip.p.y,
-                                                              clip.q.x, clip.q.y, *rgba);
+                            let (tw, th) = {
+                                let tex = tex.borrow();
+                                (tex.width as f32, tex.height as f32)
+                            };
+                            let tx1 = Renderer::expr(hook, &clip.p.x, tw);
+                            let ty1 = Renderer::expr(hook, &clip.p.y, th);
+                            let tx2 = Renderer::expr(hook, &clip.q.x, tw);
+                            let ty2 = Renderer::expr(hook, &clip.q.y, th);
+                            self.textured(tex).rect_area_rgba(x1, y1, x2, y2,
+                                                              tx1, ty1, tx2, ty2, *rgba);
                         }
                         (Some(tex), None) => {
-                            self.textured(tex).rect_rgba(at.p.x + self.dx, at.p.y + self.dy,
-                                                         at.q.x + self.dx, at.q.y + self.dy, *rgba);
+                            self.textured(tex).rect_rgba(x1, y1, x2, y2, *rgba);
                         }
                         (None, _) => {
                             warn!("skin: `{id}` is not a texture hook, will ignore",
@@ -248,33 +278,45 @@ impl<'a> Renderer<'a> {
                     }
                 }
                 Text { ref at, size, anchor: (ax,ay), ref color, ref text } => {
+                    let (x, y) = self.pos(hook, at);
                     let text = Renderer::text_source(hook, text);
                     let zoom = size / NROWS as f32;
                     let w = zoom * (text.as_slice().char_len() * NCOLUMNS) as f32;
                     let h = size as f32;
-                    self.shaded().string(at.x - w * ax + self.dx, at.y - h * ay + self.dy,
-                                         zoom, LeftAligned, text.as_slice(), *color);
+                    self.shaded().string(x - w * ax, y - h * ay, zoom,
+                                         LeftAligned, text.as_slice(), *color);
                 }
-                Group { ref clip, ref nodes } => {
-                    assert!(clip.is_none(), "clip not implemented");
+                Group(ref nodes) => {
                     let dx = self.dx;
                     let dy = self.dy;
+                    let w = self.w;
+                    let h = self.h;
                     self.nodes(hook, *nodes);
                     self.dx = dx;
                     self.dy = dy;
+                    self.w = w;
+                    self.h = h;
                 }
-                Displace { ref by } => {
-                    self.dx += by.x;
-                    self.dy += by.y;
+                Clip { ref at } => {
+                    let ((x1, y1), (x2, y2)) = self.rect(hook, at);
+                    self.dx = x1;
+                    self.dy = y1;
+                    self.w = x2 - x1;
+                    self.h = y2 - y1;
+                    if self.w <= 0.0 || self.h <= 0.0 {
+                        // no need to render past this node.
+                        // XXX this should propagate to parent nodes up to the innermost group
+                        return false;
+                    }
                 }
                 Block(ref block) => {
                     Renderer::block(hook, block, |hook_, nodes_| {
-                        self.nodes(hook_, *nodes_);
-                        true
+                        self.nodes(hook_, *nodes_)
                     });
                 }
             }
         }
+        true
     }
 }
 

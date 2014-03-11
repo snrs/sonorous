@@ -14,16 +14,15 @@
  *     "this is a temporary measure and will be replaced with the proper comments.",
  *
  *     "this renders a static rectangle.",
- *     {"$rect": null, "at": [[8,8], [122,44]], "color": "#808080"},
+ *     {"$rect": null, "at": [[8,8], ["100%-8",44]], "color": "#808080"},
  *
  *     "this renders a static text.",
  *     {"$text": "Gallery", "at": [10,10], "size": 32, "color": "black"},
  *
  *     "the renderer has a clipping region, and this delimits the changes on it.",
  *     [
- *         "this changes the clipping region by translating it.",
- *         "this is a temporary measure and will be replaced with the reclipping command.",
- *         {"$displace": [10,50]},
+ *         "this changes the clipping region.",
+ *         {"$clip": [[10,50],["100%","100%"]]},
  *
  *         "this loops over the hook. the hook provider may freely call each block.",
  *         {"$$": "images", "$then": [
@@ -37,7 +36,7 @@
  *
  *             "the block does not group the clipping region changes,",
  *             "so this command will apply to the next iteration.",
- *             {"$displace": [0,36]}
+ *             {"$clip": [[0,36],["100%","100%"]]}
  *         ], "$else": [
  *             "this gets rendered only when the `$then` block is never called.",
  *             {"$text": "Oops, no images.", "at": [0,0], "size": 16, "color": "gray"}
@@ -211,18 +210,80 @@ impl FromJson for Gradient {
     }
 }
 
+/// Numerical expression.
+#[deriving(Show)]
+pub enum Expr {
+    ENum(f32),
+    ERatioNum(f32, f32),
+}
+
+impl FromJson for Expr {
+    fn from_json(json: j::Json) -> Option<Expr> {
+        use util::std::str::StrUtil;
+
+        let expr = match json {
+            j::String(s) => s,
+            j::Number(v) => { return Some(ENum(v as f32)); }
+            _ => { return None; }
+        };
+
+        // parse <num> ['%'] {('+' | '-') <num> ['%']}
+        let mut ratio = None;
+        let mut num = 0.0;
+        let mut s = expr.as_slice();
+        let mut minus = false;
+        loop {
+            let mut v = 0.0;
+            if !lex!(s; ws*, f64 -> v, str* -> s, !) { return None; }
+            if minus { v = -v; }
+            if s.starts_with("%") {
+                v /= 100.0;
+                ratio.mutate_or_set(v, |r| r + v);
+                s = s.slice_from(1);
+            } else {
+                num += v;
+            }
+            s = s.trim_left();
+            if s.is_empty() { break; }
+            if s.starts_with("+") {
+                minus = false;
+                s = s.slice_from(1);
+            } else if s.starts_with("-") {
+                minus = true;
+                s = s.slice_from(1);
+            } else {
+                return None;
+            }
+        }
+
+        match ratio {
+            Some(r) => Some(ERatioNum(r, num)),
+            None => Some(ENum(num)),
+        }
+    }
+}
+
 /// Two-dimensional position.
 #[deriving(Show)]
-pub struct Pos { x: f32, y: f32 }
+pub struct Pos { x: Expr, y: Expr }
 
 impl FromJson for Pos {
     fn from_json(json: j::Json) -> Option<Pos> {
-        fn from_xy(x: f64, y: f64) -> Option<Pos> { Some(Pos { x: x as f32, y: y as f32 }) }
+        fn from_xy(x: j::Json, y: j::Json) -> Option<Pos> {
+            match (from_json(x), from_json(y)) {
+                (Some(x), Some(y)) => Some(Pos { x: x, y: y }),
+                _ => None,
+            }
+        }
 
         match json {
-            j::List(ref l) => match l.as_slice() {
-                // [x, y] (preferred)
-                [j::Number(x), j::Number(y)] => from_xy(x, y),
+            // [x, y]
+            j::List(mut l) => match l.len() {
+                2 => {
+                    let y = l.pop().unwrap();
+                    let x = l.pop().unwrap();
+                    from_xy(x, y)
+                },
                 _ => None,
             },
 
@@ -232,12 +293,12 @@ impl FromJson for Pos {
                 let y = map.pop(&~"y");
                 if !map.is_empty() { return None; }
                 match (x, y) {
-                    (Some(j::Number(x)), Some(j::Number(y))) => from_xy(x, y),
+                    (Some(x), Some(y)) => from_xy(x, y),
                     _ => None,
                 }
             },
 
-            _ => None
+            _ => None,
         }
     }
 }
@@ -248,7 +309,6 @@ pub struct Rect { p: Pos, q: Pos }
 
 impl FromJson for Rect {
     fn from_json(json: j::Json) -> Option<Rect> {
-        fn pos(x: f64, y: f64) -> Pos { Pos { x: x as f32, y: y as f32 } }
         fn from_pq(p: Pos, q: Pos) -> Option<Rect> { Some(Rect { p: p, q: q }) }
 
         match json {
@@ -264,11 +324,18 @@ impl FromJson for Rect {
                 },
 
                 // [px, py, qx, qy]
-                4 => match (&l[0], &l[1], &l[2], &l[3]) {
-                    (&j::Number(px), &j::Number(py), &j::Number(qx), &j::Number(qy)) =>
-                        from_pq(pos(px, py), pos(qx, qy)),
-                    _ => None,
+                4 => {
+                    let qy = l.pop().unwrap();
+                    let qx = l.pop().unwrap();
+                    let py = l.pop().unwrap();
+                    let px = l.pop().unwrap();
+                    match (from_json(px), from_json(py), from_json(qx), from_json(qy)) {
+                        (Some(px), Some(py), Some(qx), Some(qy)) =>
+                            from_pq(Pos { x: px, y: py }, Pos { x: qx, y: qy }),
+                        _ => None,
+                    }
                 },
+
                 _ => None,
             },
 
@@ -446,10 +513,10 @@ pub enum Node {
     TexturedRect { tex: Id, at: Rect, rgba: (u8,u8,u8,u8), clip: Option<Rect> },
     // text with fixed anchor
     Text { at: Pos, size: f32, anchor: (f32,f32), color: Gradient, text: TextSource },
-    // displacement/clipping group
-    Group { clip: Option<Rect>, nodes: ~[Node] },
-    // displacement command
-    Displace { by: Pos },
+    // clipping group, resets the clipping region after the group
+    Group(~[Node]),
+    // reclipping command
+    Clip { at: Rect },
     // block
     Block(Block<~[Node]>),
 }
@@ -460,11 +527,8 @@ impl FromJson for Node {
             // "some comment" (temporary)
             j::String(_) => Some(Nothing),
 
-            // ["simple group", [{"$displace": [x, y]}], "displacement will be reset"]
-            j::List(l) => match from_json(j::List(l)) {
-                Some(nodes) => Some(Group { clip: None, nodes: nodes }),
-                None => None,
-            },
+            // ["simple group", [{"$clip": [p, q]}], "clipping region will be reset"]
+            j::List(l) => from_json(j::List(l)).map(Group),
 
             j::Object(mut map) => {
                 // {"$debug": "message"}
@@ -565,31 +629,13 @@ impl FromJson for Node {
                     };
                 }
 
-                // {"$clip": [[px,py],[qx,qy]], "nodes": []}
+                // {"$clip": [[px,py],[qx,qy]]}
                 let clip = map.pop(&~"$clip");
                 if clip.is_some() {
-                    let clip = match clip.unwrap() {
-                        j::Null => Some(None),
-                        clip => from_json(clip).map(Some),
-                    };
-                    let nodes = match map.pop(&~"nodes") {
-                        Some(j::List(l)) => option::collect(l.move_iter().map(from_json::<Node>)),
-                        _ => None,
-                    };
+                    let at = from_json(clip.unwrap());
                     if !map.is_empty() { return None; }
-                    return match (clip, nodes) {
-                        (Some(clip), Some(nodes)) => Some(Group { clip: clip, nodes: nodes }),
-                        _ => None,
-                    };
-                }
-
-                // {"$displace": [x,y]}
-                let displace = map.pop(&~"$displace");
-                if displace.is_some() {
-                    let by = from_json(displace.unwrap());
-                    if !map.is_empty() { return None; }
-                    return match by {
-                        Some(by) => Some(Displace { by: by }),
+                    return match at {
+                        Some(at) => Some(Clip { at: at }),
                         _ => None,
                     };
                 }
