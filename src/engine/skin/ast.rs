@@ -468,9 +468,89 @@ impl<T:FromJson> FromJson for Block<T> {
     }
 }
 
+/// The formatting specification for scalar text.
+pub enum ScalarFormat {
+    NoFormat,
+    // ['+'] [".."] {'#'} {'0'} '0' [".0" {'0'}] [('*' <mult> | '/' <div>)]
+    // e.g. `##000.00` prints 3.147 as `003.15`, 1234.5 as `1234.50` and -987654 as `87654.00`
+    NumFormat { sign: bool, minwidth: u8, maxwidth: u8, precision: u8, multiplier: f64 },
+    // ['+'] [".."] {'#'} {'0'} '0' [":00" [":00"]] [".0" {'0'}] [('*' <mult> | '/' <div>)]
+    // e.g. `0:00:00.0` prints 23456.7 as `6:30:56.7`, `##00:00.0` prints 23456.7 as `390:56.7`
+    // note that `minwidth`/`maxwidth` here indicates those of most significant parts.
+    MsFormat { sign: bool, minwidth: u8, maxwidth: u8, precision: u8, multiplier: f64 },
+    HmsFormat { sign: bool, minwidth: u8, maxwidth: u8, precision: u8, multiplier: f64 },
+}
+
+impl FromJson for ScalarFormat {
+    fn from_json(json: j::Json) -> Option<ScalarFormat> {
+        let fmt = match json {
+            j::Null => { return Some(NoFormat); }
+            j::String(s) => s,
+            _ => { return None; }
+        };
+
+        let mut s = fmt.as_slice();
+        let sign = if s.starts_with("+") { s = s.slice_from(1); true } else { false };
+        let unbounded = if s.starts_with("..") { s = s.slice_from(2); true } else { false };
+        let nhashes = s.find(|c: char| c != '#').unwrap_or(s.len());
+        s = s.slice_from(nhashes);
+        let nzeroes = s.find(|c: char| c != '0').unwrap_or(s.len());
+        if nzeroes == 0 { return None; } // no `#.00`, only `0.00` is valid
+        s = s.slice_from(nzeroes);
+        let nsixties = if s.starts_with(":00") {
+            s = s.slice_from(3);
+            if s.starts_with(":00") { s = s.slice_from(3); 2 } else { 1 }
+        } else {
+            0
+        };
+        let precision = if s.starts_with(".0") {
+            s = s.slice_from(1);
+            let prec = s.find(|c: char| c != '0').unwrap_or(s.len());
+            assert!(prec > 0);
+            s = s.slice_from(prec);
+            prec
+        } else {
+            0
+        };
+        s = s.trim_left();
+        let mult = if s.starts_with("*") {
+            from_str::<f64>(s.slice_from(1).trim())
+        } else if s.starts_with("/") {
+            from_str::<f64>(s.slice_from(1).trim()).map(|v| 1.0 / v)
+        } else {
+            Some(1.0)
+        };
+        let mult = match mult {
+            Some(mult) => mult,
+            None => { return None; }
+        };
+
+        let signwidth = if sign {1} else {0};
+        let fracwidth = if precision > 0 && nsixties == 0 {precision+1} else {0};
+        let maxwidth = signwidth + nhashes + nzeroes + fracwidth;
+        let minwidth = signwidth + nzeroes + fracwidth;
+        if !unbounded && maxwidth > 254 { return None; }
+        if minwidth > 254 { return None; }
+
+        let maxwidth = if unbounded {255u8} else {maxwidth as u8};
+        let minwidth = if nzeroes == 1 {0} else {minwidth as u8}; // easy to test later
+        let precision = precision as u8;
+
+        match nsixties {
+            0 => Some(NumFormat { sign: sign, minwidth: minwidth, maxwidth: maxwidth,
+                                  precision: precision, multiplier: mult }),
+            1 => Some(MsFormat { sign: sign, minwidth: minwidth, maxwidth: maxwidth + 3,
+                                 precision: precision, multiplier: mult }),
+            2 => Some(HmsFormat { sign: sign, minwidth: minwidth, maxwidth: maxwidth + 6,
+                                  precision: precision, multiplier: mult }),
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// The text source for the `$text` node.
 pub enum TextSource {
-    ScalarText(Id),
+    ScalarText(Id, ScalarFormat),
     StaticText(~str),
     TextBlock(Block<~TextSource>),
     TextConcat(~[TextSource]),
@@ -487,10 +567,19 @@ impl FromJson for TextSource {
 
             j::Object(mut map) => {
                 // {"$": "number"}
-                let dynamic = map.pop(&~"$").and_then(from_json);
+                // {"$": "number", "format": "##00.00"}
+                let dynamic = map.pop(&~"$");
                 if dynamic.is_some() {
+                    let id = from_json(dynamic.unwrap());
+                    let format = match map.pop(&~"format") {
+                        None => Some(NoFormat),
+                        Some(fmt) => from_json(fmt),
+                    };
                     if !map.is_empty() { return None; }
-                    return Some(ScalarText(dynamic.unwrap()));
+                    return match (id, format) {
+                        (Some(id), Some(fmt)) => Some(ScalarText(id, fmt)),
+                        _ => None,
+                    };
                 }
 
                 // {"$$": "even?", ...} etc. (delegated to Block)

@@ -43,9 +43,9 @@
                 ]}
             ],
 
-            {"$text": [{"$": "meta.duration"},
+            {"$text": [{"$": "meta.duration", "format": "..00:00.0"},
                        " | Level ", {"$": "meta.playlevel"},
-                       " | BPM ", {"$": "timeline.initbpm"},
+                       " | BPM ", {"$": "timeline.initbpm", "format": "..0.00"},
                                   {"$$": "timeline.bpmchange", "$then": "?"},
                        " | ", {"$": "timeline.#notes"},
                               {"$$text": "timeline.#notes", "1": " note", "$default": " notes"},
@@ -117,8 +117,9 @@
                 {"$cliptop": 18},
                 {"$$": "msg",
                  "legacy-encoding": [
-                    {"$text": ["  (Detected \"", {"$": "meta.encoding"}, "\" encoding ",
-                               "with confidence ", {"$": "meta.encoding.confidence"}, ")"],
+                    {"$text": ["  (Detected \"", {"$": "meta.encoding"},
+                               "\" encoding with confidence ",
+                               {"$": "meta.encoding.confidence", "format": "##0.00 * 100"}, "%)"],
                      "at": [4,4], "size": 16, "color": "#208080"},
                     {"$cliptop": 18}
                  ],
@@ -137,5 +138,5 @@
                "   F5: Refresh   Esc: Quit"],
      "at": [2,"100%-2"], "size": 16, "color": "black", "anchor": [0,1]},
 
-    "/* vim: set syn=javascript: */"
+    "/* vim: set syn=javascript et ai: */"
 ]}

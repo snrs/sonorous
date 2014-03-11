@@ -5,7 +5,6 @@
 //! Song and pattern selection screen.
 
 use std::{str, cmp, io, os, comm, task};
-use std::str::MaybeOwned;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::rand::{rng, Rng};
@@ -27,7 +26,7 @@ use engine::keyspec::{KeySpec, key_spec};
 use engine::resource::{SearchContextAdditions, LoadedImageResource, LoadedImage};
 use engine::player::apply_modf;
 use engine::skin::ast::Skin;
-use engine::skin::hook::Hook;
+use engine::skin::hook::{Scalar, AsScalar, IntoScalar, Hook};
 use engine::skin::render::Renderer;
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PushScene, PopScene, Exit};
 use ui::options::Options;
@@ -563,16 +562,10 @@ impl Scene for SelectingScene {
 // hooks
 
 impl Hook for PreprocessedBms {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         self.bms.scalar_hook(id)
             .or_else(|| self.infos.scalar_hook(id))
             .or_else(|| self.keyspec.scalar_hook(id))
-    }
-
-    fn texture_hook<'a>(&'a self, id: &str) -> Option<&'a Rc<Texture2D>> {
-        self.bms.texture_hook(id)
-            .or_else(|| self.infos.texture_hook(id))
-            .or_else(|| self.keyspec.texture_hook(id))
     }
 
     fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
@@ -583,13 +576,11 @@ impl Hook for PreprocessedBms {
 }
 
 impl Hook for (Option<uint>, bms::diag::BmsMessage) {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         let (lineno, ref msg) = *self;
         match id {
-            "msg.line" =>
-                lineno.map(|v| v.to_str().into_maybe_owned()),
-            "msg.text" =>
-                Some(msg.message.into_maybe_owned()),
+            "msg.line" => lineno.map(|v| v.into_scalar()),
+            "msg.text" => Some(msg.message.into_scalar()),
             _ => None,
         }
     }
@@ -611,23 +602,14 @@ impl Hook for (Option<uint>, bms::diag::BmsMessage) {
 }
 
 impl Hook for PreloadedData {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         match id {
-            "meta.duration" => {
-                let dur = (self.duration * 10.0) as uint;
-                Some(format!("{:02}:{:02}.{}", dur/600, dur/10%60, dur%10).into_maybe_owned())
-            },
-            _ => self.preproc.scalar_hook(id)
-        }
-    }
-
-    fn texture_hook<'a>(&'a self, id: &str) -> Option<&'a Rc<Texture2D>> {
-        match id {
+            "meta.duration" => Some(self.duration.into_scalar()),
             "meta.banner" => match self.banner {
-                Some(ref tex) => Some(tex),
+                Some(ref tex) => Some(tex.as_scalar()),
                 None => None,
             },
-            _ => self.preproc.texture_hook(id)
+            _ => self.preproc.scalar_hook(id)
         }
     }
 
@@ -672,16 +654,15 @@ impl Hook for SelectingScene {
 }
 
 impl<'a> Hook for (&'a SelectingScene, bool, &'a Entry) {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         let (scene, _inverted, entry) = *self;
         match id {
             "entry.path" => {
                 let path = entry.path.path_relative_from(&scene.root)
                                      .unwrap_or_else(|| entry.path.clone());
-                Some(path.display().to_str().into_maybe_owned())
+                Some(path.display().to_str().into_scalar())
             },
-            "entry.hash" =>
-                entry.hash.map(|h| h.to_hex().into_maybe_owned()),
+            "entry.hash" => entry.hash.map(|h| h.to_hex().into_scalar()),
             _ => scene.scalar_hook(id)
         }
     }

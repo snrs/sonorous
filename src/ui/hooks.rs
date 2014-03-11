@@ -4,31 +4,24 @@
 
 //! Common skin hooks for various types.
 
-use std::rc::Rc;
-use std::str::MaybeOwned;
-
 use format::{timeline, bms};
-use gfx::gl::Texture2D;
 use engine::keyspec;
-use engine::skin::hook::Hook;
+use engine::skin::hook::{Scalar, AsScalar, IntoScalar, Hook};
 
 impl<S,I> Hook for timeline::Timeline<S,I> {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         match id {
-            "timeline.initbpm" =>
-                Some(format!("{:.2}", self.initbpm.to_f64()).into_maybe_owned()),
+            "timeline.initbpm" => Some(self.initbpm.to_f64().into_scalar()),
             _ => None,
         }
     }
 }
 
 impl Hook for timeline::TimelineInfo {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         match id {
-            "timeline.#notes" =>
-                Some(self.nnotes.to_str().into_maybe_owned()),
-            "timeline.maxscore" =>
-                Some(self.maxscore.to_str().into_maybe_owned()),
+            "timeline.#notes" => Some(self.nnotes.into_scalar()),
+            "timeline.maxscore" => Some(self.maxscore.into_scalar()),
             _ => None,
         }
     }
@@ -44,25 +37,20 @@ impl Hook for timeline::TimelineInfo {
 }
 
 impl Hook for bms::BmsMeta {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         match id {
-            "meta.encoding" =>
-                Some(self.encoding.val0().into_maybe_owned()),
+            "meta.encoding" => Some(self.encoding.val0().into_scalar()),
             "meta.encoding.confidence" => {
                 let mut confidence = self.encoding.val1();
                 if confidence > 1.0 { confidence = 1.0; }
-                Some(format!("{:.2}%", confidence * 100.0).into_maybe_owned())
+                Some(confidence.into_scalar())
             },
-            "meta.title" =>
-                self.title.as_ref().map(|s| s.as_slice().into_maybe_owned()),
-            "meta.genre" =>
-                self.genre.as_ref().map(|s| s.as_slice().into_maybe_owned()),
-            "meta.artist" =>
-                self.artist.as_ref().map(|s| s.as_slice().into_maybe_owned()),
-            "meta.playlevel" =>
-                Some(self.playlevel.to_str().into_maybe_owned()),
+            "meta.title" => self.title.as_ref().map(|s| s.as_scalar()),
+            "meta.genre" => self.genre.as_ref().map(|s| s.as_scalar()),
+            "meta.artist" => self.artist.as_ref().map(|s| s.as_scalar()),
+            "meta.playlevel" => Some(self.playlevel.into_scalar()),
             "meta.difficulty" => match self.difficulty {
-                Some(bms::Difficulty(diff)) => Some(diff.to_str().into_maybe_owned()),
+                Some(bms::Difficulty(diff)) => Some(diff.into_scalar()),
                 None => None,
             },
             _ => None,
@@ -107,14 +95,9 @@ impl Hook for bms::BmsMeta {
 }
 
 impl Hook for bms::Bms {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         self.meta.scalar_hook(id)
             .or_else(|| self.timeline.scalar_hook(id))
-    }
-
-    fn texture_hook<'a>(&'a self, id: &str) -> Option<&'a Rc<Texture2D>> {
-        self.meta.texture_hook(id)
-            .or_else(|| self.timeline.texture_hook(id))
     }
 
     fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
@@ -124,10 +107,10 @@ impl Hook for bms::Bms {
 }
 
 impl Hook for keyspec::KeySpec {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<MaybeOwned<'a>> {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         match id {
             "meta.#keys" =>
-                Some(self.nkeys().to_str().into_maybe_owned()),
+                Some(self.nkeys().into_scalar()),
             _ => None,
         }
     }

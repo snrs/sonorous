@@ -4,9 +4,9 @@
 
 //! Skin renderer.
 
-use std::mem;
+use std::{num, str, mem};
 use std::rc::Rc;
-use std::str::MaybeOwned;
+use std::io::{IoResult, MemWriter};
 
 use gl = opengles::gl2;
 
@@ -17,11 +17,12 @@ use gfx::screen::{Screen, ShadedFontDrawing, ScreenDraw, ScreenTexturedDraw};
 use engine::skin::ast::{Expr, ENum, ERatioNum, Pos, Rect};
 use engine::skin::ast::{Gen, HookGen, TextGen, TextLenGen};
 use engine::skin::ast::{Block, CondBlock, MultiBlock};
+use engine::skin::ast::{ScalarFormat, NoFormat, NumFormat, MsFormat, HmsFormat};
 use engine::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
 use engine::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
                         Text, Group, Clip};
 use engine::skin::ast::{Skin};
-use engine::skin::hook::Hook;
+use engine::skin::hook::{Scalar, TextureScalar, Hook};
 
 /// The currently active draw call.
 enum ActiveDraw<'a> {
@@ -86,11 +87,21 @@ impl<'a> Renderer<'a> {
         match *gen {
             HookGen(ref id) => hook.block_hook(id.as_slice(), hook, body),
             TextGen(ref id) => match hook.scalar_hook(id.as_slice()) {
-                Some(text) => { body(hook, text.as_slice()); true },
+                Some(scalar) => {
+                    let text = scalar.into_maybe_owned();
+                    body(hook, text.as_slice());
+                    true
+                },
                 None => false
             },
             TextLenGen(ref id) => match hook.scalar_hook(id.as_slice()) {
-                Some(text) => { if !text.is_empty() { body(hook, text.len().to_str()); } true },
+                Some(scalar) => {
+                    let text = scalar.into_maybe_owned();
+                    if !text.is_empty() {
+                        body(hook, text.as_slice().char_len().to_str());
+                    }
+                    true
+                },
                 None => false
             },
         }
@@ -140,34 +151,116 @@ impl<'a> Renderer<'a> {
         }
     }
 
-    fn text_source<'a>(hook: &'a Hook, text: &'a TextSource) -> MaybeOwned<'a> {
+    fn scalar_format<'a>(scalar: Scalar<'a>, fmt: &ScalarFormat,
+                         out: &mut Writer) -> IoResult<()> {
+        fn to_f64<'a>(scalar: Scalar<'a>) -> Option<f64> {
+            let v = scalar.to_f64();
+            if v.is_none() {
+                warn!("skin: scalar_format received a non-number `{}`, will ignore", scalar);
+            }
+            v
+        }
+
+        fn fill_and_clip(out: &mut Writer, sign: bool, minwidth: u8, maxwidth: u8,
+                         precision: u8, v: f64) -> IoResult<()> {
+            let precision = precision as uint;
+            if maxwidth == 255 && minwidth == 0 {
+                // no need to construct a temporary buffer
+                if sign {
+                    write!(out, "{:+.*}", precision, v)
+                } else {
+                    write!(out, "{:.*}", precision, v)
+                }
+            } else {
+                let maxwidth = maxwidth as uint;
+                let minwidth = minwidth as uint;
+                let s = if sign {
+                    format!("{:+.*}", precision, v)
+                } else {
+                    format!("{:.*}", precision, v)
+                };
+                let ss = if s.len() > maxwidth {
+                    s.slice_from(s.len() - maxwidth)
+                } else {
+                    s.as_slice()
+                };
+                if ss.len() < minwidth {
+                    let signidx = if ss.starts_with("+") || ss.starts_with("-") {1} else {0};
+                    if signidx > 0 {
+                        try!(write!(out, "{}", ss.slice_to(signidx)));
+                    }
+                    for _ in range(0, minwidth - ss.len()) {
+                        try!(write!(out, "0"));
+                    }
+                    write!(out, "{}", ss.slice_from(signidx))
+                } else {
+                    write!(out, "{}", ss)
+                }
+            }
+        }
+
+        match *fmt {
+            NoFormat => write!(out, "{}", scalar),
+            NumFormat { sign, minwidth, maxwidth, precision, multiplier } => {
+                let v = match to_f64(scalar) { Some(v) => v, None => return Ok(()) };
+                let v = v * multiplier as f64;
+                fill_and_clip(out, sign, minwidth, maxwidth, precision, v)
+            },
+            MsFormat { sign, minwidth, maxwidth, precision, multiplier } => {
+                let v = match to_f64(scalar) { Some(v) => v, None => return Ok(()) };
+                let v = v * multiplier as f64;
+                let (min, sec) = num::div_rem(v, 60.0);
+                try!(fill_and_clip(out, sign, minwidth, maxwidth, 0, min));
+                write!(out, ":{:02.*}", precision as uint, sec.abs())
+            },
+            HmsFormat { sign, minwidth, maxwidth, precision, multiplier } => {
+                let v = match to_f64(scalar) { Some(v) => v, None => return Ok(()) };
+                let v = v * multiplier as f64;
+                let (min, sec) = num::div_rem(v, 60.0);
+                let (hour, min) = num::div_rem(min, 60.0);
+                try!(fill_and_clip(out, sign, minwidth, maxwidth, 0, hour));
+                write!(out, ":{:02}:{:02.*}", min.abs(), precision as uint, sec.abs())
+            },
+        }
+    }
+
+    fn text_source<'a>(hook: &'a Hook, text: &'a TextSource, out: &mut Writer) -> IoResult<()> {
         match *text {
-            ScalarText(ref id) => match hook.scalar_hook(id.as_slice()) {
-                Some(text) => text,
+            ScalarText(ref id, ref format) => match hook.scalar_hook(id.as_slice()) {
+                Some(scalar) => Renderer::scalar_format(scalar, format, out),
                 _ => {
                     warn!("skin: `{id}` is not a scalar hook, will use an empty string",
                           id = id.as_slice());
-                    "".into_maybe_owned()
+                    Ok(())
                 },
             },
-            StaticText(ref text) => {
-                let text: &str = *text;
-                text.into_maybe_owned()
-            },
+            StaticText(ref text) => write!(out, "{}", *text),
             TextBlock(ref block) => {
-                let mut text = ~"";
+                let mut ret = Ok(());
                 Renderer::block(hook, block, |hook_, text_| {
-                    text.push_str(Renderer::text_source(hook_, *text_).as_slice());
-                    true
+                    match Renderer::text_source(hook_, *text_, out) {
+                        Ok(()) => true,
+                        Err(err) => { ret = Err(err); false }
+                    }
                 });
-                text.into_maybe_owned()
-            }
+                ret
+            },
             TextConcat(ref nodes) => {
-                let mut text = ~"";
                 for node in nodes.iter() {
-                    text.push_str(Renderer::text_source(hook, node).as_slice());
+                    try!(Renderer::text_source(hook, node, out));
                 }
-                text.into_maybe_owned()
+                Ok(())
+            },
+        }
+    }
+
+    fn text<'a>(hook: &'a Hook, text: &'a TextSource) -> str::MaybeOwned<'a> {
+        let mut out = MemWriter::new();
+        match Renderer::text_source(hook, text, &mut out) {
+            Ok(()) => str::from_utf8_owned(out.unwrap()).unwrap().into_maybe_owned(),
+            Err(err) => {
+                warn!("skin: I/O error on text_source({}), will ignore", err);
+                "".into_maybe_owned()
             }
         }
     }
@@ -255,8 +348,8 @@ impl<'a> Renderer<'a> {
                 }
                 TexturedRect { ref tex, ref at, ref rgba, ref clip } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
-                    match (hook.texture_hook(tex.as_slice()), *clip) {
-                        (Some(tex), Some(ref clip)) => {
+                    match (hook.scalar_hook(tex.as_slice()), *clip) {
+                        (Some(TextureScalar(tex)), Some(ref clip)) => {
                             let (tw, th) = {
                                 let tex = tex.borrow();
                                 (tex.width as f32, tex.height as f32)
@@ -268,10 +361,10 @@ impl<'a> Renderer<'a> {
                             self.textured(tex).rect_area_rgba(x1, y1, x2, y2,
                                                               tx1, ty1, tx2, ty2, *rgba);
                         }
-                        (Some(tex), None) => {
+                        (Some(TextureScalar(tex)), None) => {
                             self.textured(tex).rect_rgba(x1, y1, x2, y2, *rgba);
                         }
-                        (None, _) => {
+                        (_, _) => {
                             warn!("skin: `{id}` is not a texture hook, will ignore",
                                   id = tex.as_slice());
                         }
@@ -279,7 +372,7 @@ impl<'a> Renderer<'a> {
                 }
                 Text { ref at, size, anchor: (ax,ay), ref color, ref text } => {
                     let (x, y) = self.pos(hook, at);
-                    let text = Renderer::text_source(hook, text);
+                    let text = Renderer::text(hook, text);
                     let zoom = size / NROWS as f32;
                     let w = zoom * (text.as_slice().char_len() * NCOLUMNS) as f32;
                     let h = size as f32;
