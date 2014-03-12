@@ -9,8 +9,8 @@ use collections::HashMap;
 use encoding::label::encoding_from_whatwg_label;
 
 use format::bms::load::LoaderOptions;
-use engine::skin::ast::Skin;
-use engine::skin::parse::load_skin;
+use gfx::skin::ast::Skin;
+use gfx::skin::parse::load_skin;
 
 /// Game play modes.
 #[deriving(Eq,Clone)]

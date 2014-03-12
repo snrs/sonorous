@@ -1,6 +1,10 @@
 // This is a part of Sonorous.
 // Copyright (c) 2005, 2007, 2009, 2012, 2013, 2014, Kang Seonghoon.
-// See README.md and LICENSE.txt for details.
+// See README.md for details.
+//
+// Licensed under the Apache License, Version 2.0 <http://www.apache.org/licenses/LICENSE-2.0> or
+// the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 //! Skin renderer.
 
@@ -14,15 +18,15 @@ use gfx::gl::Texture2D;
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
 use gfx::bmfont::{NCOLUMNS, NROWS, FontDrawingUtils, LeftAligned};
 use gfx::screen::{Screen, ShadedFontDrawing, ScreenDraw, ScreenTexturedDraw};
-use engine::skin::ast::{Expr, ENum, ERatioNum, Pos, Rect};
-use engine::skin::ast::{Gen, HookGen, TextGen, TextLenGen};
-use engine::skin::ast::{Block, CondBlock, MultiBlock};
-use engine::skin::ast::{ScalarFormat, NoFormat, NumFormat, MsFormat, HmsFormat};
-use engine::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
-use engine::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
-                        Text, Group, Clip};
-use engine::skin::ast::{Skin};
-use engine::skin::hook::{Scalar, TextureScalar, Hook};
+use gfx::skin::ast::{Expr, ENum, ERatioNum, Pos, Rect};
+use gfx::skin::ast::{Gen, HookGen, TextGen, TextLenGen};
+use gfx::skin::ast::{Block, CondBlock, MultiBlock};
+use gfx::skin::ast::{ScalarFormat, NoFormat, NumFormat, MsFormat, HmsFormat};
+use gfx::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
+use gfx::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
+                     Text, Group, Clip};
+use gfx::skin::ast::{Skin};
+use gfx::skin::hook::{Scalar, TextureScalar, Hook};
 
 /// The currently active draw call.
 enum ActiveDraw<'a> {

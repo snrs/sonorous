@@ -75,6 +75,7 @@ pub mod gfx {
     pub mod draw;
     pub mod bmfont;
     pub mod screen;
+    pub mod skin;
 }
 
 pub mod format {
@@ -90,7 +91,6 @@ pub mod engine {
     pub mod keyspec;
     pub mod input;
     pub mod resource;
-    pub mod skin;
     pub mod player;
 }
 
