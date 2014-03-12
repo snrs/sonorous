@@ -14,10 +14,7 @@ use format::timeline::TimelineInfo;
 use format::bms::{Bms, Key};
 use util::filesearch::SearchContext;
 use util::console::{printerr, printerrln};
-use gfx::color::{Gradient, RGB, RGBA};
 use gfx::gl::Texture2D;
-use gfx::draw::{ShadedDrawingTraits, TexturedDrawingTraits};
-use gfx::bmfont::{LeftAligned, Centered, RightAligned};
 use gfx::screen::Screen;
 use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
@@ -25,9 +22,11 @@ use engine::resource::{SoundResource, LoadedSoundResource, NoSound};
 use engine::resource::{ImageResource, LoadedImageResource, NoImage, LoadedImage};
 use engine::resource::{SearchContextAdditions};
 use engine::player::Player;
+use engine::skin::ast::Skin;
+use engine::skin::hook::{Scalar, AsScalar, IntoScalar, Hook};
+use engine::skin::render::Renderer;
 use ui::common::{update_line};
 use ui::options::Options;
-use ui::init::{SCREENW, SCREENH};
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, ReplaceScene, Exit};
 use ui::playing::PlayingScene;
 use ui::viewing::{ViewingScene, TextualViewingScene};
@@ -52,8 +51,8 @@ pub struct LoadingContext {
     /// The input mapping.
     keymap: ~KeyMap,
 
-    /// The latest message from the resource loader.
-    message: Option<~str>,
+    /// The most recently loaded file name from the resource loader.
+    lastpath: Option<~str>,
     /// Context for searching files.
     search: SearchContext,
     /// A list of jobs to be executed.
@@ -64,37 +63,11 @@ pub struct LoadingContext {
     /// The resource directory associated to the BMS data.
     basedir: Path,
     /// A loaded OpenGL texture for #STAGEFILE image.
-    stagefile: Option<Texture2D>,
+    stagefile: Option<Rc<Texture2D>>,
     /// A list of loaded sound resources. Initially populated with `NoSound`.
     sndres: ~[SoundResource],
     /// A list of loaded image resources. Initially populated with `NoImage`.
     imgres: ~[ImageResource],
-
-    /// Metadata string (level, BPM, number of notes etc).
-    brief: ~str,
-    /// Title string.
-    title: ~str,
-    /// Genre string.
-    genre: ~str,
-    /// Artist string.
-    artist: ~str,
-}
-
-/// Returns the interface string common to the graphical and textual loading screen.
-fn displayed_info(bms: &Bms, infos: &TimelineInfo, keyspec: &KeySpec) -> (~str, ~str, ~str, ~str) {
-    let brief = format!("Level {level} | BPM {bpm:.2}{hasbpmchange} | \
-                         {nnotes, plural, =1{# note} other{# notes}} \
-                         [{nkeys}KEY{haslongnote}{difficulty}]",
-                        level = bms.meta.playlevel, bpm = bms.timeline.initbpm.to_f64(),
-                        hasbpmchange = if infos.hasbpmchange {"?"} else {""},
-                        nnotes = infos.nnotes, nkeys = keyspec.nkeys(),
-                        haslongnote = if infos.haslongnote {"-LN"} else {""},
-                        difficulty = bms.meta.difficulty.and_then(|d| d.name())
-                                                        .map_or(~"", |name| ~" " + name));
-    let title = bms.meta.title.clone().unwrap_or(~"");
-    let genre = bms.meta.genre.clone().unwrap_or(~"");
-    let artist = bms.meta.artist.clone().unwrap_or(~"");
-    (brief, title, genre, artist)
 }
 
 impl LoadingContext {
@@ -104,7 +77,6 @@ impl LoadingContext {
         let basedir = bms.meta.basepath.clone().unwrap_or(Path::new("."));
         let sndres = vec::from_fn(bms.meta.sndpath.len(), |_| NoSound);
         let imgres = vec::from_fn(bms.meta.imgpath.len(), |_| NoImage);
-        let (brief, title, genre, artist) = displayed_info(&bms, &infos, keyspec);
 
         let mut jobs = DList::new();
         if opts.borrow().has_bga() { // should go first
@@ -122,9 +94,8 @@ impl LoadingContext {
 
         LoadingContext {
             opts: opts, bms: bms, infos: infos, keyspec: keyspec, keymap: keymap,
-            message: None, search: SearchContext::new(), jobs: jobs, ntotaljobs: njobs,
+            lastpath: None, search: SearchContext::new(), jobs: jobs, ntotaljobs: njobs,
             basedir: basedir, stagefile: None, sndres: sndres, imgres: imgres,
-            brief: brief, title: title, genre: genre, artist: artist,
         }
     }
 
@@ -151,7 +122,7 @@ impl LoadingContext {
             }
         });
         match tex_or_err {
-            Ok(tex) => { self.stagefile = Some(tex); }
+            Ok(tex) => { self.stagefile = Some(Rc::new(tex)); }
             Err(_err) => { warn!("failed to load image \\#STAGEFILE ({})", path.to_str()); }
         }
     }
@@ -159,7 +130,7 @@ impl LoadingContext {
     /// Loads the sound and creates a `Chunk` for it.
     pub fn load_sound(&mut self, i: uint) {
         let path = self.bms.meta.sndpath[i].get_ref().clone();
-        self.message = Some(path.clone());
+        self.lastpath = Some(path.clone());
         let fullpath = self.search.resolve_relative_path_for_sound(path, &self.basedir);
 
         match fullpath.and_then(|path| LoadedSoundResource::new(&path)) {
@@ -171,7 +142,7 @@ impl LoadingContext {
     /// Loads the image or movie and creates an OpenGL texture for it.
     pub fn load_image(&mut self, i: uint) {
         let path = self.bms.meta.imgpath[i].get_ref().clone();
-        self.message = Some(path.clone());
+        self.lastpath = Some(path.clone());
         let fullpath = self.search.resolve_relative_path_for_image(path, &self.basedir);
 
         let has_movie = self.opts.borrow().has_movie();
@@ -187,7 +158,7 @@ impl LoadingContext {
             Some(LoadStageFile) => { self.load_stagefile(); true  }
             Some(LoadSound(i))  => { self.load_sound(i);    true  }
             Some(LoadImage(i))  => { self.load_image(i);    true  }
-            None                => { self.message = None;   false }
+            None                => { self.lastpath = None;  false }
         }
     }
 
@@ -210,6 +181,8 @@ pub struct LoadingScene {
     context: LoadingContext,
     /// Display screen.
     screen: Rc<RefCell<Screen>>,
+    /// Parsed skin data.
+    skin: Rc<Skin>,
     /// The minimum number of ticks (as per `sdl::get_ticks()`) until the scene proceeds.
     /// It is currently 3 seconds after the beginning of the scene.
     waituntil: uint,
@@ -219,8 +192,12 @@ impl LoadingScene {
     /// Creates a scene context required for rendering the graphical loading screen.
     pub fn new(screen: Rc<RefCell<Screen>>, bms: Bms, infos: TimelineInfo,
                keyspec: ~KeySpec, keymap: ~KeyMap, opts: Rc<Options>) -> ~LoadingScene {
+        let skin = match opts.borrow().load_skin("loading.json") {
+            Ok(skin) => skin,
+            Err(err) => die!("{}", err),
+        };
         ~LoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
-                        screen: screen, waituntil: 0 }
+                        screen: screen, skin: Rc::new(skin), waituntil: 0 }
     }
 }
 
@@ -253,44 +230,8 @@ impl Scene for LoadingScene {
         let mut screen_ = screen__.borrow_mut();
         let screen = screen_.get();
 
-        let msg = match self.context.message {
-            None => ~"loading...",
-            Some(ref msg) =>
-                format!("{} ({:.0}%)", *msg, 100.0 * self.context.processed_jobs_ratio()),
-        };
-
         screen.clear();
-
-        static W: f32 = SCREENW as f32;
-        static H: f32 = SCREENH as f32;
-
-        screen.draw_shaded_with_font(|d| {
-            d.string(W/2.0, H/2.0-16.0, 2.0, Centered, "loading bms file...",
-                     Gradient(RGB(0x80,0x80,0x80), RGB(0x20,0x20,0x20)));
-        });
-
-        if self.context.stagefile.is_some() {
-            let tex = self.context.stagefile.get_ref();
-            screen.draw_textured(tex, |d| {
-                d.rect(0.0, 0.0, W, H);
-            });
-        }
-
-        if self.context.opts.borrow().showinfo {
-            let bg = RGBA(0x10,0x10,0x10,0xc0);
-            let fg = Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80));
-            screen.draw_shaded_with_font(|d| {
-                d.rect(0.0, 0.0, W, 42.0, bg);
-                d.rect(0.0, H-20.0, W, H, bg);
-                d.string(6.0, 4.0, 2.0, LeftAligned, self.context.title, fg);
-                d.string(W-8.0, 4.0, 1.0, RightAligned, self.context.genre, fg);
-                d.string(W-8.0, 20.0, 1.0, RightAligned, self.context.artist, fg);
-                d.string(3.0, H-18.0, 1.0, LeftAligned, self.context.brief, fg);
-                d.string(W-3.0, H-18.0, 1.0, RightAligned, msg,
-                         Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x80,0x80,0x80)));
-            });
-        }
-
+        Renderer::render(screen, self.skin.clone().borrow(), &self.context);
         screen.swap_buffers();
     }
 
@@ -328,14 +269,17 @@ impl Scene for TextualLoadingScene {
         if self.context.opts.borrow().showinfo {
             printerr(format!("\
 ----------------------------------------------------------------------------------------------
-Title:    {title}", title = self.context.title));
+Title:    {title}",
+                title = self.context.bms.meta.title.as_ref().map_or("", |s| s.as_slice())));
             for subtitle in self.context.bms.meta.subtitles.iter() {
                 printerr(format!("
           {subtitle}", subtitle = *subtitle));
             }
             printerr(format!("
 Genre:    {genre}
-Artist:   {artist}", genre = self.context.genre, artist = self.context.artist));
+Artist:   {artist}",
+                genre = self.context.bms.meta.genre.as_ref().map_or("", |s| s.as_slice()),
+                artist = self.context.bms.meta.artist.as_ref().map_or("", |s| s.as_slice())));
             for subartist in self.context.bms.meta.subartists.iter() {
                 printerr(format!("
           {subartist}", subartist = *subartist));
@@ -345,9 +289,16 @@ Artist:   {artist}", genre = self.context.genre, artist = self.context.artist));
 \"{comment}\"", comment = *comment));
             }
             printerrln(format!("
-{brief}
+Level {level} | BPM {bpm:.2}{hasbpmchange} | \
+{nnotes, plural, =1{# note} other{# notes}} [{nkeys}KEY{haslongnote}{difficulty}]
 ----------------------------------------------------------------------------------------------",
-                brief = self.context.brief));
+                level = self.context.bms.meta.playlevel,
+                bpm = self.context.bms.timeline.initbpm.to_f64(),
+                hasbpmchange = if self.context.infos.hasbpmchange {"?"} else {""},
+                nnotes = self.context.infos.nnotes, nkeys = self.context.keyspec.nkeys(),
+                haslongnote = if self.context.infos.haslongnote {"-LN"} else {""},
+                difficulty = self.context.bms.meta.difficulty.and_then(|d| d.name())
+                                                             .map_or(~"", |name| ~" " + name)));
         }
         Continue
     }
@@ -360,12 +311,11 @@ Artist:   {artist}", genre = self.context.genre, artist = self.context.artist));
 
     fn render(&self) {
         if self.context.opts.borrow().showinfo {
-            match self.context.message {
-                Some(ref msg) => {
+            match self.context.lastpath {
+                Some(ref path) => {
                     use util::std::str::StrUtil;
-                    let msg: &str = *msg;
-                    let msg = if msg.len() < 63 {msg} else {msg.slice_upto(0, 63)};
-                    update_line(format!("Loading: {} ({:.0}%)", msg,
+                    let path = if path.len() < 63 {path.as_slice()} else {path.slice_upto(0, 63)};
+                    update_line(format!("Loading: {} ({:.0}%)", path,
                                         100.0 * self.context.processed_jobs_ratio()));
                 }
                 None => { update_line("Loading done."); }
@@ -386,6 +336,39 @@ Artist:   {artist}", genre = self.context.genre, artist = self.context.artist));
             Some(screen) => ViewingScene::new(screen, imgres, player) as ~Scene:,
             None => TextualViewingScene::new(player) as ~Scene:,
         }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////
+// hooks
+
+impl Hook for LoadingContext {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
+        match id {
+            "loading.path" => self.lastpath.as_ref().map(|s| s.as_scalar()),
+            "loading.ratio" => Some(self.processed_jobs_ratio().into_scalar()),
+            "meta.stagefile" => self.stagefile.as_ref().map(|s| s.as_scalar()),
+            _ => {
+                self.bms.scalar_hook(id)
+                    .or_else(|| self.infos.scalar_hook(id))
+                    .or_else(|| self.keyspec.scalar_hook(id))
+            }
+        }
+    }
+
+    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+        match id {
+            "loading" => { self.lastpath.is_some() && body(parent, ""); }
+            // XXX should go to Options hook
+            "opts.showinfo" => { self.opts.borrow().showinfo && body(parent, ""); }
+            "meta.stagefile" => { self.stagefile.is_some() && body(parent, ""); }
+            _ => {
+                return self.bms.run_block_hook(id, parent, &body) ||
+                       self.infos.run_block_hook(id, parent, &body) ||
+                       self.keyspec.run_block_hook(id, parent, &body);
+            }
+        }
+        true
     }
 }
 

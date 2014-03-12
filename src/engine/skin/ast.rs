@@ -113,7 +113,7 @@ impl FromJson for Color {
                     (7, Some(v)) => Some(RGB(((v >> 16) & 0xff) as u8,
                                              ((v >>  8) & 0xff) as u8,
                                              ( v        & 0xff) as u8)),
-                    (8, Some(v)) => Some(RGBA(((v >> 24) & 0xff) as u8,
+                    (9, Some(v)) => Some(RGBA(((v >> 24) & 0xff) as u8,
                                               ((v >> 16) & 0xff) as u8,
                                               ((v >>  8) & 0xff) as u8,
                                               ( v        & 0xff) as u8)),
