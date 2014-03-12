@@ -5,7 +5,7 @@
 //! BMS preprocessor.
 
 use std::fmt;
-use std::rand::Rng;
+use rand::Rng;
 
 use format::bms::diag::*;
 
@@ -188,12 +188,12 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
 
 #[cfg(test)]
 mod tests {
-    use std::rand::rng;
+    use rand::task_rng;
     use super::Preprocessor;
 
     macro_rules! with_pp(
         (|$pp:ident| $blk:expr) => ({
-            let mut r = rng();
+            let mut r = task_rng();
             let mut $pp = Preprocessor::new(&mut r);
             $blk;
         })
@@ -205,13 +205,13 @@ mod tests {
             let mut messages = ~[];
             let mut out = ~[];
             pp.feed_other(42, &mut messages, &mut out);
-            assert_eq!(messages.as_slice(), []);
-            assert_eq!(out.as_slice(), [42]);
+            assert!(messages.as_slice() == []);
+            assert!(out.as_slice() == [42]);
             messages.clear();
             out.clear();
             pp.finish(&mut messages, &mut out);
-            assert_eq!(messages.as_slice(), []);
-            assert_eq!(out.as_slice(), []);
+            assert!(messages.as_slice() == []);
+            assert!(out.as_slice() == []);
         })
     }
 

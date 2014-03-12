@@ -24,6 +24,7 @@
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
 
+extern crate rand;
 extern crate collections;
 extern crate serialize;
 extern crate sync;
@@ -121,12 +122,11 @@ pub fn exename() -> ~str {
 pub fn dump_bmscommand(bmspath: &Path, full: bool,
                        parseropts: &format::bms::parse::ParserOptions,
                        callback: |line: Option<uint>, msg: format::bms::diag::BmsMessage| -> bool) {
-    use std::{io, rand};
     use format::bms::diag::BmsMessage;
     use format::bms::parse::{BmsUnknown, Parsed, Command, Message, Encoding};
     use format::bms::parse::{Parser, PreprocessingParser};
 
-    let mut f = match io::File::open(bmspath) {
+    let mut f = match std::io::File::open(bmspath) {
         Ok(f) => f,
         Err(err) => die!("Couldn't load BMS file: {}", err)
     };
@@ -147,7 +147,7 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
             print_command(parsed, |line, msg| callback(line, msg));
         }
     } else {
-        let mut r = rand::rng();
+        let mut r = rand::task_rng();
         for parsed in PreprocessingParser::new(&mut f, &mut r, parseropts).iter() {
             print_command(parsed, |line, msg| callback(line, msg));
         }
@@ -157,7 +157,6 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop.
 pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
-    use std::{rand, io};
     use std::rc::Rc;
     use std::cell::RefCell;
 
@@ -186,8 +185,8 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         }
 
         // parses the file and sanitizes it
-        let mut r = rand::rng();
-        let preproc = match io::File::open(bmspath) {
+        let mut r = rand::task_rng();
+        let preproc = match std::io::File::open(bmspath) {
             Ok(mut f) => preprocess_bms(bmspath, &mut f, opts,
                                         &mut r, &opts.loader_options(), print_diag),
             Err(err) => Err(err.to_str()),

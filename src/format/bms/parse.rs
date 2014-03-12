@@ -6,7 +6,7 @@
 
 use std::{str, iter, f64, char, fmt};
 use std::str::MaybeOwned;
-use std::rand::Rng;
+use rand::Rng;
 use encoding::EncodingRef;
 
 use format::obj::{BPM, Duration, Seconds, Measures, ImageSlice};

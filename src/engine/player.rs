@@ -5,8 +5,8 @@
 //! Core game play logics. Handles the input (if any) and sound but not the user interface.
 
 use std::{vec, cmp, num};
-use std::rand::Rng;
 use std::rc::Rc;
+use rand::Rng;
 
 use sdl::{get_ticks, event};
 use ext::sdl_mixer;

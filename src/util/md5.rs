@@ -388,7 +388,7 @@ impl<'r> ToHex for &'r [u8] {
 
 #[cfg(test)]
 mod tests {
-    extern crate extra;
+    extern crate test;
     use super::{MD5, ToHex};
 
     #[test]
@@ -422,7 +422,7 @@ mod tests {
     }
 
     #[bench]
-    fn bench_md5_1k_update(harness: &mut extra::test::BenchHarness) {
+    fn bench_md5_1k_update(harness: &mut test::BenchHarness) {
         let mut buf: ~[u8] = ~[];
         for i in range(0u, 0x400) {
             buf.push(i as u8);
@@ -436,7 +436,7 @@ mod tests {
     }
 
     #[bench]
-    fn bench_md5_1k_update_then_final(harness: &mut extra::test::BenchHarness) {
+    fn bench_md5_1k_update_then_final(harness: &mut test::BenchHarness) {
         let mut buf: ~[u8] = ~[];
         for i in range(0u, 0x400) {
             buf.push(i as u8);

@@ -7,8 +7,8 @@
 use std::{str, cmp, io, os, comm, task};
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::rand::{rng, Rng};
 use std::comm::{Chan, Port};
+use rand::{task_rng, Rng};
 use sync::RWArc;
 
 use sdl::{event, get_ticks};
@@ -281,7 +281,7 @@ impl SelectingScene {
             };
 
             let load_with_reader = |mut f| {
-                let mut r = rng();
+                let mut r = task_rng();
                 let mut diags = ~[];
                 let loaderopts = opts.borrow().loader_options();
 
@@ -377,7 +377,7 @@ impl SelectingScene {
                             return None;
                         }
                     };
-                    let mut r = rng();
+                    let mut r = task_rng();
                     let opts = self.opts.borrow();
                     let ret = preprocess_bms(path, &mut f as &mut Reader, opts, &mut r,
                                              &opts.loader_options(), print_diag);

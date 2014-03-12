@@ -409,7 +409,7 @@ pub mod builder {
 /// the original timeline is no longer used.
 pub mod modf {
     use std::{vec, f64};
-    use std::rand::*;
+    use rand::Rng;
     use format::obj::*;
     use super::Timeline;
 

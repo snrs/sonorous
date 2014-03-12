@@ -5,7 +5,7 @@
 //! BMS loader. Uses a BMS parser (`format::bms::parse`) to produce `format::bms::Bms` structure.
 
 use std::{vec, iter, cmp};
-use std::rand::Rng;
+use rand::Rng;
 
 use format::obj::*;
 use format::bms::parse;
