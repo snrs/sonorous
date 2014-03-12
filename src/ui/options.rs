@@ -120,7 +120,7 @@ impl Options {
     /// Parses and returns the skin data.
     pub fn load_skin(&self, name: &str) -> Result<Skin,~str> {
         match io::File::open(&self.skinroot.join(name)) {
-            Ok(mut f) => load_skin(&mut f),
+            Ok(mut f) => load_skin(&mut f).map(|skin| skin.make_absolute(&self.skinroot)),
             Err(err) => Err(err.to_str()),
         }
     }

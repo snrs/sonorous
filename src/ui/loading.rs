@@ -16,8 +16,8 @@ use util::filesearch::SearchContext;
 use util::console::{printerr, printerrln};
 use gfx::gl::Texture2D;
 use gfx::screen::Screen;
-use gfx::skin::ast::Skin;
-use gfx::skin::hook::{Scalar, AsScalar, IntoScalar, Hook};
+use gfx::skin::scalar::{Scalar, AsScalar, IntoScalar};
+use gfx::skin::hook::Hook;
 use gfx::skin::render::Renderer;
 use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
@@ -181,8 +181,8 @@ pub struct LoadingScene {
     context: LoadingContext,
     /// Display screen.
     screen: Rc<RefCell<Screen>>,
-    /// Parsed skin data.
-    skin: Rc<Skin>,
+    /// Skin renderer.
+    skin: RefCell<Renderer>,
     /// The minimum number of ticks (as per `sdl::get_ticks()`) until the scene proceeds.
     /// It is currently 3 seconds after the beginning of the scene.
     waituntil: uint,
@@ -197,7 +197,7 @@ impl LoadingScene {
             Err(err) => die!("{}", err),
         };
         ~LoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
-                        screen: screen, skin: Rc::new(skin), waituntil: 0 }
+                        screen: screen, skin: RefCell::new(Renderer::new(skin)), waituntil: 0 }
     }
 }
 
@@ -231,7 +231,7 @@ impl Scene for LoadingScene {
         let screen = screen_.get();
 
         screen.clear();
-        Renderer::render(screen, self.skin.clone().borrow(), &self.context);
+        self.skin.borrow_mut().get().render(screen, &self.context);
         screen.swap_buffers();
     }
 

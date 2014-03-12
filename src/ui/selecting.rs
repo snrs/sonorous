@@ -21,8 +21,8 @@ use util::md5::{MD5, ToHex};
 use gfx::gl::{PreparedSurface, Texture2D};
 use gfx::draw::{ShadedDrawingTraits, TexturedDrawingTraits};
 use gfx::screen::Screen;
-use gfx::skin::ast::Skin;
-use gfx::skin::hook::{Scalar, AsScalar, IntoScalar, Hook};
+use gfx::skin::scalar::{Scalar, AsScalar, IntoScalar};
+use gfx::skin::hook::Hook;
 use gfx::skin::render::Renderer;
 use engine::input::read_keymap;
 use engine::keyspec::{KeySpec, key_spec};
@@ -130,8 +130,8 @@ pub struct SelectingScene {
     screen: Rc<RefCell<Screen>>,
     /// Game play options.
     opts: Rc<Options>,
-    /// Parsed skin data.
-    skin: Rc<Skin>,
+    /// Skin renderer.
+    skin: RefCell<Renderer>,
 
     /// The root path of the scanner.
     root: Path,
@@ -202,7 +202,7 @@ impl SelectingScene {
         let root = os::make_absolute(root);
         let (port, chan) = Chan::new();
         ~SelectingScene {
-            screen: screen, opts: opts, skin: Rc::new(skin), root: root,
+            screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)), root: root,
             files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
             port: port, chan: chan, keepgoing: RWArc::new(true),
         }
@@ -545,7 +545,7 @@ impl Scene for SelectingScene {
                    7.0, 2.0 + (top + NUMENTRIES) as f32 * pixelsperslot, RGB(0xc0,0xc0,0xc0));
         });
 
-        Renderer::render(screen, self.skin.clone().borrow(), self);
+        self.skin.borrow_mut().get().render(screen, self);
 
         screen.swap_buffers();
     }

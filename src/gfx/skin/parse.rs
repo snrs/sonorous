@@ -9,11 +9,13 @@
 //! A (sort of) parser for Scene description language.
 
 use std::{num, option};
+use collections::HashMap;
 use serialize::json::{Json, Null, Number, String, List, Object};
 use serialize::json::from_reader;
 
 use gfx::color::{Color, Gradient, RGB, RGBA};
 use gfx::bmfont::{NROWS};
+use gfx::skin::scalar::{Scalar, ImageScalar, IntoScalar};
 use gfx::skin::ast::{Expr, ENum, ERatioNum};
 use gfx::skin::ast::{Pos, Rect, Id};
 use gfx::skin::ast::{HookGen, TextGen, TextLenGen};
@@ -58,6 +60,32 @@ fn from_0_1(x: f64) -> u8 {
 /// Clamps the value in the range `[0,255]` into the range `[0,255]`.
 fn from_0_255(x: f64) -> u8 {
     if x < 0.0 {0} else if x > 255.0 {255} else {x as u8}
+}
+
+impl FromJson for Scalar<'static> {
+    fn from_json(json: Json) -> Option<Scalar<'static>> {
+        match json {
+            Number(v) => Some(v.into_scalar()),
+            String(s) => Some(s.into_scalar()),
+
+            Object(mut map) => {
+                // {"$image": "path/to/image.png"}
+                let image = map.pop(&~"$image");
+                if image.is_some() {
+                    let path = match image.unwrap() {
+                        String(path) => Path::new(path),
+                        _ => { return None; }
+                    };
+                    if !map.is_empty() { return None; }
+                    return Some(ImageScalar(path));
+                }
+
+                None
+            },
+
+            _ => None
+        }
+    }
 }
 
 impl FromJson for Color {
@@ -639,12 +667,25 @@ impl FromJson for Node {
 impl FromJson for Skin {
     fn from_json(json: Json) -> Option<Skin> {
         match json {
-            // {"nodes": [...]}
+            // {"scalars": {...}, "nodes": [...]}
             Object(mut map) => {
+                let mut scalars = HashMap::new();
+                match map.pop(&~"scalars") {
+                    Some(Object(scalarmap)) => {
+                        for (k, v) in scalarmap.move_iter() {
+                            match from_json(v) {
+                                Some(v) => { scalars.insert(k, v); }
+                                None => { return None; }
+                            }
+                        }
+                    }
+                    Some(_) => { return None; }
+                    None => {}
+                }
                 let nodes = map.pop(&~"nodes").and_then(from_json);
                 if !map.is_empty() { return None; }
                 match nodes {
-                    Some(nodes) => Some(Skin { nodes: nodes }),
+                    Some(nodes) => Some(Skin { scalars: scalars, nodes: nodes }),
                     None => None,
                 }
             },

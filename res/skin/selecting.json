@@ -1,7 +1,11 @@
-{"nodes": [
+{"scalars": {
+    "logo": {"$image": "../img/logo-prealpha.png"}
+}, "nodes": [
     "entries",
     [
         {"$clip": [[10,0], ["100%",300]]},
+        {"$rect": null, "at": [["100%-558","100%-125"], ["100%","100%"]], "opacity": 0.2, "color": "white"},
+        {"$rect": "logo", "at": [["100%-558","100%-125"], ["100%","100%"]], "opacity": 0.4},
         {"$$": "entries", "$then": [
             {"$$": "entry.inverted", "$then": [
                 {"$rect": null, "at": [[0,0], ["100%",20]], "color": "white"},

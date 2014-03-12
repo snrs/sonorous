@@ -5,9 +5,11 @@
 //! Common skin hooks for various types.
 
 use format::{timeline, bms};
-use gfx::skin::hook::{Scalar, AsScalar, IntoScalar, Hook};
 use engine::keyspec;
 use ui::options;
+
+use gfx::skin::scalar::{Scalar, AsScalar, IntoScalar};
+use gfx::skin::hook::Hook;
 
 impl Hook for options::Options {
     fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {

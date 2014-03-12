@@ -61,6 +61,7 @@
 use collections::HashMap;
 
 use gfx::color::{Color, Gradient};
+use gfx::skin::scalar::{Scalar, ImageScalar};
 
 /// Numerical expression.
 #[deriving(Show)]
@@ -167,7 +168,23 @@ pub enum Node {
 
 /// The top-level parsed skin data.
 pub struct Skin {
+    /// The predefined scalar values.
+    scalars: HashMap<~str,Scalar<'static>>,
     /// The list of commands.
     nodes: ~[Node],
+}
+
+impl Skin {
+    /// Converts the relative paths in the scalar data into the absolute ones.
+    pub fn make_absolute(self, base: &Path) -> Skin {
+        let Skin { mut scalars, nodes } = self;
+        for (_, v) in scalars.mut_iter() {
+            match *v {
+                ImageScalar(ref mut path) => { *path = base.join(&*path); }
+                _ => {}
+            }
+        }
+        Skin { scalars: scalars, nodes: nodes }
+    }
 }
 

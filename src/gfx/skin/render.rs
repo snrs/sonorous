@@ -11,13 +11,16 @@
 use std::{num, str, mem};
 use std::rc::Rc;
 use std::io::{IoResult, MemWriter};
+use collections::HashMap;
 
 use gl = opengles::gl2;
+use sdl_image;
 
 use gfx::gl::Texture2D;
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
 use gfx::bmfont::{NCOLUMNS, NROWS, FontDrawingUtils, LeftAligned};
 use gfx::screen::{Screen, ShadedFontDrawing, ScreenDraw, ScreenTexturedDraw};
+use gfx::skin::scalar::{Scalar, TextureScalar, ImageScalar};
 use gfx::skin::ast::{Expr, ENum, ERatioNum, Pos, Rect};
 use gfx::skin::ast::{Gen, HookGen, TextGen, TextLenGen};
 use gfx::skin::ast::{Block, CondBlock, MultiBlock};
@@ -26,7 +29,7 @@ use gfx::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
 use gfx::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
                      Text, Group, Clip};
 use gfx::skin::ast::{Skin};
-use gfx::skin::hook::{Scalar, TextureScalar, Hook};
+use gfx::skin::hook::Hook;
 
 /// The currently active draw call.
 enum ActiveDraw<'a> {
@@ -42,33 +45,52 @@ enum ActiveDraw<'a> {
 }
 
 /// The skin renderer.
-pub struct Renderer<'a> {
-    /// Screen reference.
-    priv screen: &'a mut Screen,
-    /// The active draw call.
-    priv draw: ActiveDraw<'a>,
-    /// Left coordinate of the clipping region.
-    priv dx: f32,
-    /// Top coordinate of the clipping region.
-    priv dy: f32,
-    /// The width of the clipping region.
-    priv w: f32,
-    /// The height of the clipping region.
-    priv h: f32,
+pub struct Renderer {
+    /// The current skin data.
+    skin: Rc<Skin>,
+    /// The cached textures for image scalars. `None` indicates the error without further retries.
+    imagecache: HashMap<Path,Option<Rc<Texture2D>>>,
 }
 
-impl<'a> Renderer<'a> {
-    /// Renders the skin with supplied hook to given screen.
-    /// This overwrites to the current screen, no `clear` is called.
-    pub fn render(screen: &mut Screen, skin: &Skin, hook: &Hook) {
-        let mut renderer = Renderer::new(screen);
-        renderer.nodes(hook, skin.nodes);
-        renderer.finish();
+impl Renderer {
+    /// Creates a new renderer out of the skin data.
+    /// The renderer maintains the global cache, thus should be kept as long as possible.
+    pub fn new(skin: Skin) -> Renderer {
+        Renderer { skin: Rc::new(skin), imagecache: HashMap::new() }
     }
 
-    fn new(screen: &'a mut Screen) -> Renderer<'a> {
-        Renderer { screen: screen, draw: ToBeDrawn,
-                   dx: 0.0, dy: 0.0, w: screen.width as f32, h: screen.height as f32 }
+    /// Renders the skin with supplied hook to given screen.
+    /// This overwrites to the current screen, no `clear` is called.
+    pub fn render(&mut self, screen: &mut Screen, hook: &Hook) {
+        let skin = self.skin.clone();
+        let mut state = State::new(self, screen);
+        state.nodes(hook, skin.borrow().nodes);
+        state.finish();
+    }
+}
+
+/// The internal state for single render.
+struct State<'a> {
+    /// Parent renderer.
+    renderer: &'a mut Renderer,
+    /// Screen reference.
+    screen: &'a mut Screen,
+    /// The active draw call.
+    draw: ActiveDraw<'a>,
+    /// Left coordinate of the clipping region.
+    dx: f32,
+    /// Top coordinate of the clipping region.
+    dy: f32,
+    /// The width of the clipping region.
+    w: f32,
+    /// The height of the clipping region.
+    h: f32,
+}
+
+impl<'a> State<'a> {
+    fn new(renderer: &'a mut Renderer, screen: &'a mut Screen) -> State<'a> {
+        State { renderer: renderer, screen: screen, draw: ToBeDrawn,
+                dx: 0.0, dy: 0.0, w: screen.width as f32, h: screen.height as f32 }
     }
 
     fn expr(_hook: &Hook, pos: &Expr, reference: f32) -> f32 {
@@ -79,8 +101,8 @@ impl<'a> Renderer<'a> {
     }
 
     fn pos(&self, hook: &Hook, pos: &Pos) -> (f32, f32) {
-        (self.dx + Renderer::expr(hook, &pos.x, self.w),
-         self.dy + Renderer::expr(hook, &pos.y, self.h))
+        (self.dx + State::expr(hook, &pos.x, self.w),
+         self.dy + State::expr(hook, &pos.y, self.h))
     }
 
     fn rect(&self, hook: &Hook, rect: &Rect) -> ((f32, f32), (f32, f32)) {
@@ -115,7 +137,7 @@ impl<'a> Renderer<'a> {
         match *block {
             CondBlock { ref gen, ref then, ref else_ } => {
                 let mut called = false;
-                Renderer::gen(hook, gen, |hook_, _alt| {
+                State::gen(hook, gen, |hook_, _alt| {
                     called = true;
                     match *then {
                         Some(ref then) => body(hook_, then),
@@ -131,7 +153,7 @@ impl<'a> Renderer<'a> {
             }
             MultiBlock { ref gen, ref map, ref default, ref else_ } => {
                 let mut called = false;
-                Renderer::gen(hook, gen, |hook_, alt| {
+                State::gen(hook, gen, |hook_, alt| {
                     called = true;
                     match map.find_equiv(&alt) {
                         Some(then) => body(hook_, then),
@@ -231,7 +253,7 @@ impl<'a> Renderer<'a> {
     fn text_source<'a>(hook: &'a Hook, text: &'a TextSource, out: &mut Writer) -> IoResult<()> {
         match *text {
             ScalarText(ref id, ref format) => match hook.scalar_hook(id.as_slice()) {
-                Some(scalar) => Renderer::scalar_format(scalar, format, out),
+                Some(scalar) => State::scalar_format(scalar, format, out),
                 _ => {
                     warn!("skin: `{id}` is not a scalar hook, will use an empty string",
                           id = id.as_slice());
@@ -241,8 +263,8 @@ impl<'a> Renderer<'a> {
             StaticText(ref text) => write!(out, "{}", *text),
             TextBlock(ref block) => {
                 let mut ret = Ok(());
-                Renderer::block(hook, block, |hook_, text_| {
-                    match Renderer::text_source(hook_, *text_, out) {
+                State::block(hook, block, |hook_, text_| {
+                    match State::text_source(hook_, *text_, out) {
                         Ok(()) => true,
                         Err(err) => { ret = Err(err); false }
                     }
@@ -251,7 +273,7 @@ impl<'a> Renderer<'a> {
             },
             TextConcat(ref nodes) => {
                 for node in nodes.iter() {
-                    try!(Renderer::text_source(hook, node, out));
+                    try!(State::text_source(hook, node, out));
                 }
                 Ok(())
             },
@@ -260,12 +282,39 @@ impl<'a> Renderer<'a> {
 
     fn text<'a>(hook: &'a Hook, text: &'a TextSource) -> str::MaybeOwned<'a> {
         let mut out = MemWriter::new();
-        match Renderer::text_source(hook, text, &mut out) {
+        match State::text_source(hook, text, &mut out) {
             Ok(()) => str::from_utf8_owned(out.unwrap()).unwrap().into_maybe_owned(),
             Err(err) => {
                 warn!("skin: I/O error on text_source({}), will ignore", err);
                 "".into_maybe_owned()
             }
+        }
+    }
+
+    // unlike others, this has to be a non-static method as we need the image cache
+    fn texture<'a>(&'a mut self, hook: &'a Hook, id: &str) -> Option<&'a Rc<Texture2D>> {
+        let mut scalar = hook.scalar_hook(id);
+        if scalar.is_none() {
+            scalar = self.renderer.skin.borrow().scalars.find_equiv(&id).map(|v| v.clone());
+        }
+        match scalar {
+            Some(TextureScalar(tex)) => Some(tex),
+            Some(ImageScalar(path)) => {
+                let ret = self.renderer.imagecache.find_or_insert_with(path, |path| {
+                    match sdl_image::load(path) {
+                        Ok(surface) => match Texture2D::from_owned_surface(surface, false, false) {
+                            Ok(tex) => Some(Rc::new(tex)),
+                            Err(..) => None,
+                        },
+                        Err(..) => None,
+                    }
+                });
+                match *ret {
+                    Some(ref tex) => Some(tex),
+                    None => None
+                }
+            },
+            _ => None,
         }
     }
 
@@ -352,20 +401,24 @@ impl<'a> Renderer<'a> {
                 }
                 TexturedRect { ref tex, ref at, ref rgba, ref clip } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
-                    match (hook.scalar_hook(tex.as_slice()), *clip) {
-                        (Some(TextureScalar(tex)), Some(ref clip)) => {
+                    let texture = {
+                        let tex = self.texture(hook, tex.as_slice());
+                        tex.map(|tex| tex.clone()) // XXX should avoid the clone here
+                    };
+                    match (texture, *clip) {
+                        (Some(ref tex), Some(ref clip)) => {
                             let (tw, th) = {
                                 let tex = tex.borrow();
                                 (tex.width as f32, tex.height as f32)
                             };
-                            let tx1 = Renderer::expr(hook, &clip.p.x, tw);
-                            let ty1 = Renderer::expr(hook, &clip.p.y, th);
-                            let tx2 = Renderer::expr(hook, &clip.q.x, tw);
-                            let ty2 = Renderer::expr(hook, &clip.q.y, th);
+                            let tx1 = State::expr(hook, &clip.p.x, tw);
+                            let ty1 = State::expr(hook, &clip.p.y, th);
+                            let tx2 = State::expr(hook, &clip.q.x, tw);
+                            let ty2 = State::expr(hook, &clip.q.y, th);
                             self.textured(tex).rect_area_rgba(x1, y1, x2, y2,
                                                               tx1, ty1, tx2, ty2, *rgba);
                         }
-                        (Some(TextureScalar(tex)), None) => {
+                        (Some(ref tex), None) => {
                             self.textured(tex).rect_rgba(x1, y1, x2, y2, *rgba);
                         }
                         (_, _) => {
@@ -376,7 +429,7 @@ impl<'a> Renderer<'a> {
                 }
                 Text { ref at, size, anchor: (ax,ay), ref color, ref text } => {
                     let (x, y) = self.pos(hook, at);
-                    let text = Renderer::text(hook, text);
+                    let text = State::text(hook, text);
                     let zoom = size / NROWS as f32;
                     let w = zoom * (text.as_slice().char_len() * NCOLUMNS) as f32;
                     let h = size as f32;
@@ -407,7 +460,7 @@ impl<'a> Renderer<'a> {
                     }
                 }
                 Block(ref block) => {
-                    Renderer::block(hook, block, |hook_, nodes_| {
+                    State::block(hook, block, |hook_, nodes_| {
                         self.nodes(hook_, *nodes_)
                     });
                 }
