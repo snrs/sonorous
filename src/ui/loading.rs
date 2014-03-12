@@ -349,7 +349,8 @@ impl Hook for LoadingContext {
             "loading.ratio" => Some(self.processed_jobs_ratio().into_scalar()),
             "meta.stagefile" => self.stagefile.as_ref().map(|s| s.as_scalar()),
             _ => {
-                self.bms.scalar_hook(id)
+                self.opts.borrow().scalar_hook(id)
+                    .or_else(|| self.bms.scalar_hook(id))
                     .or_else(|| self.infos.scalar_hook(id))
                     .or_else(|| self.keyspec.scalar_hook(id))
             }
@@ -359,11 +360,10 @@ impl Hook for LoadingContext {
     fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
         match id {
             "loading" => { self.lastpath.is_some() && body(parent, ""); }
-            // XXX should go to Options hook
-            "opts.showinfo" => { self.opts.borrow().showinfo && body(parent, ""); }
             "meta.stagefile" => { self.stagefile.is_some() && body(parent, ""); }
             _ => {
-                return self.bms.run_block_hook(id, parent, &body) ||
+                return self.opts.borrow().run_block_hook(id, parent, &body) ||
+                       self.bms.run_block_hook(id, parent, &body) ||
                        self.infos.run_block_hook(id, parent, &body) ||
                        self.keyspec.run_block_hook(id, parent, &body);
             }

@@ -627,9 +627,12 @@ impl Hook for PreloadedData {
 }
 
 impl Hook for SelectingScene {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
+        self.opts.borrow().scalar_hook(id)
+    }
+
     fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
         match id {
-            "autoplay" => { self.opts.borrow().is_autoplay() && body(parent, ""); }
             "scanning" => { self.filesdone || body(parent, ""); }
             "entries" => {
                 let top = cmp::min(self.scrolloffset, self.files.len());
@@ -647,7 +650,7 @@ impl Hook for SelectingScene {
                     body(&parent.add_text("preload.error", *err), "failed");
                 }
             },
-            _ => { return false; }
+            _ => { return self.opts.borrow().run_block_hook(id, parent, &body); }
         }
         true
     }

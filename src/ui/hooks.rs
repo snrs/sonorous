@@ -7,6 +7,36 @@
 use format::{timeline, bms};
 use gfx::skin::hook::{Scalar, AsScalar, IntoScalar, Hook};
 use engine::keyspec;
+use ui::options;
+
+impl Hook for options::Options {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
+        match id {
+            "opts.playspeed" => Some(self.playspeed.into_scalar()),
+            _ => None,
+        }
+    }
+
+    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+        match id {
+            "opts.autoplay" => { self.is_autoplay() && body(parent, ""); }
+            "opts.modifier" => match self.modf {
+                Some(options::MirrorModf)    => { body(parent, "mirror"); }
+                Some(options::ShuffleModf)   => { body(parent, "shuffle"); }
+                Some(options::ShuffleExModf) => { body(parent, "shuffle-ex"); }
+                Some(options::RandomModf)    => { body(parent, "random"); }
+                Some(options::RandomExModf)  => { body(parent, "random-ex"); }
+                None => {}
+            },
+            "opts.hasbga" => { self.has_bga() && body(parent, ""); }
+            "opts.hasmovie" => { self.has_movie() && body(parent, ""); }
+            "opts.showinfo" => { self.showinfo && body(parent, ""); }
+            "opts.fullscreen" => { self.fullscreen && body(parent, ""); }
+            _ => { return false; }
+        }
+        true
+    }
+}
 
 impl<S,I> Hook for timeline::Timeline<S,I> {
     fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {

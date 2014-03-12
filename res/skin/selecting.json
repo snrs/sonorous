@@ -134,7 +134,7 @@
     "status bar, will overwrite any overflowing messages",
     {"$rect": null, "at": [[0,"100%-20"], ["100%","100%"]], "color": "white"},
     {"$text": ["Up/Down/PgUp/PgDn/Home/End: Select   Enter: ",
-               {"$$": "autoplay", "$then": "Autoplay", "$else": "Play"},
+               {"$$": "opts.autoplay", "$then": "Autoplay", "$else": "Play"},
                "   F5: Refresh   Esc: Quit"],
      "at": [2,"100%-2"], "size": 16, "color": "black", "anchor": [0,1]},
 
