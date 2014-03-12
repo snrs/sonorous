@@ -9,6 +9,7 @@ use gfx::bmfont::{NCOLUMNS, Alignment, LeftAligned, Centered, RightAligned};
 use gfx::screen::{ShadedFontDrawing};
 
 pub mod ast;
+pub mod parse;
 pub mod hook;
 pub mod render;
 

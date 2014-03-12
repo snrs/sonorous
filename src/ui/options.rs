@@ -10,6 +10,7 @@ use encoding::label::encoding_from_whatwg_label;
 
 use format::bms::load::LoaderOptions;
 use engine::skin::ast::Skin;
+use engine::skin::parse::load_skin;
 
 /// Game play modes.
 #[deriving(Eq,Clone)]
@@ -118,19 +119,9 @@ impl Options {
 
     /// Parses and returns the skin data.
     pub fn load_skin(&self, name: &str) -> Result<Skin,~str> {
-        use serialize::json::from_reader;
-        use engine::skin::ast::from_json;
-        let mut f = match io::File::open(&self.skinroot.join(name)) {
-            Ok(f) => f,
-            Err(err) => { return Err(err.to_str()); }
-        };
-        let json = match from_reader(&mut f) {
-            Ok(json) => json,
-            Err(err) => { return Err(err.to_str()); }
-        };
-        match from_json::<Skin>(json) {
-            Some(skin) => Ok(skin),
-            None => Err(~"skin parsing failed"),
+        match io::File::open(&self.skinroot.join(name)) {
+            Ok(mut f) => load_skin(&mut f),
+            Err(err) => Err(err.to_str()),
         }
     }
 }
