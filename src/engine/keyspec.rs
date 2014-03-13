@@ -214,8 +214,9 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
         }
     }
 
-    let preset = match preset.map(|s| s.to_ascii_lower()) {
-        None | Some(~"bms") | Some(~"bme") | Some(~"bml") => {
+    let preset = preset.map(|s| s.to_ascii_lower());
+    let preset = match preset.as_ref().map(|s| s.as_slice()) {
+        None | Some("bms") | Some("bme") | Some("bml") => {
             let isbme = present[8] || present[9] || present[36+8] || present[36+9];
             let haspedal = present[7] || present[36+7];
             let nkeys = match bms.meta.mode {
@@ -224,11 +225,11 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
             };
             if haspedal {nkeys + "/fp"} else {nkeys}
         },
-        Some(~"pms") => {
+        Some("pms") => {
             let isbme = present[6] || present[7] || present[8] || present[9];
             if isbme {~"9-bme"} else {~"9"}
         },
-        Some(preset) => preset
+        Some(_) => preset.unwrap()
     };
 
     for &(name, leftkeys, rightkeys) in PRESETS.iter() {
