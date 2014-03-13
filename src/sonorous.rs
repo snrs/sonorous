@@ -297,7 +297,7 @@ Available debugging options:
 /// The entry point for subprograms. Only enabled with `--cfg subprogram`.
 #[cfg(subprogram)]
 pub fn subprogram(args: &[~str]) -> ! {
-    let ret: int = match args.head() {
+    let ret: int = match args.head().as_ref().map(|s| s.as_slice()) {
         None => {
             let _ = write!(&mut std::io::stderr(), "\
 The list of available subprograms:
@@ -306,9 +306,9 @@ The list of available subprograms:
 ");
             0
         }
-        Some(&~"chardet-train") => util::chardet::chardet_train(args.tail()),
+        Some("chardet-train") => util::chardet::chardet_train(args.tail()),
         Some(prog) => {
-            let _ = write!(&mut std::io::stderr(), "Subprogram {} is unknown.", *prog);
+            let _ = write!(&mut std::io::stderr(), "Subprogram {} is unknown.", prog);
             1
         }
     };
