@@ -187,7 +187,7 @@ impl Scene for TextualViewingScene {
     }
 
     fn render(&self) {
-        if !self.player.opts.borrow().showinfo { return; }
+        if !self.player.opts.deref().showinfo { return; }
 
         let elapsed = (self.player.now - self.player.origintime) / 100;
         let duration = (self.player.duration * 10.0) as uint;
@@ -242,7 +242,7 @@ impl Scene for ViewingScene {
     }
 
     fn render(&self) {
-        let screen__ = self.screen.borrow();
+        let screen__ = self.screen.deref();
         let mut screen_ = screen__.borrow_mut();
         let screen = screen_.get();
 

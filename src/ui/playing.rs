@@ -337,7 +337,7 @@ impl Scene for PlayingScene {
 
             Continue
         } else {
-            if self.player.opts.borrow().is_autoplay() { return PopScene; }
+            if self.player.opts.deref().is_autoplay() { return PopScene; }
 
             // check if the song reached the last gradable object (otherwise the game play was
             // terminated by the user)
@@ -350,7 +350,7 @@ impl Scene for PlayingScene {
     }
 
     fn render(&self) {
-        let screen__ = self.screen.borrow();
+        let screen__ = self.screen.deref();
         let mut screen_ = screen__.borrow_mut();
         let screen = screen_.get();
 
@@ -362,7 +362,7 @@ impl Scene for PlayingScene {
         screen.clear();
 
         // render BGAs (should render before the lanes since lanes can overlap with BGAs)
-        if self.player.opts.borrow().has_bga() {
+        if self.player.opts.deref().has_bga() {
             static POOR_LAYERS: [BGALayer, ..1] = [PoorBGA];
             static NORM_LAYERS: [BGALayer, ..3] = [Layer1, Layer2, Layer3];
             let layers = if self.poorlimit.is_some() {POOR_LAYERS.as_slice()}
@@ -498,7 +498,7 @@ impl Scene for PlayingScene {
                              format!("{} COMBO", self.player.lastcombo),
                              Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80)));
                 }
-                if self.player.opts.borrow().is_autoplay() {
+                if self.player.opts.deref().is_autoplay() {
                     d.string(cx, cy + 2.0, 1.0, Centered, "(AUTO)",
                              Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x40,0x40,0x40)));
                 }
@@ -532,7 +532,7 @@ impl Scene for PlayingScene {
             d.glyph(6.0 + timetick as f32, H-52.0, 1.0, 95, RGB(0x40,0x40,0x40));
 
             // render gauge
-            if !self.player.opts.borrow().is_autoplay() {
+            if !self.player.opts.deref().is_autoplay() {
                 // draw the gauge bar
                 let gray = RGB(0x40,0x40,0x40);
                 d.rect(0.0, H-16.0, 368.0, H, gray);

@@ -36,8 +36,8 @@ impl SearchContext {
             let (dirs, files) = entries.partition(|path| path.is_dir());
             (Rc::new(dirs), Rc::new(files))
         });
-        let dirs: &[Path] = *dirs.borrow();
-        let files: &[Path] = *files.borrow();
+        let dirs: &[Path] = *dirs.deref();
+        let files: &[Path] = *files.deref();
         (dirs, files)
     }
 

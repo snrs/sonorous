@@ -7,7 +7,7 @@
 use std::{str, cmp, io, os, comm, task};
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::comm::{Chan, Port};
+use std::comm::{Sender, Receiver};
 use rand::{task_rng, Rng};
 use sync::RWArc;
 
@@ -145,10 +145,10 @@ pub struct SelectingScene {
     offset: uint,
     /// Preloaded game data or preloading state if any.
     preloaded: PreloadingState,
-    /// A port for receiving worker messages.
-    priv port: Port<Message>,
-    /// A shared channel to which workers send messages.
-    priv chan: Chan<Message>,
+    /// A receiver for receiving worker messages.
+    priv receiver: Receiver<Message>,
+    /// A shared sender to which workers send messages.
+    priv sender: Sender<Message>,
     /// A shared cell, set to false when the scene is deactivated.
     priv keepgoing: RWArc<bool>,
 }
@@ -195,46 +195,46 @@ static PRELOAD_DELAY: uint = 300;
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
     pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> ~SelectingScene {
-        let skin = match opts.borrow().load_skin("selecting.json") {
+        let skin = match opts.deref().load_skin("selecting.json") {
             Ok(skin) => skin,
             Err(err) => die!("{}", err),
         };
         let root = os::make_absolute(root);
-        let (port, chan) = Chan::new();
+        let (sender, receiver) = comm::channel();
         ~SelectingScene {
             screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)), root: root,
             files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
-            port: port, chan: chan, keepgoing: RWArc::new(true),
+            receiver: receiver, sender: sender, keepgoing: RWArc::new(true),
         }
     }
 
     /// Spawns a new scanning task.
     pub fn spawn_scanning_task(&self) {
         let root = self.root.clone();
-        let chan = self.chan.clone();
-        let chan_ = self.chan.clone();
+        let sender = self.sender.clone();
+        let sender_ = self.sender.clone();
         let keepgoing = self.keepgoing.clone();
         spawn_worker_task(~"scanner", proc() {
             fn recur(search: &mut SearchContext, root: Path,
-                     chan: &Chan<Message>, keepgoing: &RWArc<bool>) -> bool {
+                     sender: &Sender<Message>, keepgoing: &RWArc<bool>) -> bool {
                 if !keepgoing.read(|v| *v) { return false; }
 
                 let (dirs, files) = {
                     let (dirs, files) = search.get_entries(&root);
                     (dirs.to_owned(), files.iter().map(|e| e.clone()).filter(is_bms_file).collect())
                 }; // so that we can reborrow `search`
-                chan.try_send(PushFiles(files));
+                sender.try_send(PushFiles(files));
                 for dir in dirs.move_iter() {
-                    if !recur(search, dir, chan, keepgoing) { return false; }
+                    if !recur(search, dir, sender, keepgoing) { return false; }
                 }
                 true
             }
             let mut search = SearchContext::new();
-            if recur(&mut search, root.clone(), &chan, &keepgoing) {
-                chan.try_send(NoMoreFiles);
+            if recur(&mut search, root.clone(), &sender, &keepgoing) {
+                sender.try_send(NoMoreFiles);
             }
         }, proc() {
-            chan_.try_send(NoMoreFiles);
+            sender_.try_send(NoMoreFiles);
         });
     }
 
@@ -244,9 +244,9 @@ impl SelectingScene {
         assert!(self.keepgoing.read(|&v| v));
         self.keepgoing.write(|v| { *v = false; });
         self.keepgoing = RWArc::new(true);
-        let (port, chan) = Chan::new();
-        self.port = port;
-        self.chan = chan;
+        let (sender, receiver) = comm::channel();
+        self.receiver = receiver;
+        self.sender = sender;
 
         self.files.clear();
         self.filesdone = false;
@@ -260,9 +260,9 @@ impl SelectingScene {
     pub fn spawn_preloading_task(&self, path: &Path) {
         let bmspath = path.clone();
         let bmspath_ = path.clone();
-        let opts = self.opts.borrow().clone();
-        let chan = self.chan.clone();
-        let chan_ = self.chan.clone();
+        let opts = self.opts.deref().clone();
+        let sender = self.sender.clone();
+        let sender_ = self.sender.clone();
         spawn_worker_task(~"preloader", proc() {
             let opts = Rc::new(opts);
 
@@ -273,8 +273,8 @@ impl SelectingScene {
                 let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
                 match res {
                     Ok(LoadedImage(surface)) => {
-                        chan.try_send(BmsBannerLoaded(bmspath.clone(), bannerpath,
-                                                      Envelope::new(surface)));
+                        sender.try_send(BmsBannerLoaded(bmspath.clone(), bannerpath,
+                                                        Envelope::new(surface)));
                     }
                     _ => {}
                 }
@@ -283,26 +283,26 @@ impl SelectingScene {
             let load_with_reader = |mut f| {
                 let mut r = task_rng();
                 let mut diags = ~[];
-                let loaderopts = opts.borrow().loader_options();
+                let loaderopts = opts.deref().loader_options();
 
                 let preproc = {
                     let callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
                         diags.push((line, msg));
                         true
                     };
-                    preprocess_bms(&bmspath, &mut f, opts.borrow(), &mut r, &loaderopts, callback)
+                    preprocess_bms(&bmspath, &mut f, opts.deref(), &mut r, &loaderopts, callback)
                 };
                 match preproc {
                     Ok(preproc) => {
                         let banner = preproc.bms.meta.banner.clone();
                         let basepath = preproc.bms.meta.basepath.clone();
-                        chan.try_send(BmsLoaded(bmspath.clone(), preproc, diags));
+                        sender.try_send(BmsLoaded(bmspath.clone(), preproc, diags));
                         if banner.is_some() {
                             load_banner(banner.unwrap(), basepath);
                         }
                     }
                     Err(err) => {
-                        chan.try_send(BmsFailed(bmspath.clone(), err));
+                        sender.try_send(BmsFailed(bmspath.clone(), err));
                     }
                 }
             };
@@ -311,18 +311,18 @@ impl SelectingScene {
                 Ok(mut f) => {
                     let buf = f.read_to_end().ok().unwrap_or_else(|| ~[]);
                     let hash = MD5::from_buffer(buf).final();
-                    chan.try_send(BmsHashRead(bmspath.clone(), hash));
+                    sender.try_send(BmsHashRead(bmspath.clone(), hash));
 
                     // since we have read the file we don't want the parser to read it again.
                     load_with_reader(io::MemReader::new(buf));
                 }
                 Err(err) => {
-                    chan.try_send(BmsFailed(bmspath.clone(), err.to_str()));
+                    sender.try_send(BmsFailed(bmspath.clone(), err.to_str()));
                 }
             }
         }, proc() {
             // the task failed to send the error message, so the wrapper sends it instead
-            chan_.try_send(BmsFailed(bmspath_, ~"unexpected error"));
+            sender_.try_send(BmsFailed(bmspath_, ~"unexpected error"));
         });
     }
 
@@ -378,7 +378,7 @@ impl SelectingScene {
                         }
                     };
                     let mut r = task_rng();
-                    let opts = self.opts.borrow();
+                    let opts = self.opts.deref();
                     let ret = preprocess_bms(path, &mut f as &mut Reader, opts, &mut r,
                                              &opts.loader_options(), print_diag);
                     match ret {
@@ -469,7 +469,7 @@ impl Scene for SelectingScene {
         }
 
         loop {
-            match self.port.try_recv() {
+            match self.receiver.try_recv() {
                 comm::Empty | comm::Disconnected => { break; }
 
                 comm::Data(PushFiles(paths)) => {
@@ -529,7 +529,7 @@ impl Scene for SelectingScene {
     }
 
     fn render(&self) {
-        let screen__ = self.screen.borrow();
+        let screen__ = self.screen.deref();
         let mut screen_ = screen__.borrow_mut();
         let screen = screen_.get();
 
@@ -628,7 +628,7 @@ impl Hook for PreloadedData {
 
 impl Hook for SelectingScene {
     fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
-        self.opts.borrow().scalar_hook(id)
+        self.opts.deref().scalar_hook(id)
     }
 
     fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
@@ -650,7 +650,7 @@ impl Hook for SelectingScene {
                     body(&parent.add_text("preload.error", *err), "failed");
                 }
             },
-            _ => { return self.opts.borrow().run_block_hook(id, parent, &body); }
+            _ => { return self.opts.deref().run_block_hook(id, parent, &body); }
         }
         true
     }

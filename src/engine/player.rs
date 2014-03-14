@@ -265,19 +265,19 @@ impl Player {
         let timeline = Rc::new(timeline);
 
         let now = get_ticks();
-        let initplayspeed = opts.borrow().playspeed;
+        let initplayspeed = opts.deref().playspeed;
         let originoffset = infos.originoffset;
         let gradefactor = 1.5 - cmp::min(meta.rank, 5) as f64 * 0.25;
         let initialgauge = MAXGAUGE * 500 / 1000;
         let survival = MAXGAUGE * 293 / 1000;
-        let initbpm = timeline.borrow().initbpm;
-        let nobjs = timeline.borrow().objs.len();
+        let initbpm = timeline.deref().initbpm;
+        let nobjs = timeline.deref().objs.len();
         let nsounds = sndres.len();
 
         // set all pointers to the origin and let the `tick` do the initial calculation
         let origin = timeline.pointer(VirtualPos, originoffset);
-        let duration = timeline.borrow().duration(originoffset,
-                                                  |sref| sndres[sref.to_uint()].duration());
+        let duration = timeline.deref().duration(originoffset,
+                                                 |sref| sndres[sref.to_uint()].duration());
         let mut player = Player {
             opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
             keyspec: keyspec, keymap: keymap,
@@ -523,7 +523,7 @@ impl Player {
     /// Updates the player state. Returns `true` if the caller should keep calling `tick`.
     pub fn tick(&mut self) -> bool {
         let opts_ = self.opts.clone();
-        let opts = opts_.borrow();
+        let opts = opts_.deref();
 
         // smoothly change the play speed
         if self.targetspeed.is_some() {
@@ -682,7 +682,7 @@ impl Player {
         }
 
         // determines if we should keep playing
-        if self.cur.index == self.timeline.borrow().objs.len() {
+        if self.cur.index == self.timeline.deref().objs.len() {
             if opts.is_autoplay() {
                 sdl_mixer::num_playing(None) != sdl_mixer::num_playing(Some(0))
             } else {

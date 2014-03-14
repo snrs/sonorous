@@ -64,7 +64,7 @@ impl Renderer {
     pub fn render(&mut self, screen: &mut Screen, hook: &Hook) {
         let skin = self.skin.clone();
         let mut state = State::new(self, screen);
-        state.nodes(hook, skin.borrow().nodes);
+        state.nodes(hook, skin.deref().nodes);
         state.finish();
     }
 }
@@ -295,7 +295,7 @@ impl<'a> State<'a> {
     fn texture<'a>(&'a mut self, hook: &'a Hook, id: &str) -> Option<&'a Rc<Texture2D>> {
         let mut scalar = hook.scalar_hook(id);
         if scalar.is_none() {
-            scalar = self.renderer.skin.borrow().scalars.find_equiv(&id).map(|v| v.clone());
+            scalar = self.renderer.skin.deref().scalars.find_equiv(&id).map(|v| v.clone());
         }
         match scalar {
             Some(TextureScalar(tex)) => Some(tex),
@@ -323,7 +323,7 @@ impl<'a> State<'a> {
             ToBeDrawn => {}
             ShadedLines(d) => { d.draw_to(self.screen); }
             Shaded(d) => { d.draw_to(self.screen); }
-            Textured(d, tex) => { d.draw_texture_to(self.screen, tex.borrow()); }
+            Textured(d, tex) => { d.draw_texture_to(self.screen, tex.deref()); }
         }
     }
 
@@ -366,12 +366,12 @@ impl<'a> State<'a> {
         match self.draw {
             // keep the current drawing only when the texture is exactly identical.
             Textured(ref mut d, ref tex_)
-                    if tex.borrow() as *Texture2D == tex_.borrow() as *Texture2D => {
+                    if tex.deref() as *Texture2D == tex_.deref() as *Texture2D => {
                 return d;
             }
             _ => {
                 let tex = tex.clone();
-                let newd = TexturedDrawing::new(gl::TRIANGLES, tex.borrow());
+                let newd = TexturedDrawing::new(gl::TRIANGLES, tex.deref());
                 let draw = mem::replace(&mut self.draw, Textured(newd, tex));
                 self.commit(draw);
                 match self.draw {
@@ -408,7 +408,7 @@ impl<'a> State<'a> {
                     match (texture, *clip) {
                         (Some(ref tex), Some(ref clip)) => {
                             let (tw, th) = {
-                                let tex = tex.borrow();
+                                let tex = tex.deref();
                                 (tex.width as f32, tex.height as f32)
                             };
                             let tx1 = State::expr(hook, &clip.p.x, tw);

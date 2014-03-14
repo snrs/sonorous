@@ -37,7 +37,7 @@ pub struct Pointer<SoundRef,ImageRef> {
 
 /// Returns true if two pointers share the common timeline.
 fn has_same_timeline<S,I>(lhs: &Pointer<S,I>, rhs: &Pointer<S,I>) -> bool {
-    lhs.timeline.borrow() as *Timeline<S,I> == rhs.timeline.borrow() as *Timeline<S,I>
+    lhs.timeline.deref() as *Timeline<S,I> == rhs.timeline.deref() as *Timeline<S,I>
 }
 
 /// Returns the first index `i` such that `v[i]` is no `Less` than the target, or `v.len()` if
@@ -92,7 +92,7 @@ impl<S,I> Clone for Pointer<S,I> {
 }
 
 impl<S:Clone,I:Clone> ToObjData<S,I> for Pointer<S,I> {
-    fn to_obj_data(&self) -> ObjData<S,I> { self.timeline.borrow().objs[self.index].data.clone() }
+    fn to_obj_data(&self) -> ObjData<S,I> { self.timeline.deref().objs[self.index].data.clone() }
 }
 
 /// Given one axis, interpolates remaining axes from the difference of `objs[index-1]` and
@@ -165,9 +165,9 @@ pub struct UntilIterator<SoundRef,ImageRef> {
 
 impl<S,I> Iterator<Pointer<S,I>> for UntilIterator<S,I> {
     fn next(&mut self) -> Option<Pointer<S,I>> {
-        if self.cur < self.timeline.borrow().objs.len() {
+        if self.cur < self.timeline.deref().objs.len() {
             let i = self.cur;
-            if self.timeline.borrow().objs[i].loc[self.axis] < self.endpos {
+            if self.timeline.deref().objs[i].loc[self.axis] < self.endpos {
                 self.cur += 1;
                 Some(Pointer::from_index(self.timeline.clone(), i))
             } else {
@@ -179,7 +179,7 @@ impl<S,I> Iterator<Pointer<S,I>> for UntilIterator<S,I> {
     }
 
     fn size_hint(&self) -> (uint, Option<uint>) {
-        (0, Some(self.timeline.borrow().objs.len() - self.cur))
+        (0, Some(self.timeline.deref().objs.len() - self.cur))
     }
 }
 
@@ -199,7 +199,7 @@ impl<'r,S,I> Iterator<Pointer<S,I>> for MutUptoIterator<'r,S,I> {
 
         if self.cur < self.end {
             let i = self.cur;
-            self.lastloc = Some(self.ptr.timeline.borrow().objs[i].loc.clone());
+            self.lastloc = Some(self.ptr.timeline.deref().objs[i].loc.clone());
             self.cur += 1;
             return Some(Pointer::from_index(self.ptr.timeline.clone(), i));
         }
@@ -244,17 +244,17 @@ impl<'r,S,I> Iterator<Pointer<S,I>> for MutUntilIterator<'r,S,I> {
     fn next(&mut self) -> Option<Pointer<S,I>> {
         if self.finished { return None; }
 
-        if self.cur < self.ptr.timeline.borrow().objs.len() {
+        if self.cur < self.ptr.timeline.deref().objs.len() {
             let i = self.cur;
-            if self.ptr.timeline.borrow().objs[i].loc[self.axis] < self.endpos {
-                self.lastloc = Some(self.ptr.timeline.borrow().objs[i].loc.clone());
+            if self.ptr.timeline.deref().objs[i].loc[self.axis] < self.endpos {
+                self.lastloc = Some(self.ptr.timeline.deref().objs[i].loc.clone());
                 self.cur += 1;
                 return Some(Pointer::from_index(self.ptr.timeline.clone(), i));
             }
         }
 
         self.ptr.index = self.cur;
-        self.ptr.loc = interpolate_loc(self.ptr.timeline.borrow(),
+        self.ptr.loc = interpolate_loc(self.ptr.timeline.deref(),
                                        self.cur, self.axis, self.endpos);
         self.finished = true;
         None
@@ -264,7 +264,7 @@ impl<'r,S,I> Iterator<Pointer<S,I>> for MutUntilIterator<'r,S,I> {
         if self.finished {
             (0, Some(0))
         } else {
-            (0, Some(self.ptr.timeline.borrow().objs.len() - self.cur))
+            (0, Some(self.ptr.timeline.deref().objs.len() - self.cur))
         }
     }
 }
@@ -288,14 +288,14 @@ impl<S,I> Pointer<S,I> {
     /// Returns true if the pointer invariant holds.
     pub fn invariant(&self) -> bool {
         if self.index > 0 {
-            let prev = &self.timeline.borrow().objs[self.index-1];
+            let prev = &self.timeline.deref().objs[self.index-1];
             if !(prev.loc.vpos  <= self.loc.vpos ) { return false; }
             if !(prev.loc.pos   <= self.loc.pos  ) { return false; }
             if !(prev.loc.vtime <= self.loc.vtime) { return false; }
             if !(prev.loc.time  <= self.loc.time ) { return false; }
         }
-        if self.index < self.timeline.borrow().objs.len() {
-            let next = &self.timeline.borrow().objs[self.index-1];
+        if self.index < self.timeline.deref().objs.len() {
+            let next = &self.timeline.deref().objs[self.index-1];
             if !(self.loc.vpos  <= next.loc.vpos ) { return false; }
             if !(self.loc.pos   <= next.loc.pos  ) { return false; }
             if !(self.loc.vtime <= next.loc.vtime) { return false; }
@@ -311,27 +311,27 @@ impl<S,I> Pointer<S,I> {
         // we seek to the first object no less than given position. with an exception of the very
         // first and last object, an object right before this object should be less than given
         // position therefore.
-        let index = bsearch_no_less(timeline.borrow().objs, |obj| {
+        let index = bsearch_no_less(timeline.deref().objs, |obj| {
             let pos_ = obj.loc[axis];
             if pos_ < pos {Less} else if pos_ > pos {Greater} else {Equal}
         });
 
         // the previous object (`objs[index-1]`) is guaranteed to be before `pos`, so we first
         // seek to the previous object then interpolate locations.
-        let loc = interpolate_loc(timeline.borrow(), index, axis, pos);
+        let loc = interpolate_loc(timeline.deref(), index, axis, pos);
         Pointer { timeline: timeline, index: index, loc: loc }
     }
 
     /// Returns a pointer to the object pointed by `index`.
     pub fn from_index(timeline: Rc<Timeline<S,I>>, index: uint) -> Pointer<S,I> {
-        assert!(index < timeline.borrow().objs.len());
-        let loc = timeline.borrow().objs[index].loc.clone();
+        assert!(index < timeline.deref().objs.len());
+        let loc = timeline.deref().objs[index].loc.clone();
         Pointer { timeline: timeline, index: index, loc: loc }
     }
 
     /// Returns a pointer pointing at the end of the timeline (actually, an `End` object).
     pub fn from_end(timeline: Rc<Timeline<S,I>>) -> Pointer<S,I> {
-        let index = timeline.borrow().objs.len() - 1;
+        let index = timeline.deref().objs.len() - 1;
         Pointer::from_index(timeline, index)
     }
 
@@ -345,7 +345,7 @@ impl<S,I> Pointer<S,I> {
         if delta == 0.0 { return; }
         let pos = self.loc[axis] + delta;
 
-        let objs: &[Obj<S,I>] = self.timeline.borrow().objs;
+        let objs: &[Obj<S,I>] = self.timeline.deref().objs;
         let mut index = self.index;
         if delta > 0.0 { // forward
             while index < objs.len() && objs[index].loc[axis] < pos {
@@ -357,7 +357,7 @@ impl<S,I> Pointer<S,I> {
             }
         }
         self.index = index;
-        self.loc = interpolate_loc(self.timeline.borrow(), index, axis, pos);
+        self.loc = interpolate_loc(self.timeline.deref(), index, axis, pos);
     }
 
     /// Returns a new pointer that points to the first object which position is no less than
@@ -414,7 +414,7 @@ impl<S,I> Pointer<S,I> {
 
     /// Finds the next object that satisfies given condition if any, without updating itself.
     pub fn find_next_of_type(&self, cond: |&Obj<S,I>| -> bool) -> Option<Pointer<S,I>> {
-        let objs: &[Obj<S,I>] = self.timeline.borrow().objs;
+        let objs: &[Obj<S,I>] = self.timeline.deref().objs;
         let nobjs = objs.len();
         let mut i = self.index;
         while i < nobjs {
@@ -430,7 +430,7 @@ impl<S,I> Pointer<S,I> {
         let mut i = self.index;
         while i > 0 {
             i -= 1;
-            let current = &self.timeline.borrow().objs[i];
+            let current = &self.timeline.deref().objs[i];
             if cond(current) { return Some(Pointer::from_index(self.timeline.clone(), i)); }
         }
         None

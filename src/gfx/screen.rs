@@ -352,18 +352,18 @@ impl ShadedFontDrawing {
     /// distinct from `glyph` since the glyph #95 is used for the tick marker
     /// (character code -1 in C).
     pub fn glyph<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32, glyph: uint, color: ColorT) {
-        self.drawing.glyph(self.font.borrow(), x, y, zoom, glyph, color)
+        self.drawing.glyph(self.font.deref(), x, y, zoom, glyph, color)
     }
 
     /// Draws a character with given position and color.
     pub fn char<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32, c: char, color: ColorT) {
-        self.drawing.char(self.font.borrow(), x, y, zoom, c, color)
+        self.drawing.char(self.font.deref(), x, y, zoom, c, color)
     }
 
     /// Draws a string with given position, alignment and color.
     pub fn string<ColorT:Blend>(&mut self, x: f32, y: f32, zoom: f32,
                                 align: Alignment, s: &str, color: ColorT) {
-        self.drawing.string(self.font.borrow(), x, y, zoom, align, s, color)
+        self.drawing.string(self.font.deref(), x, y, zoom, align, s, color)
     }
 }
 

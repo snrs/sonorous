@@ -52,7 +52,7 @@ impl Scene for PlayResultScene {
     }
 
     fn render(&self) {
-        let screen__ = self.screen.borrow();
+        let screen__ = self.screen.deref();
         let mut screen_ = screen__.borrow_mut();
         let screen = screen_.get();
 

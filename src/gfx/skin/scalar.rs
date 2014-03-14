@@ -127,7 +127,7 @@ impl<'a> fmt::Show for Scalar<'a> {
             OwnedStrScalar(ref s) => s.fmt(f),
             BorrowedStrScalar(s) => s.fmt(f),
             TextureScalar(tex) => {
-                let tex = tex.borrow();
+                let tex = tex.deref();
                 write!(f.buf, "<texture {}x{}>", tex.width, tex.height)
             },
             ImageScalar(ref path) => write!(f.buf, "<image {}>", path.display()),
