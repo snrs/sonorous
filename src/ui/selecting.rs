@@ -7,7 +7,8 @@
 use std::{str, cmp, io, os, comm, task};
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::comm::{Sender, Receiver};
+#[cfg(not(rust_nightly_20140312))] use std::comm::{Sender, Receiver};
+#[cfg(rust_nightly_20140312)] use std::comm::{Chan, Port};
 use rand::{task_rng, Rng};
 use sync::RWArc;
 
@@ -192,6 +193,13 @@ static NUMENTRIES: uint = 15;
 /// in order to avoid the worker congestion.
 static PRELOAD_DELAY: uint = 300;
 
+#[cfg(rust_nightly_20140312)] type Sender<T> = Chan<T>;
+#[cfg(rust_nightly_20140312)] type Receiver<T> = Port<T>;
+#[cfg(not(rust_nightly_20140312))]
+fn channel<T:Send>() -> (Sender<T>, Receiver<T>) { comm::channel() }
+#[cfg(rust_nightly_20140312)]
+fn channel<T:Send>() -> (Sender<T>, Receiver<T>) { let (p,c) = Chan::new(); (c,p) }
+
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
     pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> ~SelectingScene {
@@ -200,7 +208,7 @@ impl SelectingScene {
             Err(err) => die!("{}", err),
         };
         let root = os::make_absolute(root);
-        let (sender, receiver) = comm::channel();
+        let (sender, receiver) = channel();
         ~SelectingScene {
             screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)), root: root,
             files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
@@ -244,7 +252,7 @@ impl SelectingScene {
         assert!(self.keepgoing.read(|&v| v));
         self.keepgoing.write(|v| { *v = false; });
         self.keepgoing = RWArc::new(true);
-        let (sender, receiver) = comm::channel();
+        let (sender, receiver) = channel();
         self.receiver = receiver;
         self.sender = sender;
 

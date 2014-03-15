@@ -360,7 +360,8 @@ impl Player {
                               else if dist <  GOOD_CUTOFF {(GOOD,None)}
                               else if dist <   BAD_CUTOFF {(BAD,Some(BAD_DAMAGE))}
                               else                        {(MISS,Some(MISS_DAMAGE))};
-        let scoredelta = cmp::max(1.0 - dist / BAD_CUTOFF, 0.0);
+        let scoredelta = 1.0 - dist / BAD_CUTOFF;
+        let scoredelta = if scoredelta > 0.0 {scoredelta} else {0.0};
         let keepgoing = self.update_grade(grade, scoredelta, damage);
         assert!(keepgoing);
     }

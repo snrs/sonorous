@@ -4,7 +4,7 @@
 
 //! Timeline interface.
 
-use std::{cmp, fmt};
+use std::fmt;
 use format::obj::*;
 
 /// A portion of game data which is not associated to resources and other metadata. Timelines are
@@ -49,7 +49,8 @@ impl<S:Clone,I:Clone> Timeline<S,I> {
         for obj in self.objs.iter() {
             match obj.data {
                 Visible(_,Some(ref sref)) | LNStart(_,Some(ref sref)) | BGM(ref sref) => {
-                    maxtime = cmp::max(maxtime, obj.loc.time + sound_length(sref.clone()));
+                    let sndend = obj.loc.time + sound_length(sref.clone());
+                    if maxtime < sndend { maxtime = sndend; }
                 }
                 SetBPM(BPM(0.0)) => {
                     return obj.loc.time;
@@ -57,13 +58,14 @@ impl<S:Clone,I:Clone> Timeline<S,I> {
                 SetBPM(BPM(newbpm)) if newbpm < 0.0 => {
                     // we explicitly ignore `self.end().time` since it will be +inf.
                     let backtime = BPM(-newbpm).measure_to_sec(obj.loc.pos - originoffset);
-                    return cmp::max(maxtime, obj.loc.time + backtime);
+                    let backend = obj.loc.time + backtime;
+                    return if maxtime > backend {maxtime} else {backend};
                 }
                 _ => {}
             }
         }
         // except for sounds past the end, we normally ends at the position of `End` object.
-        cmp::max(maxtime, self.end().time)
+        if maxtime > self.end().time {maxtime} else {self.end().time}
     }
 
     /// Analyzes the timeline.
