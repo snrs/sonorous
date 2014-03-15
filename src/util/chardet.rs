@@ -331,8 +331,8 @@ pub fn chardet_train(args: &[~str]) -> int {
     let mut nkowords = 0;
     let mut njawords = 0;
 
-    let words: ~[~str] =
-        BufferedReader::new(stdin()).lines().filter(|w| !w.trim().is_empty()).collect();
+    let mut stream = BufferedReader::new(stdin());
+    let words = stream.lines().map(|s| s.unwrap()).filter(|s| !s.trim().is_empty()).to_owned_vec();
     let nwords = words.len();
     for (i, w) in words.move_iter().enumerate() {
         if (i + 1) % 10000 == 0 {
