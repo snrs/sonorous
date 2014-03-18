@@ -10,6 +10,7 @@
 
 use std::local_data;
 use std::io::{stdout, stderr};
+use std::vec_ng::Vec;
 use encoding::{Encoding, EncodingRef, Encoder, EncoderTrap, ByteWriter};
 
 local_data_key!(console_encoding_key: EncodingRef)
@@ -53,31 +54,31 @@ fn hex_ncr_escape(_encoder: &Encoder, input: &str, output: &mut ByteWriter) -> b
 }
 
 /// Converts the string to the current console encoding.
-pub fn to_console_encoding(s: &str) -> ~[u8] {
+pub fn to_console_encoding(s: &str) -> Vec<u8> {
     console_encoding().encode(s, EncoderTrap(hex_ncr_escape)).unwrap()
 }
 
 /// Same as `std::io::print` but converts to the current console encoding if possible.
 pub fn printout(s: &str) {
-    let _ = stdout().write(to_console_encoding(s));
+    let _ = stdout().write(to_console_encoding(s).as_slice());
 }
 
 /// Same as `std::io::println` but converts to the current console encoding if possible.
 pub fn printoutln(s: &str) {
     let mut out = stdout();
-    let _ = out.write(to_console_encoding(s));
+    let _ = out.write(to_console_encoding(s).as_slice());
     let _ = out.write(['\n' as u8]);
 }
 
 /// Same as `std::io::stderr().write_str` but converts to the current console encoding if possible.
 pub fn printerr(s: &str) {
-    let _ = stderr().write(to_console_encoding(s));
+    let _ = stderr().write(to_console_encoding(s).as_slice());
 }
 
 /// Same as `std::io::stderr().write_line` but converts to the current console encoding if possible.
 pub fn printerrln(s: &str) {
     let mut err = stderr();
-    let _ = err.write(to_console_encoding(s));
+    let _ = err.write(to_console_encoding(s).as_slice());
     let _ = err.write(['\n' as u8]);
 }
 

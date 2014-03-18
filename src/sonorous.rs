@@ -19,11 +19,12 @@
 #[crate_type = "bin"];
 
 #[no_uv];
-#[feature(macro_rules, struct_variant, globs, link_args)];
+#[feature(macro_rules, phase, struct_variant, globs, link_args)];
 
 #[comment = "Sonorous"];
 #[license = "GPLv2+"];
 
+#[phase(syntax, link)] extern crate log;
 extern crate rand;
 extern crate collections;
 extern crate serialize;
