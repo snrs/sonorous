@@ -342,7 +342,7 @@ pub fn chardet_train(args: &[~str]) -> int {
             Ok(w_) => {
                 nkowords += 1;
                 kotrainerko.train(w, true);
-                jatrainerko.train(WINDOWS_31J.decode(w_, DecodeReplace).unwrap(), false);
+                jatrainerko.train(WINDOWS_31J.decode(w_.as_slice(), DecodeReplace).unwrap(), false);
             }
             Err(..) => {}
         }
@@ -350,7 +350,7 @@ pub fn chardet_train(args: &[~str]) -> int {
             Ok(w_) => {
                 njawords += 1;
                 jatrainerja.train(w, true);
-                kotrainerja.train(WINDOWS_949.decode(w_, DecodeReplace).unwrap(), false);
+                kotrainerja.train(WINDOWS_949.decode(w_.as_slice(), DecodeReplace).unwrap(), false);
             }
             Err(..) => {}
         }
