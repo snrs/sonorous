@@ -4,7 +4,7 @@
 
 //! Core game play logics. Handles the input (if any) and sound but not the user interface.
 
-use std::{vec, cmp, num};
+use std::{slice, cmp, num};
 use std::rc::Rc;
 use rand::Rng;
 
@@ -249,10 +249,14 @@ fn previous_speed_mark(current: f64) -> Option<f64> {
 
 /// Creates a beep sound played on the play speed change.
 fn create_beep() -> ~sdl_mixer::Chunk {
-    let samples = vec::from_fn::<i32>(12000, // approx. 0.14 seconds
+    let samples: ~[i32] = slice::from_fn::<i32>(12000, // approx. 0.14 seconds
         // sawtooth wave at 3150 Hz, quadratic decay after 0.02 seconds.
         |i| { let i = i as i32; (i%28-14) * cmp::min(2000, (12000-i)*(12000-i)/50000) });
-    sdl_mixer::Chunk::new(unsafe { ::std::cast::transmute(samples) }, 128)
+    unsafe {
+        slice::raw::buf_as_slice(samples.as_ptr() as *u8, samples.len() * 4, |samples| {
+            sdl_mixer::Chunk::new(Vec::from_slice(samples), 128)
+        })
+    }
 }
 
 impl Player {
@@ -282,13 +286,13 @@ impl Player {
             opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
             keyspec: keyspec, keymap: keymap,
 
-            nograding: vec::from_elem(nobjs, false), sndres: sndres, beep: create_beep(),
-            sndlastch: vec::from_elem(nsounds, None), lastchsnd: ~[], bga: initial_bga_state(),
+            nograding: slice::from_elem(nobjs, false), sndres: sndres, beep: create_beep(),
+            sndlastch: slice::from_elem(nsounds, None), lastchsnd: ~[], bga: initial_bga_state(),
 
             playspeed: initplayspeed, targetspeed: None, bpm: initbpm, now: now, origintime: now,
 
             origin: origin.clone(), cur: origin.clone(), checked: origin.clone(),
-            thru: vec::from_fn(NLANES, |_| None), reverse: None,
+            thru: slice::from_fn(NLANES, |_| None), reverse: None,
 
             gradefactor: gradefactor, lastgrade: None, gradecounts: [0, ..NGRADES],
             lastcombo: 0, bestcombo: 0, score: 0, gauge: initialgauge, survival: survival,

@@ -41,8 +41,8 @@
 
 //! The MD5 digest algorithm (RFC 1321).
 
-use std::vec::bytes;
-use std::vec::bytes::MutableByteVector;
+use std::slice::bytes;
+use std::slice::bytes::MutableByteVector;
 
 /// A fast integer type which is at least 32 bits long.
 #[allow(non_camel_case_types)] pub type u32plus = u32;

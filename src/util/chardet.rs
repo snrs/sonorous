@@ -39,7 +39,7 @@
  * correlated with the row index of character sets.
  */
 
-use std::vec;
+use std::slice;
 use std::num::{Round, ln, exp};
 use util::maybe_owned::{MaybeOwnedVec, IntoMaybeOwnedVec};
 
@@ -85,7 +85,7 @@ pub trait CharClass {
     /// Returns an iterator over character classes present in given string.
     /// Currently returns distinct classes.
     fn classes(&self, s: &str) -> CharClasses {
-        let mut seen = vec::from_elem((self.num_classes() + 63) / 64, 0u64);
+        let mut seen = slice::from_elem((self.num_classes() + 63) / 64, 0u64);
         for c in s.chars() {
             match self.from_char(c) {
                 Some(cls) if (seen[cls/64] >> (cls%64)) & 1 == 0 => {
@@ -197,7 +197,7 @@ impl<CC:CharClass> Trainer<CC> {
     /// Returns a trainer without any data.
     pub fn new(cc: CC) -> Trainer<CC> {
         let nclasses = cc.num_classes();
-        Trainer { cc: cc, weights: vec::from_elem(nclasses, (0.0f64, 0.0f64)) }
+        Trainer { cc: cc, weights: slice::from_elem(nclasses, (0.0f64, 0.0f64)) }
     }
 
     /// Adds a set of default frequencies to the trainer.

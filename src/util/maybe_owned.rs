@@ -14,7 +14,7 @@ use std::cmp::{Eq, TotalEq, Ord, TotalOrd, Equiv};
 use std::cmp::Ordering;
 use std::container::Container;
 use std::default::Default;
-use std::vec::Vector;
+use std::slice::Vector;
 
 /// A vector that can hold either `&'r [T]` or `~[T]`.
 pub enum MaybeOwnedVec<'r,T> {

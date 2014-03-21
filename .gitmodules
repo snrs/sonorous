@@ -12,4 +12,4 @@
 	url = https://github.com/lifthrasiir/rust-encoding.git
 [submodule "libs/rustsqlite"]
 	path = libs/rustsqlite
-	url = https://github.com/linuxfood/rustsqlite.git
+	url = https://github.com/lifthrasiir/rustsqlite.git

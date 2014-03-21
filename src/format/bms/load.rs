@@ -4,7 +4,7 @@
 
 //! BMS loader. Uses a BMS parser (`format::bms::parse`) to produce `format::bms::Bms` structure.
 
-use std::{vec, iter, cmp};
+use std::{slice, iter, cmp};
 use rand::Rng;
 
 use format::obj::*;
@@ -70,9 +70,9 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     let mut difficulty = None;
     let mut rank = 2;
     let /*mut*/ canvassize = (256, 256);
-    let mut sndpath = vec::from_elem(MAXKEY as uint, None);
-    let mut imgpath = vec::from_elem(MAXKEY as uint, None);
-    let mut imgslices = vec::from_elem(MAXKEY as uint, None);
+    let mut sndpath = slice::from_elem(MAXKEY as uint, None);
+    let mut imgpath = slice::from_elem(MAXKEY as uint, None);
+    let mut imgslices = slice::from_elem(MAXKEY as uint, None);
 
     // A builder for objects.
     let mut builder = TimelineBuilder::new();

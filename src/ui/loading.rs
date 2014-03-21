@@ -4,7 +4,7 @@
 
 //! Loading screen. Displays the STAGEFILE image and metadata while loading resources.
 
-use std::vec;
+use std::slice;
 use std::rc::Rc;
 use std::cell::RefCell;
 use collections::{Deque, DList};
@@ -75,8 +75,8 @@ impl LoadingContext {
     pub fn new(bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec, keymap: ~KeyMap,
                opts: Rc<Options>) -> LoadingContext {
         let basedir = bms.meta.basepath.clone().unwrap_or(Path::new("."));
-        let sndres = vec::from_fn(bms.meta.sndpath.len(), |_| NoSound);
-        let imgres = vec::from_fn(bms.meta.imgpath.len(), |_| NoImage);
+        let sndres = slice::from_fn(bms.meta.sndpath.len(), |_| NoSound);
+        let imgres = slice::from_fn(bms.meta.imgpath.len(), |_| NoImage);
 
         let mut jobs = DList::new();
         if opts.deref().has_bga() { // should go first

@@ -10,7 +10,6 @@
 
 use std::local_data;
 use std::io::{stdout, stderr};
-use std::vec_ng::Vec;
 use encoding::{Encoding, EncodingRef, Encoder, EncoderTrap, ByteWriter};
 
 local_data_key!(console_encoding_key: EncodingRef)

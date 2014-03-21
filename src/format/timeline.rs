@@ -410,14 +410,14 @@ pub mod builder {
 /// Modifiers available to timelines. They are safe to run through the existing timeline, as long as
 /// the original timeline is no longer used.
 pub mod modf {
-    use std::{vec, f64};
+    use std::{slice, f64};
     use rand::Rng;
     use format::obj::*;
     use super::Timeline;
 
     /// Removes objects not in given lanes by replacing them to BGMs.
     pub fn filter_lanes<S:Clone,I:Clone>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
-        let mut keep = vec::from_elem(NLANES, false);
+        let mut keep = slice::from_elem(NLANES, false);
         for &Lane(lane) in lanes.iter() {
             keep[lane] = true;
         }
@@ -442,7 +442,7 @@ pub mod modf {
 
     /// Swaps given lanes in the reverse order.
     pub fn mirror<S:Clone,I:Clone>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
-        let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
+        let mut map = slice::from_fn(NLANES, |lane| Lane(lane));
         for (&Lane(from), &to) in lanes.iter().zip(lanes.rev_iter()) {
             map[from] = to;
         }
@@ -455,7 +455,7 @@ pub mod modf {
     /// Swaps given lanes in the random order.
     pub fn shuffle<S:Clone,I:Clone,R:Rng>(timeline: &mut Timeline<S,I>, r: &mut R, lanes: &[Lane]) {
         let shuffled = r.shuffle(lanes.to_owned());
-        let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
+        let mut map = slice::from_fn(NLANES, |lane| Lane(lane));
         for (&Lane(from), &to) in lanes.iter().zip(shuffled.iter()) {
             map[from] = to;
         }
@@ -471,7 +471,7 @@ pub mod modf {
     pub fn randomize<S:Clone,I:Clone,R:Rng>(timeline: &mut Timeline<S,I>, r: &mut R,
                                             lanes: &[Lane]) {
         let mut movable = lanes.to_owned();
-        let mut map = vec::from_fn(NLANES, |lane| Lane(lane));
+        let mut map = slice::from_fn(NLANES, |lane| Lane(lane));
 
         let mut lasttime = f64::NEG_INFINITY;
         for obj in timeline.objs.mut_iter() {

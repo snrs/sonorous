@@ -9,7 +9,7 @@
 //! Abstracted graphical screen.
 
 use std::rc::Rc;
-use std::vec::MutableCloneableVector;
+use std::slice::MutableCloneableVector;
 use sdl::video;
 use gl = opengles::gl2;
 
