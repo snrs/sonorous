@@ -18,7 +18,7 @@
 #[crate_id = "sonorous#0.1.0"];
 #[crate_type = "bin"];
 
-#[no_uv];
+#[no_start];
 #[feature(macro_rules, phase, struct_variant, globs, link_args)];
 
 #[comment = "Sonorous"];

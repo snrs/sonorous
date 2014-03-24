@@ -352,7 +352,7 @@ impl Scene for PlayingScene {
     fn render(&self) {
         let screen__ = self.screen.deref();
         let mut screen_ = screen__.borrow_mut();
-        let screen = screen_.get();
+        let screen = screen_.deref_mut();
 
         static W: f32 = SCREENW as f32;
         static H: f32 = SCREENH as f32;

@@ -228,10 +228,10 @@ impl Scene for LoadingScene {
     fn render(&self) {
         let screen__ = self.screen.deref();
         let mut screen_ = screen__.borrow_mut();
-        let screen = screen_.get();
+        let screen = screen_.deref_mut();
 
         screen.clear();
-        self.skin.borrow_mut().get().render(screen, &self.context);
+        self.skin.borrow_mut().deref_mut().render(screen, &self.context);
         screen.swap_buffers();
     }
 

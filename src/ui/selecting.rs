@@ -539,7 +539,7 @@ impl Scene for SelectingScene {
     fn render(&self) {
         let screen__ = self.screen.deref();
         let mut screen_ = screen__.borrow_mut();
-        let screen = screen_.get();
+        let screen = screen_.deref_mut();
 
         screen.clear();
 
@@ -553,7 +553,7 @@ impl Scene for SelectingScene {
                    7.0, 2.0 + (top + NUMENTRIES) as f32 * pixelsperslot, RGB(0xc0,0xc0,0xc0));
         });
 
-        self.skin.borrow_mut().get().render(screen, self);
+        self.skin.borrow_mut().deref_mut().render(screen, self);
 
         screen.swap_buffers();
     }

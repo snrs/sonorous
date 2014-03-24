@@ -244,7 +244,7 @@ impl Scene for ViewingScene {
     fn render(&self) {
         let screen__ = self.screen.deref();
         let mut screen_ = screen__.borrow_mut();
-        let screen = screen_.get();
+        let screen = screen_.deref_mut();
 
         screen.clear();
 
