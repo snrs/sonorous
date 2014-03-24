@@ -64,7 +64,7 @@ fn from_0_255(x: f64) -> u8 {
 
 /// Returns a string representation of remaining keys in the tree map.
 fn treemap_keys(map: &TreeMap<~str,Json>) -> ~str {
-    map.iter().map(|(k,_)| k.as_slice()).to_owned_vec().connect(", ")
+    map.iter().map(|(k,_)| k.as_slice()).collect::<Vec<&str>>().connect(", ")
 }
 
 macro_rules! ensure_empty(

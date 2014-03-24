@@ -8,7 +8,7 @@ use std::fmt;
 
 /// A game play element mapped to the single input element (for example, button) and the screen
 /// area (henceforth "lane").
-#[deriving(Eq,Clone)]
+#[deriving(Eq,TotalEq,Clone)]
 pub struct Lane(uint);
 
 /// The maximum number of lanes.
@@ -23,7 +23,7 @@ impl Lane {
 }
 
 /// BGA layers.
-#[deriving(Eq,Show,Clone)]
+#[deriving(Eq,TotalEq,Show,Clone)]
 pub enum BGALayer {
     /// The lowest layer. BMS channel #04.
     Layer1 = 0,
@@ -526,7 +526,7 @@ impl<S:Clone,I:Clone,T:WithObjData<S,I>+Clone> ObjConvOps<S,I> for T {
 }
 
 /// Axes available to the objects. See `Obj` for more information.
-#[deriving(Eq,Show,Clone)]
+#[deriving(Eq,TotalEq,Show,Clone)]
 pub enum ObjAxis {
     /// Virtual position.
     VirtualPos  = 0,

@@ -13,7 +13,7 @@ use format::bms::Key;
 use engine::keyspec::*;
 
 /// Actual input. Mapped to zero or more virtual inputs by input mapping.
-#[deriving(Eq)]
+#[deriving(Eq,TotalEq)]
 pub enum Input {
     /// Keyboard input.
     KeyInput(event::Key),
@@ -62,7 +62,7 @@ impl Input {
 }
 
 /// Virtual input.
-#[deriving(Eq)]
+#[deriving(Eq,TotalEq)]
 pub enum VirtualInput {
     /// Virtual input mapped to the lane.
     LaneInput(Lane),
@@ -83,7 +83,7 @@ pub enum VirtualInput {
  * state. We solve this problem by making the transition from negative to positive (and vice
  * versa) temporarily hit the neutral state.
  */
-#[deriving(Eq)]
+#[deriving(Eq,TotalEq)]
 pub enum InputState {
     /// Positive input state. Occurs when the button is pressed or the joystick axis is moved
     /// in the positive direction.

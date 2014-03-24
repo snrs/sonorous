@@ -23,7 +23,7 @@ use format::bms::{Bms, Key, DoublePlay, CouplePlay};
  * For PMS, channels #11/17/25 use `Button1`, #12/16/24 use `Button2`, #13/19/23 use `Button3`,
  * #14/18/22 use `Button4`, #15 uses `Button5`.
  */
-#[deriving(Eq)]
+#[deriving(Eq,TotalEq)]
 pub enum KeyKind {
     /// White key, which mimics a real white key in the musical keyboard.
     WhiteKey,

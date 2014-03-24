@@ -22,7 +22,7 @@ use format::bms::encoding::{decode_stream, guess_decode_stream};
 pub type ARGB = (u8,u8,u8,u8);
 
 /// Represents one line of BMS file.
-#[deriving(Clone)]
+#[deriving(Eq,Clone)]
 pub enum BmsCommand<'r> {
     BmsUnknown(MaybeOwned<'r>),                 // starting with `#` but unknown otherwise
     BmsTitle(MaybeOwned<'r>),                   // #TITLE
@@ -232,7 +232,7 @@ impl<'r> fmt::Show for BmsCommand<'r> {
 }
 
 /// A parsed item in the stream returned by parsing iterators.
-#[deriving(Clone)]
+#[deriving(Eq,Clone)]
 pub enum Parsed<'r> {
     /// A borrowed BMS command in the specified line number (if any).
     Command(Option<uint>, BmsCommand<'r>),

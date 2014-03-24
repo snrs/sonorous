@@ -80,12 +80,7 @@ impl<'r,T:Eq> Eq for MaybeOwnedVec<'r,T> {
     }
 }
 
-impl<'r,T:TotalEq> TotalEq for MaybeOwnedVec<'r,T> {
-    #[inline]
-    fn equals(&self, other: &MaybeOwnedVec<'r,T>) -> bool {
-        self.as_slice().equals(&other.as_slice())
-    }
-}
+impl<'r,T:TotalEq> TotalEq for MaybeOwnedVec<'r,T> {}
 
 impl<'r,T:Eq,V:Vector<T>> Equiv<V> for MaybeOwnedVec<'r,T> {
     #[inline]

@@ -16,7 +16,7 @@ use opengles::gl2::{GLenum, GLint, GLuint, GLsizei, GLfloat};
 
 /// OpenGL shader types. This closely follows OpenGL ES API, which means that geometry shaders are
 /// absent.
-#[deriving(Eq)]
+#[deriving(Eq,TotalEq)]
 pub enum ShaderType {
     /// Vertex shader.
     VertexShader = gl::VERTEX_SHADER as int,

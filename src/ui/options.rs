@@ -13,7 +13,7 @@ use gfx::skin::ast::Skin;
 use gfx::skin::parse::load_skin;
 
 /// Game play modes.
-#[deriving(Eq,Clone)]
+#[deriving(Eq,TotalEq,Clone)]
 pub enum Mode {
     /// Normal game play. The graphical display and input is enabled.
     PlayMode,
@@ -26,7 +26,7 @@ pub enum Mode {
 }
 
 /// Modifiers that affect the game data.
-#[deriving(Eq,Clone)]
+#[deriving(Eq,TotalEq,Clone)]
 pub enum Modf {
     /// Swaps all "key" (i.e. `KeyKind::counts_as_key` returns true) lanes in the reverse order.
     /// See `player::apply_mirror_modf` for the detailed algorithm.
@@ -44,7 +44,7 @@ pub enum Modf {
 }
 
 /// Specifies how the BGA is displayed.
-#[deriving(Eq,Clone)]
+#[deriving(Eq,TotalEq,Clone)]
 pub enum Bga {
     /// Both the BGA image and movie is displayed.
     BgaAndMovie,

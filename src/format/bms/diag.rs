@@ -7,7 +7,7 @@
 use std::fmt;
 
 /// The severity of messages. Every error message has one of the severity assigned.
-#[deriving(Eq,Ord,Show,Clone)]
+#[deriving(Eq,TotalEq,Ord,Show,Clone)]
 pub enum Severity {
     /// Various notes. This kind of diagnostics does not affect the game play at all but indicates
     /// possible incompatibilities or deprecated features.
@@ -23,7 +23,7 @@ pub enum Severity {
 }
 
 /// Messages for BMS format.
-#[deriving(Eq,Clone)]
+#[deriving(Eq,TotalEq,Clone)]
 pub struct BmsMessage {
     /// The severity of message.
     severity: Severity,
