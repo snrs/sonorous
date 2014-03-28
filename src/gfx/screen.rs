@@ -72,7 +72,7 @@ impl GLState {
         if configs.is_empty() {
             return Err(~"no suitable EGL configs available");
         }
-        let config = configs[0];
+        let config = configs.as_slice()[0];
 
         let surfaceattrs = [
             // none
