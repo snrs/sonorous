@@ -851,8 +851,8 @@ impl<'r,R:Rng> Iterator<Parsed<'r>> for PreprocessingParsingIterator<'r,R> {
                         }
                     }
 
-                    self.queued.extend(&mut messages.move_iter().map(|msg| Message(lineno, msg)));
-                    self.queued.extend(&mut out.move_iter().map(|(line, cmd)| Command(line, cmd)));
+                    self.queued.extend(messages.move_iter().map(|msg| Message(lineno, msg)));
+                    self.queued.extend(out.move_iter().map(|(line, cmd)| Command(line, cmd)));
                     // now the next iteration will return a queued item if any
                 }
                 Some(parsed) => {
@@ -864,8 +864,8 @@ impl<'r,R:Rng> Iterator<Parsed<'r>> for PreprocessingParsingIterator<'r,R> {
                     let mut messages = ~[];
                     let mut out = ~[];
                     self.pp.finish(&mut messages, &mut out);
-                    self.queued.extend(&mut messages.move_iter().map(|msg| Message(None, msg)));
-                    self.queued.extend(&mut out.move_iter().map(|(line, cmd)| Command(line, cmd)));
+                    self.queued.extend(messages.move_iter().map(|msg| Message(None, msg)));
+                    self.queued.extend(out.move_iter().map(|(line, cmd)| Command(line, cmd)));
                 }
             }
         }

@@ -7,10 +7,9 @@
 use std::{str, cmp, io, os, comm, task};
 use std::rc::Rc;
 use std::cell::RefCell;
-#[cfg(not(rust_nightly_20140312))] use std::comm::{Sender, Receiver};
-#[cfg(rust_nightly_20140312)] use std::comm::{Chan, Port};
+use std::comm::{Sender, Receiver};
 use rand::{task_rng, Rng};
-use sync::RWArc;
+use sync::{Arc, RWLock};
 
 use sdl::{event, get_ticks};
 use format::timeline::TimelineInfo;
@@ -151,7 +150,7 @@ pub struct SelectingScene {
     /// A shared sender to which workers send messages.
     priv sender: Sender<Message>,
     /// A shared cell, set to false when the scene is deactivated.
-    priv keepgoing: RWArc<bool>,
+    priv keepgoing: Arc<RWLock<bool>>,
 }
 
 /// Returns true if the path should be parsed as a BMS file.
@@ -193,13 +192,6 @@ static NUMENTRIES: uint = 15;
 /// in order to avoid the worker congestion.
 static PRELOAD_DELAY: uint = 300;
 
-#[cfg(rust_nightly_20140312)] type Sender<T> = Chan<T>;
-#[cfg(rust_nightly_20140312)] type Receiver<T> = Port<T>;
-#[cfg(not(rust_nightly_20140312))]
-fn channel<T:Send>() -> (Sender<T>, Receiver<T>) { comm::channel() }
-#[cfg(rust_nightly_20140312)]
-fn channel<T:Send>() -> (Sender<T>, Receiver<T>) { let (p,c) = Chan::new(); (c,p) }
-
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
     pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> ~SelectingScene {
@@ -208,11 +200,11 @@ impl SelectingScene {
             Err(err) => die!("{}", err),
         };
         let root = os::make_absolute(root);
-        let (sender, receiver) = channel();
+        let (sender, receiver) = comm::channel();
         ~SelectingScene {
             screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)), root: root,
             files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
-            receiver: receiver, sender: sender, keepgoing: RWArc::new(true),
+            receiver: receiver, sender: sender, keepgoing: Arc::new(RWLock::new(true)),
         }
     }
 
@@ -224,8 +216,8 @@ impl SelectingScene {
         let keepgoing = self.keepgoing.clone();
         spawn_worker_task(~"scanner", proc() {
             fn recur(search: &mut SearchContext, root: Path,
-                     sender: &Sender<Message>, keepgoing: &RWArc<bool>) -> bool {
-                if !keepgoing.read(|v| *v) { return false; }
+                     sender: &Sender<Message>, keepgoing: &Arc<RWLock<bool>>) -> bool {
+                if !*keepgoing.read() { return false; }
 
                 let (dirs, files) = {
                     let (dirs, files) = search.get_entries(&root);
@@ -249,10 +241,10 @@ impl SelectingScene {
     /// Clears the current scanned files and restarts the scanning task.
     pub fn refresh(&mut self) {
         // terminates prior tasks
-        assert!(self.keepgoing.read(|&v| v));
-        self.keepgoing.write(|v| { *v = false; });
-        self.keepgoing = RWArc::new(true);
-        let (sender, receiver) = channel();
+        assert!(*self.keepgoing.read());
+        *self.keepgoing.write() = false;
+        self.keepgoing = Arc::new(RWLock::new(true));
+        let (sender, receiver) = comm::channel();
         self.receiver = receiver;
         self.sender = sender;
 
@@ -406,7 +398,7 @@ impl SelectingScene {
 
 impl Scene for SelectingScene {
     fn activate(&mut self) -> SceneCommand {
-        self.keepgoing.write(|v| { *v = true; });
+        *self.keepgoing.write() = true;
         if !self.filesdone { self.refresh(); }
         event::enable_key_repeat(event::DefaultRepeatDelay, event::DefaultRepeatInterval);
         Continue
@@ -560,7 +552,7 @@ impl Scene for SelectingScene {
 
     fn deactivate(&mut self) {
         event::enable_key_repeat(event::CustomRepeatDelay(0), event::DefaultRepeatInterval);
-        self.keepgoing.write(|v| { *v = false; });
+        *self.keepgoing.write() = false;
     }
 
     fn consume(~self) -> ~Scene: { fail!("unreachable"); }
