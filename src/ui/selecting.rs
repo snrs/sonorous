@@ -168,7 +168,7 @@ fn is_bms_file(path: &Path) -> bool {
 /// Spawns an worker task. We are required to use `libnative` due to the SDL event loop.
 /// Also we need to use our own wrapper to avoid "sending on a closed channel" error from
 /// the default `future_result` wrapper.
-fn spawn_worker_task(name: ~str, body: proc(), on_error: proc()) {
+fn spawn_worker_task(name: ~str, body: proc:Send(), on_error: proc:Send()) {
     task::task().named(name + " wrapper").spawn(proc() {
         let ret = task::task().named(name).try(body);
         if ret.is_err() { on_error(); }

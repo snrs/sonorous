@@ -15,14 +15,14 @@
  * [Github page](https://github.com/snrs/sonorous) for now.
  */
 
-#[crate_id = "sonorous#0.1.0"];
-#[crate_type = "bin"];
+#![crate_id = "sonorous#0.1.0"]
+#![crate_type = "bin"]
 
-#[no_start];
-#[feature(macro_rules, phase, struct_variant, globs, link_args)];
+#![no_start]
+#![feature(macro_rules, phase, struct_variant, globs, link_args)]
 
-#[comment = "Sonorous"];
-#[license = "GPLv2+"];
+#![comment = "Sonorous"]
+#![license = "GPLv2+"]
 
 #[phase(syntax, link)] extern crate log;
 extern crate rand;

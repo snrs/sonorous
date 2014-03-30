@@ -4,7 +4,7 @@
 
 //! Common UI patterns.
 
-#[macro_escape];
+#![macro_escape]
 
 use sdl::event;
 use util::console::{printerr, printerrln};

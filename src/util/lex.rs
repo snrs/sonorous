@@ -45,7 +45,7 @@
 //       - it would be more useful to generate bindings for parsed result. this is related to
 //         many issues in general.
 
-#[macro_escape];
+#![macro_escape]
 
 macro_rules! lex(
     ($e:expr; ) => (true);

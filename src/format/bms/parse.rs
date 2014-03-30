@@ -136,7 +136,7 @@ impl<'r> BmsCommand<'r> {
 impl<'r> fmt::Show for BmsCommand<'r> {
     /// Returns a reconstructed line for given BMS command.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        #[allow(non_camel_case_types)];
+        #![allow(non_camel_case_types)]
 
         struct fmt_argb(ARGB);
         impl fmt::Show for fmt_argb {

@@ -176,7 +176,7 @@ pub enum ObjData<SoundRef,ImageRef> {
 
 impl<S:fmt::Show,I:fmt::Show> fmt::Show for ObjData<S,I> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        #[allow(non_camel_case_types)];
+        #![allow(non_camel_case_types)]
 
         struct fmt_lane(Lane);
         impl fmt::Show for fmt_lane {

@@ -8,10 +8,10 @@
 
 //! Win32 API wrappers.
 
-#[cfg(target_os = "win32")];
+#![cfg(target_os = "win32")]
 
 pub mod ll {
-    #[allow(non_camel_case_types, uppercase_variables)];
+    #![allow(non_camel_case_types, uppercase_variables)]
 
     use std::libc::{c_int, c_uint, c_void};
     use std::libc::{BOOL, CHAR, WORD, DWORD, HANDLE, LPCSTR, LPWSTR, LPCWSTR};

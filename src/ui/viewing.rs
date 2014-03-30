@@ -53,7 +53,7 @@ pub struct BGACanvas {
     /// The current BGA states.
     state: BGAState,
     /// Per-layer textures.
-    textures: ~[Texture2D],
+    textures: Vec<Texture2D>,
     /// The internal canvas texture. This is what the caller should render.
     canvas: Texture2D,
     /// The frame buffer associated to the canvas.
@@ -95,14 +95,14 @@ impl BGACanvas {
             Err(err) => die!("PreparedSurface::new failed: {}", err)
         };
 
-        let textures = state.map(|iref| {
+        let textures = state.iter().map(|iref| {
             let texture = match Texture2D::new(BGAW, BGAH) {
                 Ok(texture) => texture,
                 Err(err) => die!("Texture2D::new failed: {}", err)
             };
             upload_bga_ref_to_texture(iref, imgres, &texture, &scratch, true);
             texture
-        });
+        }).collect();
 
         let canvas = match Texture2D::new(BGAW, BGAH) {
             Ok(texture) => texture,
@@ -132,10 +132,10 @@ impl BGACanvas {
                     }
                 }
                 upload_bga_ref_to_texture(&current[layer], imgres,
-                                          &self.textures[layer], &self.scratch, true);
+                                          &self.textures.as_slice()[layer], &self.scratch, true);
             } else {
                 upload_bga_ref_to_texture(&self.state[layer], imgres,
-                                          &self.textures[layer], &self.scratch, false);
+                                          &self.textures.as_slice()[layer], &self.scratch, false);
             }
             self.state[layer] = current[layer].clone();
         }
@@ -149,7 +149,7 @@ impl BGACanvas {
                 match self.state[layer as uint] {
                     BlankBGA => {}
                     _ => {
-                        buf.draw_textured(&self.textures[layer as uint], |d| {
+                        buf.draw_textured(&self.textures.as_slice()[layer as uint], |d| {
                             d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
                         });
                     }
