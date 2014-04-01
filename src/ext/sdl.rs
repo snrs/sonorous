@@ -18,9 +18,9 @@ pub mod syswm {
         use std::libc::{HANDLE, c_int};
 
         pub struct SDL_version {
-            major: u8,
-            minor: u8,
-            patch: u8
+            pub major: u8,
+            pub minor: u8,
+            pub patch: u8
         }
 
         impl SDL_version {
@@ -30,9 +30,9 @@ pub mod syswm {
         }
 
         pub struct SDL_SysWMinfo {
-            version: SDL_version,
-            window: HANDLE,
-            hglrc: HANDLE
+            pub version: SDL_version,
+            pub window: HANDLE,
+            pub hglrc: HANDLE
         }
 
         extern {

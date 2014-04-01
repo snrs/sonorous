@@ -126,19 +126,19 @@ impl GLState {
 /// Abstracted graphical screen.
 pub struct Screen {
     /// Screen width.
-    width: uint,
+    pub width: uint,
     /// Screen height.
-    height: uint,
+    pub height: uint,
     /// SDL surface returned by `sdl::video::set_video_mode`.
-    sdl_surface: ~video::Surface,
+    pub sdl_surface: ~video::Surface,
     /// OpenGL state if required.
     glstate: GLState,
     /// Shared vertex buffer object for drawing.
-    vertexbuf: VertexBuffer,
+    pub vertexbuf: VertexBuffer,
     /// OpenGL program for non-textured triangles.
-    program_for_shades: ProgramForShades,
+    pub program_for_shades: ProgramForShades,
     /// OpenGL program for textured triangles.
-    program_for_textures: ProgramForTextures,
+    pub program_for_textures: ProgramForTextures,
     /// The last viewport set via `set_viewport`.
     last_viewport: (gl::GLint, gl::GLint, gl::GLsizei, gl::GLsizei),
     /// The last projection matrix set via `set_projection_*`.
@@ -146,7 +146,7 @@ pub struct Screen {
     /// The last local transform matrix set via `set_local_transform`.
     last_local_transform: [gl::GLfloat, ..9],
     /// Shared bitmap font.
-    font: Rc<Font>,
+    pub font: Rc<Font>,
 }
 
 impl Screen {

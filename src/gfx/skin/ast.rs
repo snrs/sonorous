@@ -72,11 +72,11 @@ pub enum Expr {
 
 /// Two-dimensional position.
 #[deriving(Show)]
-pub struct Pos { x: Expr, y: Expr }
+pub struct Pos { pub x: Expr, pub y: Expr }
 
 /// Two-dimensional rectangle.
 #[deriving(Show)]
-pub struct Rect { p: Pos, q: Pos }
+pub struct Rect { pub p: Pos, pub q: Pos }
 
 /// An identifier to the hook. Different kind of hooks can share the same identifier.
 #[deriving(Eq,TotalEq,Hash,Show)]
@@ -118,12 +118,13 @@ pub enum Block<T> {
     // conditional
     // - `then` is called multiple times with a fresh mapping
     // - `else_` is called once with an original mapping when `then` is never called
-    CondBlock { gen: Gen, then: Option<T>, else_: Option<T> },
+    CondBlock { pub gen: Gen, pub then: Option<T>, pub else_: Option<T> },
     // multi
     // - the hook can call other alternatives multiple times
     // - if there is no recognized alternative `default` gets called instead
     // - `else_` is called once with an original mapping when no alternative is called
-    MultiBlock { gen: Gen, map: HashMap<~str,T>, default: Option<T>, else_: Option<T> },
+    MultiBlock { pub gen: Gen, pub map: HashMap<~str,T>,
+                 pub default: Option<T>, pub else_: Option<T> },
 }
 
 /// The formatting specification for scalar text.
@@ -131,12 +132,15 @@ pub enum ScalarFormat {
     NoFormat,
     // ['+'] [".."] {'#'} {'0'} '0' [".0" {'0'}] [('*' <mult> | '/' <div>)]
     // e.g. `##000.00` prints 3.147 as `003.15`, 1234.5 as `1234.50` and -987654 as `87654.00`
-    NumFormat { sign: bool, minwidth: u8, maxwidth: u8, precision: u8, multiplier: f64 },
+    NumFormat { pub sign: bool, pub minwidth: u8, pub maxwidth: u8,
+                pub precision: u8, pub multiplier: f64 },
     // ['+'] [".."] {'#'} {'0'} '0' [":00" [":00"]] [".0" {'0'}] [('*' <mult> | '/' <div>)]
     // e.g. `0:00:00.0` prints 23456.7 as `6:30:56.7`, `##00:00.0` prints 23456.7 as `390:56.7`
     // note that `minwidth`/`maxwidth` here indicates those of most significant parts.
-    MsFormat { sign: bool, minwidth: u8, maxwidth: u8, precision: u8, multiplier: f64 },
-    HmsFormat { sign: bool, minwidth: u8, maxwidth: u8, precision: u8, multiplier: f64 },
+    MsFormat { pub sign: bool, pub minwidth: u8, pub maxwidth: u8,
+               pub precision: u8, pub multiplier: f64 },
+    HmsFormat { pub sign: bool, pub minwidth: u8, pub maxwidth: u8,
+                pub precision: u8, pub multiplier: f64 },
 }
 
 /// The text source for the `$text` node.
@@ -151,17 +155,18 @@ pub enum TextSource {
 pub enum Node {
     Nothing,
     Debug(~str),
-    ColoredLine { from: Pos, to: Pos, color: Color },
+    ColoredLine { pub from: Pos, pub to: Pos, pub color: Color },
     // colored rect at given position
-    ColoredRect { at: Rect, color: Color },
+    ColoredRect { pub at: Rect, pub color: Color },
     // textured rect at given position, optionally clipped
-    TexturedRect { tex: Id, at: Rect, rgba: (u8,u8,u8,u8), clip: Option<Rect> },
+    TexturedRect { pub tex: Id, pub at: Rect, pub rgba: (u8,u8,u8,u8), pub clip: Option<Rect> },
     // text with fixed anchor
-    Text { at: Pos, size: f32, anchor: (f32,f32), color: Gradient, text: TextSource },
+    Text { pub at: Pos, pub size: f32, pub anchor: (f32,f32),
+           pub color: Gradient, pub text: TextSource },
     // clipping group, resets the clipping region after the group
     Group(~[Node]),
     // reclipping command
-    Clip { at: Rect },
+    Clip { pub at: Rect },
     // block
     Block(Block<~[Node]>),
 }
@@ -169,9 +174,9 @@ pub enum Node {
 /// The top-level parsed skin data.
 pub struct Skin {
     /// The predefined scalar values.
-    scalars: HashMap<~str,Scalar<'static>>,
+    pub scalars: HashMap<~str,Scalar<'static>>,
     /// The list of commands.
-    nodes: ~[Node],
+    pub nodes: ~[Node],
 }
 
 impl Skin {

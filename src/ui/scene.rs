@@ -13,10 +13,10 @@ use ui::common::Ticker;
 pub struct SceneOptions {
     /// If specified, limits the number of `Scene::tick` calls per second to this value.
     /// `run_scene` ensures this limitation by sleeping after each tick as needed.
-    tpslimit: Option<uint>,
+    pub tpslimit: Option<uint>,
     /// If specified, limits the number of `Scene::render` calls per second to this value.
     /// Due to the implementation strategy `tpslimit` takes precedence over this if specified.
-    fpslimit: Option<uint>,
+    pub fpslimit: Option<uint>,
 }
 
 impl SceneOptions {

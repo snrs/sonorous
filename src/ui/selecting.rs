@@ -35,11 +35,11 @@ use ui::loading::LoadingScene;
 /// The BMS data that has been preprocessed for modifiers and analyzed but yet to be loaded.
 pub struct PreprocessedBms {
     /// Yet-to-be-loaded BMS data.
-    bms: Bms,
+    pub bms: Bms,
     /// The derived timeline information.
-    infos: TimelineInfo,
+    pub infos: TimelineInfo,
     /// The key specification.
-    keyspec: ~KeySpec,
+    pub keyspec: ~KeySpec,
 }
 
 /// Loads and preprocesses the BMS file from given options. Frontend routines should use this.
@@ -82,14 +82,14 @@ enum Message {
 pub struct PreloadedData {
     /// A part of the game data necessary for initializing `Player`. Anything else is used for
     /// the selection screen only.
-    preproc: ~PreprocessedBms,
+    pub preproc: ~PreprocessedBms,
     /// A banner texture, if any.
-    banner: Option<Rc<Texture2D>>,
+    pub banner: Option<Rc<Texture2D>>,
     /// A tentatively calculated duration of the BMS file in seconds. This is tentative because
     /// we don't know lengths of key sounds and BGMs yet.
-    duration: f64,
+    pub duration: f64,
     /// A list of diagnostic messages returned during the loading.
-    messages: ~[(Option<uint>,bms::diag::BmsMessage)],
+    pub messages: ~[(Option<uint>,bms::diag::BmsMessage)],
 }
 
 impl PreloadedData {
@@ -119,38 +119,38 @@ pub enum PreloadingState {
 /// The scanned entry.
 pub struct Entry {
     /// A path to loaded file.
-    path: Path,
+    pub path: Path,
     /// MD5 hash. Only present when it has been read.
-    hash: Option<[u8, ..16]>,
+    pub hash: Option<[u8, ..16]>,
 }
 
 /// Song/pattern selection scene context. Used when the directory path is specified.
 pub struct SelectingScene {
     /// Display screen.
-    screen: Rc<RefCell<Screen>>,
+    pub screen: Rc<RefCell<Screen>>,
     /// Game play options.
-    opts: Rc<Options>,
+    pub opts: Rc<Options>,
     /// Skin renderer.
-    skin: RefCell<Renderer>,
+    pub skin: RefCell<Renderer>,
 
     /// The root path of the scanner.
-    root: Path,
+    pub root: Path,
     /// A list of scanned entries.
-    files: ~[Entry],
+    pub files: ~[Entry],
     /// Set to true when the scanner finished scanning.
-    filesdone: bool,
+    pub filesdone: bool,
     /// The index of the topmost entry visible on the screen.
-    scrolloffset: uint,
+    pub scrolloffset: uint,
     /// The index of the selected entry.
-    offset: uint,
+    pub offset: uint,
     /// Preloaded game data or preloading state if any.
-    preloaded: PreloadingState,
+    pub preloaded: PreloadingState,
     /// A receiver for receiving worker messages.
-    priv receiver: Receiver<Message>,
+    receiver: Receiver<Message>,
     /// A shared sender to which workers send messages.
-    priv sender: Sender<Message>,
+    sender: Sender<Message>,
     /// A shared cell, set to false when the scene is deactivated.
-    priv keepgoing: Arc<RWLock<bool>>,
+    keepgoing: Arc<RWLock<bool>>,
 }
 
 /// Returns true if the path should be parsed as a BMS file.

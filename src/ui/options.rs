@@ -59,37 +59,37 @@ pub enum Bga {
 #[deriving(Eq,Clone)]
 pub struct Options {
     /// Game play mode.
-    mode: Mode,
+    pub mode: Mode,
     /// Modifiers that affect the game data.
-    modf: Option<Modf>,
+    pub modf: Option<Modf>,
     /// Specifies how the BGA is displayed.
-    bga: Bga,
+    pub bga: Bga,
     /// True if the metadata (either overlaid in the loading screen or printed separately
     /// in the console) is displayed.
-    showinfo: bool,
+    pub showinfo: bool,
     /// True if the full screen is enabled.
-    fullscreen: bool,
+    pub fullscreen: bool,
     /// An index to the joystick device if any.
-    joystick: Option<uint>,
+    pub joystick: Option<uint>,
     /// A key specification preset name if any.
-    preset: Option<~str>,
+    pub preset: Option<~str>,
     /// A left-hand-side key specification if any.
-    leftkeys: Option<~str>,
+    pub leftkeys: Option<~str>,
     /// A right-hand-side key specification if any. Can be an empty string.
-    rightkeys: Option<~str>,
+    pub rightkeys: Option<~str>,
     /// An initial play speed.
-    playspeed: f64,
+    pub playspeed: f64,
     /// A character encoding *name* forced to the loader.
-    encoding: Option<~str>,
+    pub encoding: Option<~str>,
     /// A root path to the skin.
-    skinroot: Path,
+    pub skinroot: Path,
 
     /// If set, prints the recognized BMS commands after parsing and exits.
-    debug_dumpbmscommandfull: bool,
+    pub debug_dumpbmscommandfull: bool,
     /// If set, prints the recognized BMS commands after parsing and preprocessing and exits.
-    debug_dumpbmscommand: bool,
+    pub debug_dumpbmscommand: bool,
     /// If set, prints the fully calculated timeline and exits.
-    debug_dumptimeline: bool,
+    pub debug_dumptimeline: bool,
 }
 
 impl Options {

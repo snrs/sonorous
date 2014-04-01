@@ -117,12 +117,12 @@ impl KeyKind {
 pub struct KeySpec {
     /// The number of lanes on the left side. This number is significant only when Couple Play
     /// is used.
-    split: uint,
+    pub split: uint,
     /// The order of significant lanes. The first `nleftkeys` lanes go to the left side and
     /// the remaining lanes go to the right side.
-    order: ~[Lane],
+    pub order: ~[Lane],
     /// The type of lanes.
-    kinds: ~[Option<KeyKind>]
+    pub kinds: ~[Option<KeyKind>]
 }
 
 impl KeySpec {

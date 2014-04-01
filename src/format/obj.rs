@@ -95,7 +95,7 @@ pub enum Damage { GaugeDamage(f64), InstantDeath }
  */
 #[deriving(Eq,Show,Clone)]
 pub struct ImageSlice {
-    sx: int, sy: int, dx: int, dy: int, w: int, h: int,
+    pub sx: int, pub sy: int, pub dx: int, pub dy: int, pub w: int, pub h: int,
 }
 
 /// A reference to the BGA target, i.e. something that can be displayed in a single BGA layer.
@@ -542,15 +542,15 @@ pub enum ObjAxis {
 #[deriving(Eq,Show,Clone)]
 pub struct ObjLoc<T> {
     /// Virtual position in measures.
-    vpos: T,
+    pub vpos: T,
     /// Actual position in measures.
-    pos: T,
+    pub pos: T,
     /// Virtual time in seconds. Can be a positive infinity if the chart scrolls backwards prior to
     /// this object and this object should not be graded.
-    vtime: T,
+    pub vtime: T,
     /// Actual time in seconds. Can be a positive infinity if the chart scrolls backwards prior to
     /// this object and this object should not be activated.
-    time: T,
+    pub time: T,
 }
 
 impl<T:Clone+Ord> Ord for ObjLoc<T> {
@@ -609,9 +609,9 @@ impl<T:Clone> Index<ObjAxis,T> for ObjLoc<T> {
 #[deriving(Show,Clone)]
 pub struct Obj<SoundRef,ImageRef> {
     /// Object location.
-    loc: ObjLoc<f64>,
+    pub loc: ObjLoc<f64>,
     /// Associated object data.
-    data: ObjData<SoundRef,ImageRef>
+    pub data: ObjData<SoundRef,ImageRef>
 }
 
 impl<S:Clone,I:Clone> Eq for Obj<S,I> {

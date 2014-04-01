@@ -14,7 +14,7 @@ use format::timeline::Timeline;
 /// be used like an object when it points to the valid object.
 pub struct Pointer<SoundRef,ImageRef> {
     /// A timeline holding objects.
-    timeline: Rc<Timeline<SoundRef,ImageRef>>,
+    pub timeline: Rc<Timeline<SoundRef,ImageRef>>,
     /**
      * The position of an object next to the current pointer. `Pointer` implements a `ToObjData`
      * trait, and it will return the data of the object pointed by `index`.
@@ -30,9 +30,9 @@ pub struct Pointer<SoundRef,ImageRef> {
      * The iteration properly handles both cases, but you should be aware of the fact that seeking
      * alone does not yield all available objects.
      */
-    index: uint,
+    pub index: uint,
     /// The current location per axis, not necessarily equal to that of any object.
-    loc: ObjLoc<f64>,
+    pub loc: ObjLoc<f64>,
 }
 
 /// Returns true if two pointers share the common timeline.
@@ -132,9 +132,9 @@ fn interpolate_loc<S,I>(timeline: &Timeline<S,I>, index: uint,
 /// An iterator object for `Pointer::upto`.
 #[deriving(Clone)]
 pub struct UptoIterator<SoundRef,ImageRef> {
-    priv timeline: Rc<Timeline<SoundRef,ImageRef>>,
-    priv cur: uint,
-    priv end: uint,
+    timeline: Rc<Timeline<SoundRef,ImageRef>>,
+    cur: uint,
+    end: uint,
 }
 
 impl<S,I> Iterator<Pointer<S,I>> for UptoIterator<S,I> {
@@ -157,10 +157,10 @@ impl<S,I> Iterator<Pointer<S,I>> for UptoIterator<S,I> {
 /// An iterator object for `Pointer::until`.
 #[deriving(Clone)]
 pub struct UntilIterator<SoundRef,ImageRef> {
-    priv timeline: Rc<Timeline<SoundRef,ImageRef>>,
-    priv cur: uint,
-    priv axis: ObjAxis,
-    priv endpos: f64,
+    timeline: Rc<Timeline<SoundRef,ImageRef>>,
+    cur: uint,
+    axis: ObjAxis,
+    endpos: f64,
 }
 
 impl<S,I> Iterator<Pointer<S,I>> for UntilIterator<S,I> {
@@ -185,12 +185,12 @@ impl<S,I> Iterator<Pointer<S,I>> for UntilIterator<S,I> {
 
 /// An iterator object for `Pointer::mut_upto`.
 pub struct MutUptoIterator<'r,SoundRef,ImageRef> {
-    priv ptr: &'r mut Pointer<SoundRef,ImageRef>,
-    priv finished: bool,
-    priv lastloc: Option<ObjLoc<f64>>,
-    priv cur: uint,
-    priv end: uint,
-    priv endloc: ObjLoc<f64>,
+    ptr: &'r mut Pointer<SoundRef,ImageRef>,
+    finished: bool,
+    lastloc: Option<ObjLoc<f64>>,
+    cur: uint,
+    end: uint,
+    endloc: ObjLoc<f64>,
 }
 
 impl<'r,S,I> Iterator<Pointer<S,I>> for MutUptoIterator<'r,S,I> {
@@ -232,12 +232,12 @@ impl<'r,S,I> Drop for MutUptoIterator<'r,S,I> {
 
 /// An iterator object for `Pointer::mut_until`.
 pub struct MutUntilIterator<'r,SoundRef,ImageRef> {
-    priv ptr: &'r mut Pointer<SoundRef,ImageRef>,
-    priv finished: bool,
-    priv lastloc: Option<ObjLoc<f64>>,
-    priv cur: uint,
-    priv axis: ObjAxis,
-    priv endpos: f64,
+    ptr: &'r mut Pointer<SoundRef,ImageRef>,
+    finished: bool,
+    lastloc: Option<ObjLoc<f64>>,
+    cur: uint,
+    axis: ObjAxis,
+    endpos: f64,
 }
 
 impl<'r,S,I> Iterator<Pointer<S,I>> for MutUntilIterator<'r,S,I> {

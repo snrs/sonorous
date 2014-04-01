@@ -19,20 +19,20 @@ pub mod ll {
     use std::libc::{c_void, c_int, c_char, c_float, c_double};
     use sdl::video::ll::{SDL_RWops, SDL_Surface};
     use sdl::audio::ll::SDL_AudioSpec;
-    pub struct SMPEG { priv opaque: () }
+    pub struct SMPEG { opaque: () }
     pub struct SMPEG_Info {
-        has_audio: c_int,
-        has_video: c_int,
-        width: c_int,
-        height: c_int,
-        current_frame: c_int,
-        current_fps: c_double,
-        audio_string: [c_char, ..80],
-        audio_current_frame: c_int,
-        current_offset: u32,
-        total_size: u32,
-        current_time: c_double,
-        total_time: c_double
+        pub has_audio: c_int,
+        pub has_video: c_int,
+        pub width: c_int,
+        pub height: c_int,
+        pub current_frame: c_int,
+        pub current_fps: c_double,
+        pub audio_string: [c_char, ..80],
+        pub audio_current_frame: c_int,
+        pub current_offset: u32,
+        pub total_size: u32,
+        pub current_time: c_double,
+        pub total_time: c_double
     }
     #[deriving(Eq, TotalEq, Clone)]
     #[repr(C)]
@@ -85,7 +85,7 @@ pub mod ll {
 }
 
 pub struct MPEG {
-    raw: *ll::SMPEG
+    pub raw: *ll::SMPEG
 }
 
 fn wrap_mpeg(raw: *ll::SMPEG) -> ~MPEG {

@@ -12,24 +12,24 @@ use format::obj::*;
 /// in order to satisfy the invariant.
 pub struct Timeline<SoundRef,ImageRef> {
     /// Initial BPM.
-    initbpm: BPM,
+    pub initbpm: BPM,
     /// List of objects sorted by the position.
-    objs: ~[Obj<SoundRef,ImageRef>],
+    pub objs: ~[Obj<SoundRef,ImageRef>],
 }
 
 /// Derived Timeline information.
 pub struct TimelineInfo {
     /// The start position of the timeline. This is either -1.0 or 0.0 depending on the first
     /// measure has any visible objects or not.
-    originoffset: f64,
+    pub originoffset: f64,
     /// Set to true if the timeline has a BPM change.
-    hasbpmchange: bool,
+    pub hasbpmchange: bool,
     /// Set to true if the timeline has long note objects.
-    haslongnote: bool,
+    pub haslongnote: bool,
     /// The number of visible objects in the timeline. A long note object counts as one object.
-    nnotes: uint,
+    pub nnotes: uint,
     /// The maximum possible score.
-    maxscore: int
+    pub maxscore: int
 }
 
 impl<S:Clone,I:Clone> Timeline<S,I> {
@@ -114,8 +114,8 @@ pub mod builder {
     /// An object data with virtual position. Easier than a tuple to deal with.
     #[deriving(Clone)]
     pub struct ObjDataWithVpos<SoundRef,ImageRef> {
-        vpos: f64,
-        data: ObjData<SoundRef,ImageRef>
+        pub vpos: f64,
+        pub data: ObjData<SoundRef,ImageRef>
     }
 
     /// Converts objects to an integral "class". Normally objects have no ordering, but sometimes
@@ -336,11 +336,11 @@ pub mod builder {
     /// An unprocessed game data which will eventually produce `Timeline` value.
     pub struct TimelineBuilder<SoundRef,ImageRef> {
         /// Same as `Timeline::initbpm`.
-        initbpm: Option<BPM>,
+        pub initbpm: Option<BPM>,
         /// Same as `Timeline::objs` but not yet sorted and only has a virtual position.
-        objs: ~[ObjDataWithVpos<SoundRef,ImageRef>],
+        pub objs: ~[ObjDataWithVpos<SoundRef,ImageRef>],
         /// End position. Every object must have the virtual position less than this value.
-        endvpos: f64,
+        pub endvpos: f64,
     }
 
     /// A mark to the existing object. The caller is recommended not to directly mutate the builder

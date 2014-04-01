@@ -20,15 +20,15 @@ use opengles::gl2::{GLenum, GLint, GLuint, GLsizei};
 /// OpenGL program for shaded triangles. See also `ShadedDrawing`.
 pub struct ProgramForShades {
     /// Compiled and linked program.
-    program: Program,
+    pub program: Program,
     /// Vertex position attribute.
-    vertex_position: AttribLoc,
+    pub vertex_position: AttribLoc,
     /// Color attribute.
-    color: AttribLoc,
+    pub color: AttribLoc,
     /// Local transform (i.e. three-dimensional Affine transform) uniform.
-    local_transform: UniformLoc,
+    pub local_transform: UniformLoc,
     /// Projection (i.e. four-dimensional 2D projection) uniform.
-    projection: UniformLoc,
+    pub projection: UniformLoc,
 }
 
 impl ProgramForShades {
@@ -84,19 +84,19 @@ impl ProgramForShades {
 /// OpenGL program for textured triangles. See also `TexturedDrawing`.
 pub struct ProgramForTextures {
     /// Compiled and linked program.
-    program: Program,
+    pub program: Program,
     /// Vertex position attribute.
-    vertex_position: AttribLoc,
+    pub vertex_position: AttribLoc,
     /// Texture coordinate attribute.
-    texture_coord: AttribLoc,
+    pub texture_coord: AttribLoc,
     /// Color attribute.
-    color: AttribLoc,
+    pub color: AttribLoc,
     /// Local transform (i.e. three-dimensional Affine transform) uniform.
-    local_transform: UniformLoc,
+    pub local_transform: UniformLoc,
     /// Projection (i.e. four-dimensional 2D projection) uniform.
-    projection: UniformLoc,
+    pub projection: UniformLoc,
     /// Texture uniform.
-    sampler: UniformLoc,
+    pub sampler: UniformLoc,
 }
 
 impl ProgramForTextures {
@@ -162,8 +162,8 @@ impl ProgramForTextures {
 /// A state for non-immediate shaded rendering. This is not intended for the general use, see
 /// `ui::screen::Screen::draw_shaded` for the initial invocation.
 pub struct ShadedDrawing {
-    prim: GLenum,
-    vertices: ~[(f32,f32,u8,u8,u8,u8)],
+    pub prim: GLenum,
+    pub vertices: ~[(f32,f32,u8,u8,u8,u8)],
 }
 
 impl ShadedDrawing {
@@ -280,10 +280,10 @@ impl ShadedDrawingTraits for ShadedDrawing {
 /// A state for non-immediate textured rendering. This is not intended for the general use, see
 /// `ui::screen::Screen::draw_textured` for the initial invocation.
 pub struct TexturedDrawing {
-    width_recip: f32,
-    height_recip: f32,
-    prim: GLenum,
-    vertices: ~[(f32,f32,f32,f32,u8,u8,u8,u8)],
+    pub width_recip: f32,
+    pub height_recip: f32,
+    pub prim: GLenum,
+    pub vertices: ~[(f32,f32,f32,f32,u8,u8,u8,u8)],
 }
 
 impl TexturedDrawing {

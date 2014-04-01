@@ -141,41 +141,41 @@ impl Difficulty {
 pub struct BmsMeta {
     /// The name of character encoding used by the BMS file, and its confidence between 0 and 1.
     /// Confidence is set to infinity when it is forced by the loader.
-    encoding: (&'static str, f64),
+    pub encoding: (&'static str, f64),
 
     /// Title. Maps to BMS #TITLE command.
-    title: Option<~str>,
+    pub title: Option<~str>,
     /// Subtitle(s). Maps to BMS #SUBTITLE command.
-    subtitles: ~[~str],
+    pub subtitles: ~[~str],
     /// Genre. Maps to BMS #GENRE command.
-    genre: Option<~str>,
+    pub genre: Option<~str>,
     /// Artist. Maps to BMS #ARTIST command.
-    artist: Option<~str>,
+    pub artist: Option<~str>,
     /// Secondary artist(s). Maps to BMS #SUBARTIST command.
-    subartists: ~[~str],
+    pub subartists: ~[~str],
     /// Comment(s). Maps to BMS #COMMENT command.
-    comments: ~[~str],
+    pub comments: ~[~str],
     /// Path to an image for loading screen. Maps to BMS #STAGEFILE command.
-    stagefile: Option<~str>,
+    pub stagefile: Option<~str>,
     /// Path to an image for banner image for the selection screen. Maps to BMS #BANNER command.
-    banner: Option<~str>,
+    pub banner: Option<~str>,
     /// A base path used for loading all other resources. Maps to BMS #PATH_WAV command.
-    basepath: Option<Path>,
+    pub basepath: Option<Path>,
 
     /// Game mode. Maps to BMS #PLAYER command.
-    mode: PlayMode,
+    pub mode: PlayMode,
     /// Game level specified by the author. Does not affect the actual game play. Maps to BMS
     /// #PLAYLEVEL command.
-    playlevel: int,
+    pub playlevel: int,
     /// Difficulty level specified by the author. Maps to BMS #DIFFICULTY command.
-    difficulty: Option<Difficulty>,
+    pub difficulty: Option<Difficulty>,
     /// Gauge difficulty. Higher is easier. Maps to BMS #RANK command.
-    rank: int,
+    pub rank: int,
 
     /// Paths to sound file relative to `basepath` or BMS file.
-    sndpath: ~[Option<~str>],
+    pub sndpath: ~[Option<~str>],
     /// Paths to image/movie file relative to `basepath` or BMS file.
-    imgpath: ~[Option<~str>],
+    pub imgpath: ~[Option<~str>],
 }
 
 /// Timeline for the BMS file.
@@ -190,11 +190,11 @@ pub type BmsPointer = Pointer<SoundRef,ImageRef>;
 pub struct Bms {
     /// A path to the BMS file if any. Also used for finding the resource when `meta.basepath`
     /// is not set.
-    bmspath: Option<Path>,
+    pub bmspath: Option<Path>,
     /// Metadata and resources.
-    meta: BmsMeta,
+    pub meta: BmsMeta,
     /// Timeline.
-    timeline: BmsTimeline,
+    pub timeline: BmsTimeline,
 }
 
 impl Bms {

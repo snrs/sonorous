@@ -253,10 +253,10 @@ impl MD5State {
 
 /// The full MD5 state. This state gets erased when dropped.
 pub struct MD5 {
-    priv lo: u32plus,
-    priv hi: u32plus,
-    priv state: MD5State,
-    priv buffer: [u8, ..64],
+    lo: u32plus,
+    hi: u32plus,
+    state: MD5State,
+    buffer: [u8, ..64],
 }
 
 impl MD5 {

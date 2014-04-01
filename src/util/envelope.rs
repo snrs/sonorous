@@ -12,7 +12,7 @@ use std::cast;
 
 /// A wrapper to send a non-sendable owned type across tasks. Use with care.
 pub struct Envelope<T> {
-    priv wrapped: uint
+    wrapped: uint
 }
 
 impl<T> Envelope<T> {

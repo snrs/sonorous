@@ -41,33 +41,33 @@ pub enum LoadingJob {
 /// Scene-independent loading context.
 pub struct LoadingContext {
     /// Game play options.
-    opts: Rc<Options>,
+    pub opts: Rc<Options>,
     /// Yet-to-be-loaded BMS data.
-    bms: Bms,
+    pub bms: Bms,
     /// The derived timeline information.
-    infos: TimelineInfo,
+    pub infos: TimelineInfo,
     /// The key specification.
-    keyspec: ~KeySpec,
+    pub keyspec: ~KeySpec,
     /// The input mapping.
-    keymap: ~KeyMap,
+    pub keymap: ~KeyMap,
 
     /// The most recently loaded file name from the resource loader.
-    lastpath: Option<~str>,
+    pub lastpath: Option<~str>,
     /// Context for searching files.
-    search: SearchContext,
+    pub search: SearchContext,
     /// A list of jobs to be executed.
-    jobs: DList<LoadingJob>,
+    pub jobs: DList<LoadingJob>,
     /// A number of total jobs queued.
-    ntotaljobs: uint,
+    pub ntotaljobs: uint,
 
     /// The resource directory associated to the BMS data.
-    basedir: Path,
+    pub basedir: Path,
     /// A loaded OpenGL texture for #STAGEFILE image.
-    stagefile: Option<Rc<Texture2D>>,
+    pub stagefile: Option<Rc<Texture2D>>,
     /// A list of loaded sound resources. Initially populated with `NoSound`.
-    sndres: ~[SoundResource],
+    pub sndres: ~[SoundResource],
     /// A list of loaded image resources. Initially populated with `NoImage`.
-    imgres: ~[ImageResource],
+    pub imgres: ~[ImageResource],
 }
 
 impl LoadingContext {
@@ -178,14 +178,14 @@ impl LoadingContext {
 /// Graphical loading scene context.
 pub struct LoadingScene {
     /// Loading context.
-    context: LoadingContext,
+    pub context: LoadingContext,
     /// Display screen.
-    screen: Rc<RefCell<Screen>>,
+    pub screen: Rc<RefCell<Screen>>,
     /// Skin renderer.
-    skin: RefCell<Renderer>,
+    pub skin: RefCell<Renderer>,
     /// The minimum number of ticks (as per `sdl::get_ticks()`) until the scene proceeds.
     /// It is currently 3 seconds after the beginning of the scene.
-    waituntil: uint,
+    pub waituntil: uint,
 }
 
 impl LoadingScene {
@@ -250,9 +250,9 @@ impl Scene for LoadingScene {
 /// Textual loading scene context.
 pub struct TextualLoadingScene {
     /// Loading context.
-    context: LoadingContext,
+    pub context: LoadingContext,
     /// Display screen. This is not used by this scene but sent to the viewing scene.
-    screen: Option<Rc<RefCell<Screen>>>,
+    pub screen: Option<Rc<RefCell<Screen>>>,
 }
 
 impl TextualLoadingScene {

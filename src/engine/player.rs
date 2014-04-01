@@ -127,93 +127,93 @@ static BAD_DAMAGE: Damage = GaugeDamage(0.030);
 /// Game play states independent to the display.
 pub struct Player {
     /// The game play options.
-    opts: Rc<Options>,
+    pub opts: Rc<Options>,
     /// The current BMS metadata.
-    meta: BmsMeta,
+    pub meta: BmsMeta,
     /// The current timeline. This is a managed pointer so that `Pointer` can be created for it.
-    timeline: Rc<BmsTimeline>,
+    pub timeline: Rc<BmsTimeline>,
     /// The derived timeline information.
-    infos: TimelineInfo,
+    pub infos: TimelineInfo,
     /// The length of BMS file in seconds as calculated by `bms_duration`.
-    duration: f64,
+    pub duration: f64,
     /// The key specification.
-    keyspec: ~KeySpec,
+    pub keyspec: ~KeySpec,
     /// The input mapping.
-    keymap: ~KeyMap,
+    pub keymap: ~KeyMap,
 
     /// Set to true if the corresponding object in `bms.objs` had graded and should not be
     /// graded twice. Its length equals to that of `bms.objs`.
-    nograding: ~[bool],
+    pub nograding: ~[bool],
     /// Sound resources.
-    sndres: ~[SoundResource],
+    pub sndres: ~[SoundResource],
     /// A sound chunk used for beeps. It always plays on the channel #0.
-    beep: ~sdl_mixer::Chunk,
+    pub beep: ~sdl_mixer::Chunk,
     /// Last channels in which the corresponding sound in `sndres` was played.
-    sndlastch: ~[Option<uint>],
+    pub sndlastch: ~[Option<uint>],
     /// Indices to last sounds which the channel has played. For every `x`, if `sndlastch[x] ==
     /// Some(y)` then `sndlastchmap[y] == Some(x)` and vice versa.
-    lastchsnd: ~[Option<uint>],
+    pub lastchsnd: ~[Option<uint>],
     /// Currently active BGA layers.
-    bga: BGAState,
+    pub bga: BGAState,
 
     /// The chart expansion rate, or "play speed". One measure has the length of 400 pixels
     /// times the play speed, so higher play speed means that objects will fall much more
     /// quickly (hence the name).
-    playspeed: f64,
+    pub playspeed: f64,
     /// The play speed targeted for speed change if any. It is also the value displayed while
     /// the play speed is changing.
-    targetspeed: Option<f64>,
+    pub targetspeed: Option<f64>,
     /// The current BPM. Can be negative, in that case the chart will scroll backwards.
-    bpm: BPM,
+    pub bpm: BPM,
     /// The timestamp at the last tick. It is a return value from `sdl::get_ticks` and measured
     /// in milliseconds.
-    now: uint,
+    pub now: uint,
     /// The timestamp at the first tick.
-    origintime: uint,
+    pub origintime: uint,
 
     /// A pointer to the point where the game play starts (and not necessarily equal to zero point
     /// in the chart). Corresponds to `origintime` and `TimelineInfo::originoffset`.
-    origin: BmsPointer,
+    pub origin: BmsPointer,
     /// A pointer to the grading line.
-    cur: BmsPointer,
+    pub cur: BmsPointer,
     /// A pointer to the lower bound of the grading area containing `cur`.
-    checked: BmsPointer,
+    pub checked: BmsPointer,
     /// A pointer to objects for the start of LN which grading is in progress.
-    thru: ~[Option<BmsPointer>],
+    pub thru: ~[Option<BmsPointer>],
     /// The pointer to the first encountered `SetBPM` object with a negative value. This is
     /// a special casing for negative BPMs (ugh!); when this is set, the normal timeline routine is
     /// disabled and `cur` etc. always move backwards with given BPM. Everything except for
     /// `MeasureLine` is not rendered.
-    reverse: Option<BmsPointer>,
+    pub reverse: Option<BmsPointer>,
 
     /// The scale factor for grading area. The factor less than 1 causes the grading area
     /// shrink.
-    gradefactor: f64,
+    pub gradefactor: f64,
     /// The last grade and time when the grade is issued.
-    lastgrade: Option<(Grade,uint)>,
+    pub lastgrade: Option<(Grade,uint)>,
     /// The numbers of each grades.
-    gradecounts: [uint, ..NGRADES],
+    pub gradecounts: [uint, ..NGRADES],
     /// The last combo number, i.e. the number of objects graded at least GREAT. GOOD doesn't
     /// cause the combo number reset; BAD and MISS do.
-    lastcombo: uint,
+    pub lastcombo: uint,
     /// The best combo number so far. If the player manages to get no BADs and MISSes, then
     /// the combo number should end up with the number of note and LN objects
     /// (`BMSInfo::nnotes`).
-    bestcombo: uint,
+    pub bestcombo: uint,
     /// The current score.
-    score: uint,
+    pub score: uint,
     /// The current health gauge. Should be no larger than `MAXGAUGE`. This can go negative
     /// (not displayed directly), which will require players much more efforts to survive.
-    gauge: int,
+    pub gauge: int,
     /// The health gauge required to survive at the end of the song. Note that the gaugex
     /// less than this value (or even zero) doesn't cause the instant game over;
     /// only `InstantDeath` value from `Damage` does.
-    survival: int,
+    pub survival: int,
 
     /// The number of keyboard or joystick keys, mapped to each lane and and currently pressed.
-    keymultiplicity: [uint, ..NLANES],
+    pub keymultiplicity: [uint, ..NLANES],
     /// The state of joystick axes.
-    joystate: [InputState, ..NLANES],
+    pub joystate: [InputState, ..NLANES],
 }
 
 /// A list of play speed marks. `SpeedUpInput` and `SpeedDownInput` changes the play speed to

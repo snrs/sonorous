@@ -28,9 +28,9 @@ pub enum ShaderType {
 #[deriving(Eq)]
 pub struct Shader {
     /// Shader type.
-    shader_type: ShaderType,
+    pub shader_type: ShaderType,
     /// OpenGL reference to the shader.
-    index: GLuint,
+    pub index: GLuint,
 }
 
 /// Location for attributes (per-vertex additional data used by the shader).
@@ -170,9 +170,9 @@ impl Drop for Shader {
 /// A program owns and manages both kinds of shaders.
 #[deriving(Eq)]
 pub struct Program {
-    vertex: Shader,
-    fragment: Shader,
-    index: GLuint,
+    pub vertex: Shader,
+    pub fragment: Shader,
+    pub index: GLuint,
 }
 
 impl Program {
@@ -359,11 +359,11 @@ impl PreparedSurface {
 /// OpenGL 2D texture.
 pub struct Texture2D {
     /// OpenGL reference to the texture.
-    index: GLuint,
+    pub index: GLuint,
     /// Intrinsic width of the texture. Not affected by calls to `upload_surface`.
-    width: uint,
+    pub width: uint,
     /// Intrinsic height of the texture. Not affected by calls to `upload_surface`.
-    height: uint,
+    pub height: uint,
 }
 
 impl Drop for Texture2D {
@@ -450,7 +450,7 @@ impl Texture2D {
 /// OpenGL vertex buffer object.
 pub struct VertexBuffer {
     /// OpenGL reference to the VBO.
-    index: GLuint,
+    pub index: GLuint,
 }
 
 impl Drop for VertexBuffer {
@@ -480,11 +480,11 @@ impl VertexBuffer {
 /// OpenGL render buffer object.
 pub struct RenderBuffer {
     /// OpenGL reference to the RBO.
-    index: GLuint,
+    pub index: GLuint,
     /// Intrinsic width of the render buffer.
-    width: uint,
+    pub width: uint,
     /// Intrinsic height of the render buffer.
-    height: uint,
+    pub height: uint,
 }
 
 impl Drop for RenderBuffer {
@@ -546,11 +546,11 @@ impl RenderBuffer {
 /// OpenGL frame buffer object.
 pub struct FrameBuffer {
     /// OpenGL reference to the FBO.
-    index: GLuint,
+    pub index: GLuint,
     /// Intrinsic width of the frame buffer. Should be identical to the width of any attachments.
-    width: uint,
+    pub width: uint,
     /// Intrinsic height of the frame buffer. Should be identical to the height of any attachments.
-    height: uint,
+    pub height: uint,
 }
 
 impl Drop for FrameBuffer {

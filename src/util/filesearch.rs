@@ -15,7 +15,7 @@ use collections::HashMap;
 /// Context for searching files.
 pub struct SearchContext {
     /// Cached return values of `get_entries`.
-    get_entries_cache: HashMap<Path,(Rc<~[Path]>,Rc<~[Path]>)>,
+    pub get_entries_cache: HashMap<Path,(Rc<~[Path]>,Rc<~[Path]>)>,
 }
 
 impl SearchContext {

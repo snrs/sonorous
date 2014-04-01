@@ -26,11 +26,11 @@ pub enum Severity {
 #[deriving(Eq,TotalEq,Clone)]
 pub struct BmsMessage {
     /// The severity of message.
-    severity: Severity,
+    pub severity: Severity,
     /// The internal identifier.
-    id: &'static str,
+    pub id: &'static str,
     /// The string representation of the message.
-    message: &'static str,
+    pub message: &'static str,
 }
 
 impl fmt::Show for BmsMessage {

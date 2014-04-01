@@ -165,9 +165,9 @@ impl BGACanvas {
 /// Text-only viewing scene context. Used for the exclusive mode with BGA disabled.
 pub struct TextualViewingScene {
     /// Current game play states.
-    player: Player,
+    pub player: Player,
     /// Ticker used for printing to the console.
-    ticker: Ticker,
+    pub ticker: Ticker,
 }
 
 impl TextualViewingScene {
@@ -210,13 +210,13 @@ impl Scene for TextualViewingScene {
 pub struct ViewingScene {
     /// The underlying text-only viewing scene context (as the BGA-only viewing scene lacks
     /// the on-screen display).
-    parent: ~TextualViewingScene,
+    pub parent: ~TextualViewingScene,
     /// Display screen.
-    screen: Rc<RefCell<Screen>>,
+    pub screen: Rc<RefCell<Screen>>,
     /// Image resources.
-    imgres: ~[ImageResource],
+    pub imgres: ~[ImageResource],
     /// BGA canvas.
-    bgacanvas: BGACanvas,
+    pub bgacanvas: BGACanvas,
 }
 
 impl ViewingScene {

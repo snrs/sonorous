@@ -65,15 +65,15 @@ pub struct Font {
      * The group bits 15 (1+2+4+8) always draw the whole square, so in the zoom factor 1 only
      * pixels with group bits 15 will be drawn.
      */
-    priv glyphs: ~[u16],
+    glyphs: ~[u16],
 
     /// Precalculated zoomed font per zoom factor. It is three-dimensional array which indices
     /// are zoom factor, glyph number and row respectively. Assumes that each element has
     /// at least zoom factor times 8 (columns per row) bits.
-    priv pixels: ~[~[~[ZoomedFontRow]]],
+    pixels: ~[~[~[ZoomedFontRow]]],
 
     /// Precalculated polygons for glyphs.
-    priv polygons: ~[~[FontPolygon]],
+    polygons: ~[~[FontPolygon]],
 }
 
 /// An alignment mode of `Font::print_string`.

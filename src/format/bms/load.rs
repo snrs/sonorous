@@ -17,7 +17,7 @@ use format::bms::{SinglePlay, CouplePlay, DoublePlay, BattlePlay, Difficulty};
 /// Loader options for BMS format.
 pub struct LoaderOptions {
     /// Parser options.
-    parser: parse::ParserOptions,
+    pub parser: parse::ParserOptions,
 }
 
 impl LoaderOptions {

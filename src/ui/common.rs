@@ -132,11 +132,11 @@ pub fn get_path_from_dialog() -> Option<Path> {
 /// A periodic timer for thresholding the rate of information display.
 pub struct Ticker {
     /// Minimal required milliseconds after the last display.
-    interval: uint,
+    pub interval: uint,
     /// The timestamp at the last display. It is a return value from `sdl::get_ticks` and
     /// measured in milliseconds. May be a `None` if the ticker is at the initial state or
     /// has been reset by `reset` method.
-    lastinfo: Option<uint>
+    pub lastinfo: Option<uint>
 }
 
 /// Returns a new ticker with a default display interval.

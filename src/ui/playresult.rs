@@ -21,9 +21,9 @@ use ui::playing;
 /// Play result scene.
 pub struct PlayResultScene {
     /// Display screen.
-    screen: Rc<RefCell<Screen>>,
+    pub screen: Rc<RefCell<Screen>>,
     /// Game play state after playing.
-    player: Player,
+    pub player: Player,
 }
 
 impl PlayResultScene {

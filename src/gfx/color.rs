@@ -25,9 +25,9 @@ pub fn to_rgba(c: Color) -> (u8, u8, u8, u8) {
 #[deriving(Eq)]
 pub struct Gradient {
     /// A color at the position 0.0. Normally used as a topmost value.
-    zero: Color,
+    pub zero: Color,
     /// A color at the position 1.0. Normally used as a bottommost value.
-    one: Color
+    pub one: Color
 }
 
 /// Creates a new color gradient (for text printing).

@@ -277,9 +277,9 @@ impl<'r> Parsed<'r> {
 /// Parser options for BMS format.
 pub struct ParserOptions {
     /// Enables a parsing of several obviously mistyped commands. (Default: true)
-    autofix_commands: bool,
+    pub autofix_commands: bool,
     /// Disables an automatic encoding detection and forces the use of given encoding.
-    force_encoding: Option<EncodingRef>,
+    pub force_encoding: Option<EncodingRef>,
 }
 
 impl ParserOptions {
@@ -321,13 +321,13 @@ pub struct Parser<'r> {
  */
 pub struct ParsingIterator<'r> {
     /// The base iterator over each line in the file.
-    priv iter: str::CharSplits<'r,char>,
+    iter: str::CharSplits<'r,char>,
     /// The current line number starting at 1.
-    priv lineno: uint,
+    lineno: uint,
     /// Parser options.
-    priv opts: &'r ParserOptions,
+    opts: &'r ParserOptions,
     /// Queued items to be returned at the next invocations of `next`.
-    priv queued: ~[Parsed<'r>],
+    queued: ~[Parsed<'r>],
 }
 
 impl<'r> Parser<'r> {
@@ -787,9 +787,9 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
 /// The preprocessing parser, which feeds parsed items from the main parser into the preprocessor.
 pub struct PreprocessingParser<'r,R> {
     /// The internal parser.
-    priv parser: Parser<'r>,
+    parser: Parser<'r>,
     /// The random number generator.
-    priv r: &'r mut R,
+    r: &'r mut R,
 }
 
 /**
@@ -801,14 +801,14 @@ pub struct PreprocessingParser<'r,R> {
  */
 pub struct PreprocessingParsingIterator<'r,R> {
     /// The preprocessor that returns a pair of the line number (if any) and fully owned command.
-    priv pp: Preprocessor<'r,(Option<uint>,BmsCommand<'static>),R>,
+    pp: Preprocessor<'r,(Option<uint>,BmsCommand<'static>),R>,
     /// The base parsing iterator.
-    priv iter: ParsingIterator<'r>,
+    iter: ParsingIterator<'r>,
     /// Set to true when the parsing iterator once returned None.
-    priv done: bool,
+    done: bool,
     /// Queued items to be returned at the next invocations of `next`.
     /// They take precedence over the parsing iterator's own queued items.
-    priv queued: ~[Parsed<'r>]
+    queued: ~[Parsed<'r>]
 }
 
 impl<'r,R:Rng> PreprocessingParser<'r,R> {
