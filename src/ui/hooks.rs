@@ -43,7 +43,7 @@ impl Hook for options::Options {
 impl<S,I> Hook for timeline::Timeline<S,I> {
     fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         match id {
-            "timeline.initbpm" => Some(self.initbpm.to_f64().into_scalar()),
+            "timeline.initbpm" => Some(self.initbpm.into_scalar()),
             _ => None,
         }
     }

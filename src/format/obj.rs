@@ -14,10 +14,9 @@ pub struct Lane(uint);
 /// The maximum number of lanes.
 pub static NLANES: uint = 72;
 
-impl Lane {
-    /// Returns an index to the lane.
-    pub fn to_uint(&self) -> uint {
-        let Lane(v) = *self;
+impl Deref<uint> for Lane {
+    fn deref<'a>(&'a self) -> &'a uint {
+        let Lane(ref v) = *self;
         v
     }
 }
@@ -44,18 +43,19 @@ pub static NLAYERS: uint = 4;
 #[deriving(Eq,Show,Clone)]
 pub struct BPM(f64);
 
-impl BPM {
-    /// Returns a number of beats per minute.
-    pub fn to_f64(&self) -> f64 {
-        let BPM(v) = *self;
+impl Deref<f64> for BPM {
+    fn deref<'a>(&'a self) -> &'a f64 {
+        let BPM(ref v) = *self;
         v
     }
+}
 
+impl BPM {
     /// Converts a measure to a second.
-    pub fn measure_to_sec(self, measure: f64) -> f64 { measure * 240.0 / self.to_f64() }
+    pub fn measure_to_sec(&self, measure: f64) -> f64 { measure * 240.0 / **self }
 
     /// Converts a second to a measure.
-    pub fn sec_to_measure(self, sec: f64) -> f64 { sec * self.to_f64() / 240.0 }
+    pub fn sec_to_measure(&self, sec: f64) -> f64 { sec * **self / 240.0 }
 }
 
 /// A duration from the particular point. It may be specified in measures or seconds. Used in
@@ -182,8 +182,7 @@ impl<S:fmt::Show,I:fmt::Show> fmt::Show for ObjData<S,I> {
         impl fmt::Show for fmt_lane {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 let fmt_lane(lane) = *self;
-                let lane = lane.to_uint();
-                write!(f.buf, "{}:{:02}", lane / 36 + 1, lane % 36)
+                write!(f.buf, "{}:{:02}", *lane / 36 + 1, *lane % 36)
             }
         }
 

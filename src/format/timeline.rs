@@ -95,8 +95,7 @@ impl<S:Clone,I:Clone> Timeline<S,I> {
 impl<S:fmt::Show,I:fmt::Show> Timeline<S,I> {
     /// Dumps the timeline to the writer for the debugging purpose.
     pub fn dump(&self, writer: &mut Writer) -> fmt::Result {
-        try!(writeln!(writer, "********  ********  ********  ********  SetBPM({})",
-                      self.initbpm.to_f64()));
+        try!(writeln!(writer, "********  ********  ********  ********  SetBPM({})", *self.initbpm));
         for obj in self.objs.iter() {
             try!(writeln!(writer, "{:8.3}  {:8.3}  {:8.3}  {:8.3}  {}",
                           obj.loc.vpos, obj.loc.pos, obj.loc.vtime, obj.loc.time, obj.data));
@@ -424,7 +423,7 @@ pub mod modf {
 
         for obj in timeline.objs.mut_iter() {
             match (*obj).object_lane() {
-                Some(lane) if !keep[lane.to_uint()] => { obj.data = obj.data.to_effect(); }
+                Some(lane) if !keep[*lane] => { obj.data = obj.data.to_effect(); }
                 _ => {}
             }
         }
@@ -435,7 +434,7 @@ pub mod modf {
     /// modifying the relative time position.
     fn map_object_lane<S:Clone,I:Clone>(obj: &mut Obj<S,I>, map: &[Lane]) {
         match (*obj).object_lane() {
-            Some(lane) => { *obj = (*obj).with_object_lane(map[lane.to_uint()]); }
+            Some(lane) => { *obj = (*obj).with_object_lane(map[*lane]); }
             None => {}
         }
     }

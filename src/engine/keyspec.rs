@@ -268,9 +268,9 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
             Some(left) => {
                 let mut err = false;
                 for &(lane,kind) in left.iter() {
-                    if keyspec.kinds[lane.to_uint()].is_some() { err = true; break; }
+                    if keyspec.kinds[*lane].is_some() { err = true; break; }
                     keyspec.order.push(lane);
-                    keyspec.kinds[lane.to_uint()] = Some(kind);
+                    keyspec.kinds[*lane] = Some(kind);
                 }
                 if err {None} else {Some(left.len())}
             }

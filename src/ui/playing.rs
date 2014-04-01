@@ -131,7 +131,7 @@ fn build_lane_styles(keyspec: &KeySpec) ->
     let mut rightmost = SCREENW;
     let mut styles = ~[];
     for &lane in keyspec.left_lanes().iter() {
-        let kind = keyspec.kinds[lane.to_uint()];
+        let kind = keyspec.kinds[*lane];
         assert!(kind.is_some());
         let kind = kind.unwrap();
         let style = LaneStyle::from_kind(kind, leftmost, false);
@@ -142,7 +142,7 @@ fn build_lane_styles(keyspec: &KeySpec) ->
         }
     }
     for &lane in keyspec.right_lanes().rev_iter() {
-        let kind = keyspec.kinds[lane.to_uint()];
+        let kind = keyspec.kinds[*lane];
         assert!(kind.is_some());
         let kind = kind.unwrap();
         let style = LaneStyle::from_kind(kind, rightmost, true);
@@ -526,7 +526,7 @@ impl Scene for PlayingScene {
             d.string(95.0, H-62.0, 1.0, LeftAligned,
                      format!("@{:9.4}", self.player.cur.loc.vpos), black);
             d.string(95.0, H-78.0, 1.0, LeftAligned,
-                     format!("BPM {:6.2}", self.player.bpm.to_f64()), black);
+                     format!("BPM {:6.2}", *self.player.bpm), black);
             let timetick = cmp::min(self.leftmost, (self.player.now - self.player.origintime) *
                                                    self.leftmost / durationmsec);
             d.glyph(6.0 + timetick as f32, H-52.0, 1.0, 95, RGB(0x40,0x40,0x40));

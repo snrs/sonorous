@@ -31,7 +31,7 @@ pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modf, r: &mu
     let mut lanes = ~[];
     for i in range(begin, end) {
         let lane = keyspec.order[i];
-        let kind = keyspec.kinds[lane.to_uint()];
+        let kind = keyspec.kinds[*lane];
         if modf == ShuffleExModf || modf == RandomExModf ||
                 kind.map_or(false, |kind| kind.counts_as_key()) {
             lanes.push(lane);
@@ -280,8 +280,7 @@ impl Player {
 
         // set all pointers to the origin and let the `tick` do the initial calculation
         let origin = timeline.pointer(VirtualPos, originoffset);
-        let duration = timeline.deref().duration(originoffset,
-                                                 |sref| sndres[sref.to_uint()].duration());
+        let duration = timeline.deref().duration(originoffset, |sref| sndres[**sref].duration());
         let mut player = Player {
             opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
             keyspec: keyspec, keymap: keymap,
@@ -396,17 +395,16 @@ impl Player {
     /// should be played with the lower volume and should in the different channel group from
     /// key sounds.
     pub fn play_sound(&mut self, sref: SoundRef, bgm: bool) {
-        let sref = sref.to_uint();
-        if self.sndres[sref].chunk().is_none() {
+        if self.sndres[**sref].chunk().is_none() {
             return;
         }
-        let lastch = self.sndlastch[sref].map(|ch| ch as ::std::libc::c_int);
+        let lastch = self.sndlastch[**sref].map(|ch| ch as ::std::libc::c_int);
 
         // try to play on the last channel if it is not occupied by other sounds (in this case
         // the last channel info is removed)
         let mut ch;
         loop {
-            ch = self.sndres[sref].chunk().unwrap().play(lastch, 0);
+            ch = self.sndres[**sref].chunk().unwrap().play(lastch, 0);
             if ch >= 0 { break; }
             self.allocate_more_channels(32);
         }
@@ -417,14 +415,14 @@ impl Player {
 
         let ch = ch as uint;
         for &idx in self.lastchsnd[ch].iter() { self.sndlastch[idx] = None; }
-        self.sndlastch[sref] = Some(ch);
-        self.lastchsnd[ch] = Some(sref as uint);
+        self.sndlastch[**sref] = Some(ch);
+        self.lastchsnd[ch] = Some(**sref as uint);
     }
 
     /// Plays a given sound if `sref` is not zero. This reflects the fact that an alphanumeric
     /// key `00` is normally a placeholder.
     pub fn play_sound_if_nonzero(&mut self, sref: SoundRef, bgm: bool) {
-        if sref.to_uint() > 0 { self.play_sound(sref, bgm); }
+        if **sref > 0 { self.play_sound(sref, bgm); }
     }
 
     /// Plays a beep. The beep is always played in the channel 0, which is excluded from
@@ -437,16 +435,15 @@ impl Player {
     /// When the virtual input is mapped to multiple actual inputs
     /// it can update the internal state but still return false.
     pub fn is_unpressed(&mut self, lane: Lane, continuous: bool, state: InputState) -> bool {
-        let lane = lane.to_uint();
-        if state == Neutral || (continuous && self.joystate[lane] != state) {
+        if state == Neutral || (continuous && self.joystate[*lane] != state) {
             if continuous {
-                self.joystate[lane] = state;
+                self.joystate[*lane] = state;
                 true
             } else {
-                if self.keymultiplicity[lane] > 0 {
-                    self.keymultiplicity[lane] -= 1;
+                if self.keymultiplicity[*lane] > 0 {
+                    self.keymultiplicity[*lane] -= 1;
                 }
-                (self.keymultiplicity[lane] == 0)
+                (self.keymultiplicity[*lane] == 0)
             }
         } else {
             false
@@ -457,14 +454,13 @@ impl Player {
     /// When the virtual input is mapped to multiple actual inputs
     /// it can update the internal state but still return false.
     pub fn is_pressed(&mut self, lane: Lane, continuous: bool, state: InputState) -> bool {
-        let lane = lane.to_uint();
         if state != Neutral {
             if continuous {
-                self.joystate[lane] = state;
+                self.joystate[*lane] = state;
                 true
             } else {
-                self.keymultiplicity[lane] += 1;
-                (self.keymultiplicity[lane] == 1)
+                self.keymultiplicity[*lane] += 1;
+                (self.keymultiplicity[*lane] == 1)
             }
         } else {
             false
@@ -477,7 +473,7 @@ impl Player {
         // if LN grading is in progress and it is not within the threshold then
         // MISS grade is issued
         let nextlndone =
-            self.thru[lane.to_uint()].as_ref().and_then(|thru| {
+            self.thru[*lane].as_ref().and_then(|thru| {
                 thru.find_next_of_type(|obj| {
                     obj.object_lane() == Some(lane) &&
                     obj.is_lndone()
@@ -491,7 +487,7 @@ impl Player {
                 self.update_grade_to_miss();
             }
         }
-        self.thru[lane.to_uint()] = None;
+        self.thru[*lane] = None;
     }
 
     /// Processes the press event at given lane:
@@ -517,7 +513,7 @@ impl Player {
             if p.index >= self.checked.index && !self.nograding[p.index] && !p.is_lndone() {
                 let dist = (p.loc.vtime - self.cur.loc.vtime) * self.gradefactor;
                 if num::abs(dist) < BAD_CUTOFF {
-                    if p.is_lnstart() { self.thru[lane.to_uint()] = Some(p.clone()); }
+                    if p.is_lnstart() { self.thru[*lane] = Some(p.clone()); }
                     self.nograding[p.index] = true;
                     self.update_grade_from_distance(dist);
                 }
@@ -548,7 +544,7 @@ impl Player {
         let curtime = (self.now - self.origintime) as f64 / 1000.0 + self.origin.loc.time;
         match self.reverse {
             Some(ref reverse) => {
-                assert!(self.bpm.to_f64() < 0.0 && curtime >= reverse.loc.time);
+                assert!(*self.bpm < 0.0 && curtime >= reverse.loc.time);
                 let newpos = reverse.loc.pos + self.bpm.sec_to_measure(curtime - reverse.loc.time);
                 self.cur.seek(ActualPos, newpos - self.cur.loc.pos);
             }
@@ -565,9 +561,9 @@ impl Player {
                         }
                         SetBPM(newbpm) => {
                             self.bpm = newbpm;
-                            if newbpm.to_f64() == 0.0 {
+                            if *newbpm == 0.0 {
                                 return false; // finish immediately
-                            } else if newbpm.to_f64() < 0.0 {
+                            } else if *newbpm < 0.0 {
                                 self.reverse = Some(p.clone()); // activate reverse motion
                             }
                         }
@@ -671,7 +667,7 @@ impl Player {
                 match p.data() {
                     Bomb(lane,sref,damage) if self.key_pressed(lane) => {
                         // ongoing long note is not graded twice
-                        self.thru[lane.to_uint()] = None;
+                        self.thru[*lane] = None;
                         for &sref in sref.iter() {
                             self.play_sound(sref, false);
                         }

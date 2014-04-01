@@ -15,6 +15,13 @@ pub struct Key(int);
 /// The number of all possible alphanumeric keys.
 pub static MAXKEY: int = 36*36;
 
+impl Deref<int> for Key {
+    fn deref<'a>(&'a self) -> &'a int {
+        let Key(ref v) = *self;
+        v
+    }
+}
+
 /// All base-36 digits.
 static BASE36_MAP: &'static [u8] = bytes!("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
 
@@ -55,46 +62,36 @@ impl Key {
         })
     }
 
-    /// Returns a bare integer value out of the key.
-    pub fn to_int(&self) -> int {
-        let Key(v) = *self;
-        v
-    }
-
     /// Returns if the alphanumeric key is in the proper range. Sonorous supports the full
     /// range of 00-ZZ (0-1295) for every case.
     pub fn is_valid(&self) -> bool {
-        let Key(v) = *self;
-        0 <= v && v < MAXKEY
+        0 <= **self && **self < MAXKEY
     }
 
     /// Re-reads the alphanumeric key as a hexadecimal number if possible. This is required
     /// due to handling of channel #03 (BPM is expected to be in hexadecimal).
     pub fn to_hex(&self) -> Option<int> {
-        let Key(v) = *self;
-        let sixteens = v / 36;
-        let ones = v % 36;
+        let sixteens = **self / 36;
+        let ones = **self % 36;
         if sixteens < 16 && ones < 16 {Some(sixteens * 16 + ones)} else {None}
     }
 
     /// Converts the channel number to the lane number.
     pub fn to_lane(&self) -> Lane {
-        let Key(v) = *self;
-        let player = match v / 36 {
+        let player = match **self / 36 {
             1 | 3 | 5 | 0xD => 0,
             2 | 4 | 6 | 0xE => 1,
             _ => fail!(~"non-object channel")
         };
-        Lane(player * 36 + v as uint % 36)
+        Lane(player * 36 + **self as uint % 36)
     }
 }
 
 impl fmt::Show for Key {
     /// Returns a two-letter representation of alphanumeric key.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let Key(v) = *self;
         assert!(self.is_valid());
-        write!(f.buf, "{}{}", BASE36_MAP[v / 36] as char, BASE36_MAP[v % 36] as char)
+        write!(f.buf, "{}{}", BASE36_MAP[**self / 36] as char, BASE36_MAP[**self % 36] as char)
     }
 }
 
@@ -102,6 +99,13 @@ impl fmt::Show for Key {
 /// from -1 (`0`) to -36 (`Z`) which is invalid in a plain `Key`.
 #[deriving(Eq,Ord,Clone)]
 pub struct PartialKey(int);
+
+impl Deref<int> for PartialKey {
+    fn deref<'a>(&'a self) -> &'a int {
+        let PartialKey(ref v) = *self;
+        v
+    }
+}
 
 impl PartialKey {
     /// Returns a definitely invalid partial alphanumeric key.
@@ -147,49 +151,38 @@ impl PartialKey {
         })
     }
 
-    /// Returns a bare integer value out of the key.
-    pub fn to_int(&self) -> int {
-        let PartialKey(v) = *self;
-        v
-    }
-
     /// Returns if the alphanumeric key is in the proper range.
     /// In addition to `Key`s 00-ZZ (0 to 1295), `PartialKey` supports 0-Z (-1 to -36).
     pub fn is_valid(&self) -> bool {
-        let PartialKey(v) = *self;
-        -36 <= v && v < MAXKEY
+        -36 <= **self && **self < MAXKEY
     }
 
     /// Returns if the alphanumeric key is one-digit long.
     pub fn is_partial(&self) -> bool {
-        let PartialKey(v) = *self;
-        v < 0
+        **self < 0
     }
 
     /// Re-reads the alphanumeric key as a hexadecimal number if possible.
     pub fn to_hex(&self) -> Option<int> {
-        let PartialKey(v) = *self;
-        let (sixteens, ones) = if v < 0 {(0, -v - 1)} else {(v / 36, v % 36)};
+        let (sixteens, ones) = if **self < 0 {(0, -**self - 1)} else {(**self / 36, **self % 36)};
         if sixteens < 16 && ones < 16 {Some(sixteens * 16 + ones)} else {None}
     }
 
     /// Converts a partial alphanumeric key into a `Key`, assuming it's missing a leading `0`.
     pub fn into_key(self) -> Key {
-        let PartialKey(v) = self;
         assert!(self.is_valid());
-        if v < 0 {Key(-v - 1)} else {Key(v)}
+        if *self < 0 {Key(-*self - 1)} else {Key(*self)}
     }
 }
 
 impl fmt::Show for PartialKey {
     /// Returns an one- or two-letter representation of alphanumeric key.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let PartialKey(v) = *self;
         assert!(self.is_valid());
-        if v < 0 {
-            write!(f.buf, "{}", BASE36_MAP[-v - 1] as char)
+        if **self < 0 {
+            write!(f.buf, "{}", BASE36_MAP[-**self - 1] as char)
         } else {
-            write!(f.buf, "{}{}", BASE36_MAP[v / 36] as char, BASE36_MAP[v % 36] as char)
+            write!(f.buf, "{}{}", BASE36_MAP[**self / 36] as char, BASE36_MAP[**self % 36] as char)
         }
     }
 }

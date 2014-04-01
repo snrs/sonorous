@@ -68,13 +68,13 @@ pub struct BGACanvas {
 fn upload_bga_ref_to_texture(bgaref: &BGARef<ImageRef>, imgres: &[ImageResource],
                              texture: &Texture2D, scratch: &PreparedSurface, force: bool) {
     match *bgaref {
-        ImageBGA(ref iref) if force || imgres[iref.to_uint()].should_always_upload() => {
-            imgres[iref.to_uint()].upload_to_texture(texture);
+        ImageBGA(iref) if force || imgres[**iref].should_always_upload() => {
+            imgres[**iref].upload_to_texture(texture);
         }
-        SlicedImageBGA(ref iref, ~ImageSlice {sx,sy,dx,dy,w,h})
-                if force || imgres[iref.to_uint()].should_always_upload() => {
+        SlicedImageBGA(iref, ~ImageSlice {sx,sy,dx,dy,w,h})
+                if force || imgres[**iref].should_always_upload() => {
             scratch.as_surface().fill(RGBA(0, 0, 0, 0));
-            for surface in imgres[iref.to_uint()].surface().move_iter() {
+            for surface in imgres[**iref].surface().move_iter() {
                 // this requires SDL_SRCALPHA flags in `surface` (and not `scratch`).
                 // see `LoadedImageResource::new` for relevant codes.
                 scratch.as_surface().blit_area(surface.as_surface(), (sx, sy), (dx, dy), (w, h));
@@ -125,10 +125,10 @@ impl BGACanvas {
                 // image reference, which should rewind the movie playback.
                 if self.state[layer].as_image_ref() != current[layer].as_image_ref() {
                     for &iref in self.state[layer].as_image_ref().move_iter() {
-                        imgres[iref.to_uint()].stop_animating();
+                        imgres[**iref].stop_animating();
                     }
                     for &iref in current[layer].as_image_ref().move_iter() {
-                        imgres[iref.to_uint()].start_animating();
+                        imgres[**iref].start_animating();
                     }
                 }
                 upload_bga_ref_to_texture(&current[layer], imgres,
@@ -195,7 +195,7 @@ impl Scene for TextualViewingScene {
                              BPM {bpm:6.2} | {lastcombo} / {nnotes} notes",
                             elapsed/600, elapsed/10%60, elapsed%10,
                             duration/600, duration/10%60, duration%10,
-                            pos = self.player.cur.loc.vpos, bpm = self.player.bpm.to_f64(),
+                            pos = self.player.cur.loc.vpos, bpm = *self.player.bpm,
                             lastcombo = self.player.lastcombo, nnotes = self.player.infos.nnotes));
     }
 

@@ -154,16 +154,16 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             }
 
             parse::BmsBPM(bpm) => {
-                if bpm.to_f64() < 0.0 {
+                if *bpm < 0.0 {
                     diag!(BmsHasNegativeInitBPM at lineno);
-                } else if bpm.to_f64() == 0.0 {
+                } else if *bpm == 0.0 {
                     diag!(BmsHasZeroInitBPM at lineno);
                 } else {
                     builder.set_initbpm(bpm);
                 }
             }
             parse::BmsExBPM(Key(i), bpm) => {
-                if bpm.to_f64() <= 0.0 {
+                if *bpm <= 0.0 {
                     diag!(BmsHasNonpositiveBPM at lineno);
                 }
                 bpmtab[i] = bpm;
@@ -281,7 +281,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // Replaces the reference to #BGA/#@BGA keys into a pair of the reference to #BMP keys
     // and corresponding `ImageSlice`, if possible.
     let imgref_to_bgaref = |iref: ImageRef| -> BGARef<ImageRef> {
-        match imgslices[iref.to_uint()] {
+        match imgslices[**iref] {
             Some((iref, ref slice)) => SlicedImageBGA(iref.clone(), ~slice.clone()),
             None => ImageBGA(iref),
         }
@@ -293,81 +293,81 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
         // an alphanumeric key designates an area rather than a point.
         let handle_key = |chan: Key, t: f64, t2: f64, v: Key, _lineno: Option<uint>| -> bool {
             let /*mut*/ ret = true;
-            match chan {
+            match *chan {
                 // channel #01: BGM
-                Key(1) => { builder.add(t, BGM(SoundRef(v))); }
+                1 => { builder.add(t, BGM(SoundRef(v))); }
 
                 // channel #03: BPM as an hexadecimal key
-                Key(3) => {
+                3 => {
                     for &v in v.to_hex().iter() {
                         builder.add(t, SetBPM(BPM(v as f64)))
                     }
                 }
 
                 // channel #04: BGA layer 1
-                Key(4) => { builder.add(t, SetBGA(Layer1, imgref_to_bgaref(ImageRef(v)))); }
+                4 => { builder.add(t, SetBGA(Layer1, imgref_to_bgaref(ImageRef(v)))); }
 
                 // channel #06: POOR BGA
-                Key(6) => {
+                6 => {
                     builder.add(t, SetBGA(PoorBGA, imgref_to_bgaref(ImageRef(v))));
                     poorbgafix = false; // we don't add artificial BGA
                 }
 
                 // channel #07: BGA layer 2
-                Key(7) => { builder.add(t, SetBGA(Layer2, imgref_to_bgaref(ImageRef(v)))); }
+                7 => { builder.add(t, SetBGA(Layer2, imgref_to_bgaref(ImageRef(v)))); }
 
                 // channel #08: BPM defined by #BPMxx
-                Key(8) => { builder.add(t, SetBPM(bpmtab[v.to_int() as uint])); }
+                8 => { builder.add(t, SetBPM(bpmtab[*v as uint])); }
 
                 // channel #09: scroll stopper defined by #STOPxx
-                Key(9) => { builder.add(t, Stop(stoptab[v.to_int() as uint])); }
+                9 => { builder.add(t, Stop(stoptab[*v as uint])); }
 
                 // channel #0A: BGA layer 3
-                Key(10) => { builder.add(t, SetBGA(Layer3, imgref_to_bgaref(ImageRef(v)))); }
+                10 => { builder.add(t, SetBGA(Layer3, imgref_to_bgaref(ImageRef(v)))); }
 
                 // channels #1x/2x: visible object, possibly LNs when #LNOBJ is in active
-                Key(36/*1*36*/..107/*3*36-1*/) => {
+                36/*1*36*/..107/*3*36-1*/ => {
                     let lane = chan.to_lane();
                     if lnobj.is_some() && lnobj == Some(v) {
                         // change the last inserted visible object to the start of LN if any.
-                        let lastvispos = lastvis[lane.to_uint()];
+                        let lastvispos = lastvis[*lane];
                         for &mark in lastvispos.iter() {
                             builder.mutate(mark, |pos, data| {
                                 assert!(data.is_visible());
                                 (pos, data.to_lnstart())
                             });
                             builder.add(t, LNDone(lane, Some(SoundRef(v))));
-                            lastvis[lane.to_uint()] = None;
+                            lastvis[*lane] = None;
                         }
                     } else {
                         let mark = builder.add_and_mark(t, Visible(lane, Some(SoundRef(v))));
-                        lastvis[lane.to_uint()] = Some(mark);
+                        lastvis[*lane] = Some(mark);
                     }
                 }
 
                 // channels #3x/4x: invisible object
-                Key(108/*3*36*/..179/*5*36-1*/) => {
+                108/*3*36*/..179/*5*36-1*/ => {
                     let lane = chan.to_lane();
                     builder.add(t, Invisible(lane, Some(SoundRef(v))));
                 }
 
                 // channels #5x/6x, #LNTYPE 1: LN endpoints
-                Key(180/*5*36*/..251/*7*36-1*/) if !consecutiveln => {
+                180/*5*36*/..251/*7*36-1*/ if !consecutiveln => {
                     let lane = chan.to_lane();
 
                     // a pair of non-00 alphanumeric keys designate one LN. if there are an odd
                     // number of them, the last LN is implicitly closed later.
-                    if lastln[lane.to_uint()].is_some() {
-                        lastln[lane.to_uint()] = None;
+                    if lastln[*lane].is_some() {
+                        lastln[*lane] = None;
                         builder.add(t, LNDone(lane, Some(SoundRef(v))));
                     } else {
                         let mark = builder.add_and_mark(t, LNStart(lane, Some(SoundRef(v))));
-                        lastln[lane.to_uint()] = Some(mark); // TODO unused for now
+                        lastln[*lane] = Some(mark); // TODO unused for now
                     }
                 }
 
                 // channels #5x/6x, #LNTYPE 2: LN areas
-                Key(180/*5*36*/..251/*7*36-1*/) if consecutiveln => {
+                180/*5*36*/..251/*7*36-1*/ if consecutiveln => {
                     let lane = chan.to_lane();
 
                     // one non-00 alphanumeric key, in the absence of other information, inserts one
@@ -377,7 +377,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                     // `t2`, unless there is already an end of LN at `t` in which case the end of LN
                     // is simply moved from `t` to `t2` (effectively increasing the length of
                     // previous LN).
-                    match lastln[lane.to_uint()] {
+                    match lastln[*lane] {
                         Some(mark) => {
                             builder.mutate(mark, |pos, data| {
                                 if pos == t {
@@ -391,14 +391,14 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                         _ => {
                             builder.add(t, LNStart(lane, Some(SoundRef(v))));
                             let mark = builder.add_and_mark(t2, LNDone(lane, Some(SoundRef(v))));
-                            lastln[lane.to_uint()] = Some(mark);
+                            lastln[*lane] = Some(mark);
                         }
                     }
                 }
 
                 // channels #Dx/Ex: bombs, base-36 damage value (unit of 0.5% of the full gauge) or
                 // instant death (ZZ)
-                Key(468/*0xD*36*/..539/*0xF*36-1*/) => {
+                468/*0xD*36*/..539/*0xF*36-1*/ => {
                     let lane = chan.to_lane();
                     let damage = match v {
                         Key(v @ 1..200) => Some(GaugeDamage(v as f64 / 200.0)),

@@ -54,40 +54,26 @@ pub struct SoundRef(Key);
 #[deriving(Eq,TotalEq,Clone)]
 pub struct ImageRef(Key);
 
-impl SoundRef {
-    /// Returns a `Key` representation of the sound reference.
-    pub fn as_key<'a>(&'a self) -> &'a Key {
+impl Deref<Key> for SoundRef {
+    fn deref<'a>(&'a self) -> &'a Key {
         let SoundRef(ref key) = *self;
         key
     }
-
-    /// Returns a numeric index to the sound reference.
-    pub fn to_uint(&self) -> uint {
-        let SoundRef(Key(v)) = *self;
-        v as uint
-    }
 }
 
-impl ImageRef {
-    /// Returns a `Key` representation of the image reference.
-    pub fn as_key<'a>(&'a self) -> &'a Key {
+impl Deref<Key> for ImageRef {
+    fn deref<'a>(&'a self) -> &'a Key {
         let ImageRef(ref key) = *self;
         key
-    }
-
-    /// Returns a numeric index to the image reference.
-    pub fn to_uint(&self) -> uint {
-        let ImageRef(Key(v)) = *self;
-        v as uint
     }
 }
 
 impl fmt::Show for SoundRef {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.as_key().fmt(f) }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.deref().fmt(f) }
 }
 
 impl fmt::Show for ImageRef {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.as_key().fmt(f) }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.deref().fmt(f) }
 }
 
 /// Default BPM. This value comes from the original BMS specification.

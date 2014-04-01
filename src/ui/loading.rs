@@ -293,7 +293,7 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
 {nnotes, plural, =1{# note} other{# notes}} [{nkeys}KEY{haslongnote}{difficulty}]
 ----------------------------------------------------------------------------------------------",
                 level = self.context.bms.meta.playlevel,
-                bpm = self.context.bms.timeline.initbpm.to_f64(),
+                bpm = *self.context.bms.timeline.initbpm,
                 hasbpmchange = if self.context.infos.hasbpmchange {"?"} else {""},
                 nnotes = self.context.infos.nnotes, nkeys = self.context.keyspec.nkeys(),
                 haslongnote = if self.context.infos.haslongnote {"-LN"} else {""},

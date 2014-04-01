@@ -232,8 +232,8 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
     }
 
     for &lane in keyspec.order.iter() {
-        let key = Key(36 + lane.to_uint() as int);
-        let kind = keyspec.kinds[lane.to_uint()].unwrap();
+        let key = Key(36 + *lane as int);
+        let kind = keyspec.kinds[*lane].unwrap();
         let envvar = format!("SNRS_{}{}_KEY", key.to_str(), kind.to_char());
         let envvar2 = format!("ANGOLMOIS_{}{}_KEY", key.to_str(), kind.to_char());
         for s in getenv(envvar).or(getenv(envvar2)).iter() {
