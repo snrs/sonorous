@@ -280,7 +280,8 @@ impl Player {
 
         // set all pointers to the origin and let the `tick` do the initial calculation
         let origin = timeline.pointer(VirtualPos, originoffset);
-        let duration = timeline.deref().duration(originoffset, |sref| sndres[**sref].duration());
+        let duration = timeline.deref().duration(originoffset,
+                                                 |sref| sndres[**sref as uint].duration());
         let mut player = Player {
             opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
             keyspec: keyspec, keymap: keymap,
@@ -395,16 +396,17 @@ impl Player {
     /// should be played with the lower volume and should in the different channel group from
     /// key sounds.
     pub fn play_sound(&mut self, sref: SoundRef, bgm: bool) {
-        if self.sndres[**sref].chunk().is_none() {
+        let sref = **sref as uint;
+        if self.sndres[sref].chunk().is_none() {
             return;
         }
-        let lastch = self.sndlastch[**sref].map(|ch| ch as ::std::libc::c_int);
+        let lastch = self.sndlastch[sref].map(|ch| ch as ::std::libc::c_int);
 
         // try to play on the last channel if it is not occupied by other sounds (in this case
         // the last channel info is removed)
         let mut ch;
         loop {
-            ch = self.sndres[**sref].chunk().unwrap().play(lastch, 0);
+            ch = self.sndres[sref].chunk().unwrap().play(lastch, 0);
             if ch >= 0 { break; }
             self.allocate_more_channels(32);
         }
@@ -415,8 +417,8 @@ impl Player {
 
         let ch = ch as uint;
         for &idx in self.lastchsnd[ch].iter() { self.sndlastch[idx] = None; }
-        self.sndlastch[**sref] = Some(ch);
-        self.lastchsnd[ch] = Some(**sref as uint);
+        self.sndlastch[sref] = Some(ch);
+        self.lastchsnd[ch] = Some(sref);
     }
 
     /// Plays a given sound if `sref` is not zero. This reflects the fact that an alphanumeric

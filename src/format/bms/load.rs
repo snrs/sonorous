@@ -166,7 +166,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 if *bpm <= 0.0 {
                     diag!(BmsHasNonpositiveBPM at lineno);
                 }
-                bpmtab[i] = bpm;
+                bpmtab[i as uint] = bpm;
             }
 
             parse::BmsPlayer(1) => { mode = SinglePlay; }
@@ -200,17 +200,17 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 }
             }
 
-            parse::BmsWAV(Key(i), s) => { sndpath[i] = Some(s.into_owned()); }
-            parse::BmsBMP(Key(i), s) => { imgpath[i] = Some(s.into_owned()); }
+            parse::BmsWAV(Key(i), s) => { sndpath[i as uint] = Some(s.into_owned()); }
+            parse::BmsBMP(Key(i), s) => { imgpath[i as uint] = Some(s.into_owned()); }
             parse::BmsBGA(Key(i), Key(j), slice) => {
-                imgslices[i] = Some((ImageRef(Key(j)), slice));
+                imgslices[i as uint] = Some((ImageRef(Key(j)), slice));
             }
 
             parse::BmsStop(Key(i), dur) => {
                 if dur.sign() < 0 {
                     diag!(BmsHasNegativeSTOPDuration at lineno);
                 } else {
-                    stoptab[i] = dur;
+                    stoptab[i as uint] = dur;
                 }
             }
             parse::BmsStp(pos, dur) => {
@@ -281,7 +281,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // Replaces the reference to #BGA/#@BGA keys into a pair of the reference to #BMP keys
     // and corresponding `ImageSlice`, if possible.
     let imgref_to_bgaref = |iref: ImageRef| -> BGARef<ImageRef> {
-        match imgslices[**iref] {
+        match imgslices[**iref as uint] {
             Some((iref, ref slice)) => SlicedImageBGA(iref.clone(), ~slice.clone()),
             None => ImageBGA(iref),
         }

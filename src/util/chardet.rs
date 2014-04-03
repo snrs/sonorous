@@ -40,7 +40,7 @@
  */
 
 use std::slice;
-use std::num::{Round, ln, exp};
+use std::num::Round;
 use util::maybe_owned::{MaybeOwnedVec, IntoMaybeOwnedVec};
 
 /// An iterator returned by `CharClass::classes`.
@@ -243,7 +243,7 @@ impl<CC:CharClass> Trainer<CC> {
         let Trainer { weights, cc } = self;
         let logprobs: ~[i32] = weights.move_iter().map(|(pos, neg)| {
             let p = (pos + 1.0) / (pos + neg + 2.0);
-            ((ln(1.0 - p) - ln(p)) * 65536.0).round() as i32
+            (((1.0 - p).ln() - p.ln()) * 65536.0).round() as i32
         }).collect();
         Classifier::new(cc, logprobs)
     }
@@ -262,7 +262,7 @@ pub struct Classifier<CC> {
 /// Converts a raw confidence value from `Classifier::raw_confidence`
 /// to the true probability from `Classifier::confidence`.
 pub fn convert_raw_confidence(v: i32) -> f64 {
-    1.0 / (1.0 + exp(v as f64 / 65536.0))
+    1.0 / (1.0 + (v as f64 / 65536.0).exp())
 }
 
 impl<CC:CharClass> Classifier<CC> {

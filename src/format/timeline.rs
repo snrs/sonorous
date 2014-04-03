@@ -453,7 +453,8 @@ pub mod modf {
 
     /// Swaps given lanes in the random order.
     pub fn shuffle<S:Clone,I:Clone,R:Rng>(timeline: &mut Timeline<S,I>, r: &mut R, lanes: &[Lane]) {
-        let shuffled = r.shuffle(lanes.to_owned());
+        let mut shuffled = lanes.to_owned();
+        r.shuffle(shuffled);
         let mut map = slice::from_fn(NLANES, |lane| Lane(lane));
         for (&Lane(from), &to) in lanes.iter().zip(shuffled.iter()) {
             map[from] = to;
@@ -483,7 +484,8 @@ pub mod modf {
             }
             if lasttime < obj.loc.time { // reshuffle required
                 lasttime = obj.loc.time; // XXX should we use this restriction on very quick notes?
-                let shuffled = r.shuffle(movable.clone());
+                let mut shuffled = movable.clone();
+                r.shuffle(shuffled);
                 for (&Lane(from), &to) in movable.iter().zip(shuffled.iter()) {
                     map[from] = to;
                 }

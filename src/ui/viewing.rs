@@ -68,13 +68,13 @@ pub struct BGACanvas {
 fn upload_bga_ref_to_texture(bgaref: &BGARef<ImageRef>, imgres: &[ImageResource],
                              texture: &Texture2D, scratch: &PreparedSurface, force: bool) {
     match *bgaref {
-        ImageBGA(iref) if force || imgres[**iref].should_always_upload() => {
-            imgres[**iref].upload_to_texture(texture);
+        ImageBGA(iref) if force || imgres[**iref as uint].should_always_upload() => {
+            imgres[**iref as uint].upload_to_texture(texture);
         }
         SlicedImageBGA(iref, ~ImageSlice {sx,sy,dx,dy,w,h})
-                if force || imgres[**iref].should_always_upload() => {
+                if force || imgres[**iref as uint].should_always_upload() => {
             scratch.as_surface().fill(RGBA(0, 0, 0, 0));
-            for surface in imgres[**iref].surface().move_iter() {
+            for surface in imgres[**iref as uint].surface().move_iter() {
                 // this requires SDL_SRCALPHA flags in `surface` (and not `scratch`).
                 // see `LoadedImageResource::new` for relevant codes.
                 scratch.as_surface().blit_area(surface.as_surface(), (sx, sy), (dx, dy), (w, h));
@@ -125,10 +125,10 @@ impl BGACanvas {
                 // image reference, which should rewind the movie playback.
                 if self.state[layer].as_image_ref() != current[layer].as_image_ref() {
                     for &iref in self.state[layer].as_image_ref().move_iter() {
-                        imgres[**iref].stop_animating();
+                        imgres[**iref as uint].stop_animating();
                     }
                     for &iref in current[layer].as_image_ref().move_iter() {
-                        imgres[**iref].start_animating();
+                        imgres[**iref as uint].start_animating();
                     }
                 }
                 upload_bga_ref_to_texture(&current[layer], imgres,

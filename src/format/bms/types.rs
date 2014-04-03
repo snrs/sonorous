@@ -91,7 +91,10 @@ impl fmt::Show for Key {
     /// Returns a two-letter representation of alphanumeric key.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         assert!(self.is_valid());
-        write!(f.buf, "{}{}", BASE36_MAP[**self / 36] as char, BASE36_MAP[**self % 36] as char)
+        let sixteens = **self / 36;
+        let ones = **self % 36;
+        write!(f.buf, "{}{}", BASE36_MAP[sixteens as uint] as char,
+                              BASE36_MAP[ones as uint] as char)
     }
 }
 
@@ -180,9 +183,12 @@ impl fmt::Show for PartialKey {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         assert!(self.is_valid());
         if **self < 0 {
-            write!(f.buf, "{}", BASE36_MAP[-**self - 1] as char)
+            write!(f.buf, "{}", BASE36_MAP[(-**self - 1) as uint] as char)
         } else {
-            write!(f.buf, "{}{}", BASE36_MAP[**self / 36] as char, BASE36_MAP[**self % 36] as char)
+            let sixteens = **self / 36;
+            let ones = **self % 36;
+            write!(f.buf, "{}{}", BASE36_MAP[sixteens as uint] as char,
+                                  BASE36_MAP[ones as uint] as char)
         }
     }
 }
