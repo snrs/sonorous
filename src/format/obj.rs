@@ -9,7 +9,7 @@ use std::fmt;
 /// A game play element mapped to the single input element (for example, button) and the screen
 /// area (henceforth "lane").
 #[deriving(Eq,TotalEq,Clone)]
-pub struct Lane(uint);
+pub struct Lane(pub uint);
 
 /// The maximum number of lanes.
 pub static NLANES: uint = 72;
@@ -41,7 +41,7 @@ pub static NLAYERS: uint = 4;
 /// Beats per minute. Used as a conversion factor between the time position and actual time
 /// in BMS.
 #[deriving(Eq,Show,Clone)]
-pub struct BPM(f64);
+pub struct BPM(pub f64);
 
 impl Deref<f64> for BPM {
     fn deref<'a>(&'a self) -> &'a f64 {

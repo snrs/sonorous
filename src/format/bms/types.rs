@@ -10,7 +10,7 @@ use format::obj::Lane;
 /// Two-letter alphanumeric identifier used for virtually everything, including resource
 /// management, variable BPM and chart specification.
 #[deriving(Eq,Ord,TotalEq,TotalOrd,Clone)]
-pub struct Key(int);
+pub struct Key(pub int);
 
 /// The number of all possible alphanumeric keys.
 pub static MAXKEY: int = 36*36;
@@ -101,7 +101,7 @@ impl fmt::Show for Key {
 /// Same as `Key` but accepts one-letter alphanumeric keys, encoded as a negative number
 /// from -1 (`0`) to -36 (`Z`) which is invalid in a plain `Key`.
 #[deriving(Eq,Ord,Clone)]
-pub struct PartialKey(int);
+pub struct PartialKey(pub int);
 
 impl Deref<int> for PartialKey {
     fn deref<'a>(&'a self) -> &'a int {

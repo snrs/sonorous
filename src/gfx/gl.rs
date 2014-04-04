@@ -291,7 +291,7 @@ fn with_prepared_surface<R>(
 }
 
 /// An SDL surface prepared for uploading to OpenGL.
-pub struct PreparedSurface(~video::Surface);
+pub struct PreparedSurface(pub ~video::Surface);
 
 impl Deref<video::Surface> for PreparedSurface {
     fn deref<'a>(&'a self) -> &'a video::Surface {

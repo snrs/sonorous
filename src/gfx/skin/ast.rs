@@ -80,7 +80,7 @@ pub struct Rect { pub p: Pos, pub q: Pos }
 
 /// An identifier to the hook. Different kind of hooks can share the same identifier.
 #[deriving(Eq,TotalEq,Hash,Show)]
-pub struct Id(~str);
+pub struct Id(pub ~str);
 
 impl Id {
     /// Returns a slice of the identifier for a convenient matching.

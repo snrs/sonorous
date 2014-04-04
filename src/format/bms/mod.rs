@@ -48,11 +48,11 @@ pub mod load;
 
 /// Sound reference.
 #[deriving(Eq,TotalEq,Clone)]
-pub struct SoundRef(Key);
+pub struct SoundRef(pub Key);
 
 /// Image reference.
 #[deriving(Eq,TotalEq,Clone)]
-pub struct ImageRef(Key);
+pub struct ImageRef(pub Key);
 
 impl Deref<Key> for SoundRef {
     fn deref<'a>(&'a self) -> &'a Key {
@@ -105,7 +105,7 @@ pub enum PlayMode {
 /// Difficulty level specified by the author. This maps to BMS #DIFFICULTY command. Does not affect
 /// the actual game play but affects the selection screen by grouping related BMSes.
 #[deriving(Eq,TotalEq,Ord,Clone)]
-pub struct Difficulty(int);
+pub struct Difficulty(pub int);
 
 impl Difficulty {
     /// Returns a string for representing the difficulty if any. This is used only for convenience.
