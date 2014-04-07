@@ -6,10 +6,11 @@
 
 use std::{slice, cmp, num};
 use std::rc::Rc;
+use libc;
 use rand::Rng;
 
 use sdl::{get_ticks, event};
-use ext::sdl_mixer;
+use sdl_mixer;
 use format::obj::*;
 use format::timeline::TimelineInfo;
 use format::pointer::*;
@@ -384,8 +385,8 @@ impl Player {
 
     /// Allocate more SDL_mixer channels without stopping already playing channels.
     pub fn allocate_more_channels(&mut self, howmany: uint) {
-        let howmany = howmany as ::std::libc::c_int;
-        let nchannels = sdl_mixer::allocate_channels(-1 as ::std::libc::c_int);
+        let howmany = howmany as libc::c_int;
+        let nchannels = sdl_mixer::allocate_channels(-1 as libc::c_int);
         let nchannels = sdl_mixer::allocate_channels(nchannels + howmany) as uint;
         if self.lastchsnd.len() < nchannels {
             self.lastchsnd.grow(nchannels, &None);
@@ -400,7 +401,7 @@ impl Player {
         if self.sndres[sref].chunk().is_none() {
             return;
         }
-        let lastch = self.sndlastch[sref].map(|ch| ch as ::std::libc::c_int);
+        let lastch = self.sndlastch[sref].map(|ch| ch as libc::c_int);
 
         // try to play on the last channel if it is not occupied by other sounds (in this case
         // the last channel info is removed)

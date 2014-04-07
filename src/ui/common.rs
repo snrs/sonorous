@@ -6,13 +6,14 @@
 
 #![macro_escape]
 
+use libc;
 use sdl::event;
 use util::console::{printerr, printerrln};
 
 /// Immediately terminates the program with given exit code.
 pub fn exit(exitcode: int) -> ! {
     // Rust: `os::set_exit_status` doesn't immediately terminate the program.
-    unsafe { ::std::libc::exit(exitcode as ::std::libc::c_int); }
+    unsafe { libc::exit(exitcode as libc::c_int); }
 }
 
 /// Exits with an error message. Internally used in the `die!` macro below.
@@ -74,7 +75,7 @@ pub fn update_line(s: &str) {
 /// refused to do so or the platform is unsupported.
 #[cfg(target_os = "win32")]
 pub fn get_path_from_dialog() -> Option<Path> {
-    use std::{str, mem, libc, cast};
+    use std::{str, mem, cast};
     use std::ptr::{null, mut_null};
     use util::std::str::StrUtil;
     use ext::win32;

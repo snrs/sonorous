@@ -8,11 +8,11 @@
 
 //! Additional bindings for SDL_mixer.
 
-use std::libc::c_int;
+use libc::c_int;
 pub use sdl_mixer::*;
 
 pub mod ll {
-    use std::libc::c_int;
+    use libc::c_int;
     extern {
         pub fn Mix_Volume(channel: c_int, volume: c_int) -> c_int;
         pub fn Mix_ReserveChannels(num: c_int) -> c_int;

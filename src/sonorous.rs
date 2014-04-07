@@ -25,6 +25,7 @@
 #![license = "GPLv2+"]
 
 #[phase(syntax, link)] extern crate log;
+extern crate libc;
 extern crate rand;
 extern crate collections;
 extern crate serialize;
@@ -64,7 +65,6 @@ extern crate sqlite3;
 pub mod ext {
     //! Bindings to external libraries or APIs.
     pub mod sdl;
-    pub mod sdl_mixer;
     pub mod smpeg;
     pub mod win32;
 }
