@@ -16,9 +16,9 @@ use std::container::Container;
 use std::default::Default;
 use std::slice::Vector;
 
-/// A vector that can hold either `&'r [T]` or `~[T]`.
+/// A vector that can hold either `&'r [T]` or `Vec<T>`.
 pub enum MaybeOwnedVec<'r,T> {
-    OwnedVec(~[T]),
+    OwnedVec(Vec<T>),
     VecSlice(&'r [T]),
 }
 
@@ -49,6 +49,13 @@ pub trait IntoMaybeOwnedVec<'r,T> {
 }
 
 impl<T> IntoMaybeOwnedVec<'static,T> for ~[T] {
+    #[inline]
+    fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'static,T> {
+        OwnedVec(FromIterator::from_iter(self.move_iter()))
+    }
+}
+
+impl<T> IntoMaybeOwnedVec<'static,T> for Vec<T> {
     #[inline]
     fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'static,T> { OwnedVec(self) }
 }

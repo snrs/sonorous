@@ -120,9 +120,9 @@ pub struct KeySpec {
     pub split: uint,
     /// The order of significant lanes. The first `nleftkeys` lanes go to the left side and
     /// the remaining lanes go to the right side.
-    pub order: ~[Lane],
+    pub order: Vec<Lane>,
     /// The type of lanes.
-    pub kinds: ~[Option<KeyKind>]
+    pub kinds: Vec<Option<KeyKind>>,
 }
 
 impl KeySpec {
@@ -150,13 +150,13 @@ impl KeySpec {
 
     /// Removes insignificant lanes.
     pub fn filter_timeline<S:Clone,I:Clone>(&self, timeline: &mut Timeline<S,I>) {
-        filter_lanes(timeline, self.order);
+        filter_lanes(timeline, self.order.as_slice());
     }
 }
 
 /// Parses the key specification from the string.
-pub fn parse_key_spec(s: &str) -> Option<~[(Lane, KeyKind)]> {
-    let mut specs = ~[];
+pub fn parse_key_spec(s: &str) -> Option<Vec<(Lane, KeyKind)>> {
+    let mut specs = Vec::new();
     let mut s = s.trim_left();
     while !s.is_empty() {
         let mut chan = Key::dummy();
@@ -260,7 +260,8 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
             (leftkeys.clone().unwrap_or(~""), rightkeys.clone().unwrap_or(~""))
         };
 
-    let mut keyspec = ~KeySpec { split: 0, order: ~[], kinds: ~[None, ..NLANES] };
+    let mut keyspec = ~KeySpec { split: 0, order: Vec::new(),
+                                 kinds: Vec::from_fn(NLANES, |_| None) };
     let parse_and_add = |keyspec: &mut KeySpec, keys: &str| -> Option<uint> {
         match parse_key_spec(keys) {
             None => None,
@@ -268,9 +269,9 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
             Some(left) => {
                 let mut err = false;
                 for &(lane,kind) in left.iter() {
-                    if keyspec.kinds[*lane].is_some() { err = true; break; }
+                    if keyspec.kinds.as_slice()[*lane].is_some() { err = true; break; }
                     keyspec.order.push(lane);
-                    keyspec.kinds[*lane] = Some(kind);
+                    keyspec.kinds.as_mut_slice()[*lane] = Some(kind);
                 }
                 if err {None} else {Some(left.len())}
             }

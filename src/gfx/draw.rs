@@ -163,13 +163,13 @@ impl ProgramForTextures {
 /// `ui::screen::Screen::draw_shaded` for the initial invocation.
 pub struct ShadedDrawing {
     pub prim: GLenum,
-    pub vertices: ~[(f32,f32,u8,u8,u8,u8)],
+    pub vertices: Vec<(f32,f32,u8,u8,u8,u8)>,
 }
 
 impl ShadedDrawing {
     /// Creates a new state.
     pub fn new(prim: GLenum) -> ShadedDrawing {
-        ShadedDrawing { prim: prim, vertices: ~[] }
+        ShadedDrawing { prim: prim, vertices: Vec::new() }
     }
 }
 
@@ -272,7 +272,7 @@ impl ShadedDrawingTraits for ShadedDrawing {
         program.color.define_pointer_u8(4, true, rowsize, coloroffset);
 
         let ShadedDrawing { prim, vertices } = self;
-        vertexbuf.upload(vertices, gl::DYNAMIC_DRAW);
+        vertexbuf.upload(vertices.as_slice(), gl::DYNAMIC_DRAW);
         gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }
@@ -283,7 +283,7 @@ pub struct TexturedDrawing {
     pub width_recip: f32,
     pub height_recip: f32,
     pub prim: GLenum,
-    pub vertices: ~[(f32,f32,f32,f32,u8,u8,u8,u8)],
+    pub vertices: Vec<(f32,f32,f32,f32,u8,u8,u8,u8)>,
 }
 
 impl TexturedDrawing {
@@ -292,7 +292,7 @@ impl TexturedDrawing {
         let width_recip = 1.0 / (texture.width as f32);
         let height_recip = 1.0 / (texture.height as f32);
         TexturedDrawing { width_recip: width_recip, height_recip: height_recip,
-                          prim: prim, vertices: ~[] }
+                          prim: prim, vertices: Vec::new() }
     }
 }
 
@@ -395,7 +395,7 @@ impl TexturedDrawingTraits for TexturedDrawing {
         texture.bind(0);
 
         let TexturedDrawing { prim, vertices, .. } = self;
-        vertexbuf.upload(vertices, gl::DYNAMIC_DRAW);
+        vertexbuf.upload(vertices.as_slice(), gl::DYNAMIC_DRAW);
         gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }

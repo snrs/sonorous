@@ -95,7 +95,7 @@ struct Block {
 /// A generic BMS preprocessor. `T` is normally a BMS command, but there is no restriction.
 pub struct Preprocessor<'r,T,R> {
     /// The current block informations.
-    blocks: ~[Block],
+    blocks: Vec<Block>,
     /// Random number generator.
     r: &'r mut R,
 }
@@ -103,7 +103,7 @@ pub struct Preprocessor<'r,T,R> {
 impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
     /// Creates a new preprocessor with given RNG.
     pub fn new(r: &'r mut R) -> Preprocessor<'r,T,R> {
-        let blocks = ~[Block { val: None, state: Outside, skip: false }];
+        let blocks = vec!(Block { val: None, state: Outside, skip: false });
         Preprocessor { blocks: blocks, r: r }
     }
 
@@ -116,7 +116,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
     /// Adds the non-flow command (or any appropriate data) into the preprocessor.
     /// `messages` will have zero or more messages inserted.
     /// `result` will have zero or more preprocessed commands (or any appropriate data) inserted.
-    pub fn feed_other(&mut self, cmd: T, _messages: &mut ~[BmsMessage], result: &mut ~[T]) {
+    pub fn feed_other(&mut self, cmd: T, _messages: &mut Vec<BmsMessage>, result: &mut Vec<T>) {
         if !self.inactive() {
             result.push(cmd);
         }
@@ -126,7 +126,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
     /// `messages` will have zero or more messages inserted.
     /// `result` will have zero or more preprocessed commands (or any appropriate data) inserted.
     pub fn feed_flow(&mut self, _lineno: Option<uint>, flow: &BmsFlowCommand,
-                     messages: &mut ~[BmsMessage], _result: &mut ~[T]) {
+                     messages: &mut Vec<BmsMessage>, _result: &mut Vec<T>) {
         let inactive = self.inactive();
         match *flow {
             BmsRandom(val) | BmsSetRandom(val) => {
@@ -153,7 +153,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
                 let val = if val <= 0 {None} else {Some(val)};
                 let haspriorelse = match *flow { BmsElseIf(..) => true, _ => false };
 
-                let last = &mut self.blocks[self.blocks.len() - 1];
+                let last = self.blocks.mut_last().unwrap();
                 last.state =
                     if (!haspriorelse && !last.state.inactive()) || last.state == Ignore {
                         if val.is_none() || val != last.val {Ignore} else {Process}
@@ -162,7 +162,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
                     };
             }
             BmsElse => {
-                let last = &mut self.blocks[self.blocks.len() - 1];
+                let last = self.blocks.mut_last().unwrap();
                 last.state = if last.state == Ignore {Process} else {NoFurther};
             }
             BmsEndIf => {
@@ -170,8 +170,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
                     if idx > 0 { self.blocks.truncate(idx + 1); }
                 }
 
-                let last = &mut self.blocks[self.blocks.len() - 1];
-                last.state = Outside;
+                self.blocks.mut_last().unwrap().state = Outside;
             }
             BmsSwitch(..) | BmsSetSwitch(..) | BmsEndSw | BmsCase(..) | BmsSkip | BmsDef => {
                 messages.push(BmsHasUnimplementedFlow);
@@ -182,7 +181,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
     /// Terminates the preprocessor.
     /// `messages` will have zero or more messages inserted.
     /// `result` will have zero or more preprocessed commands (or any appropriate data) inserted.
-    pub fn finish(&mut self, _messages: &mut ~[BmsMessage], _result: &mut ~[T]) {
+    pub fn finish(&mut self, _messages: &mut Vec<BmsMessage>, _result: &mut Vec<T>) {
     }
 }
 
@@ -202,8 +201,8 @@ mod tests {
     #[test]
     fn test_no_flow() {
         with_pp!(|pp| {
-            let mut messages = ~[];
-            let mut out = ~[];
+            let mut messages = Vec::new();
+            let mut out = Vec::new();
             pp.feed_other(42, &mut messages, &mut out);
             assert!(messages.as_slice() == []);
             assert!(out.as_slice() == [42]);

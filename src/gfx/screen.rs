@@ -155,11 +155,11 @@ impl Screen {
         let mut surfaceflags;
         let mut videoflags;
         if fullscreen {
-            surfaceflags = ~[];
-            videoflags = ~[video::Fullscreen];
+            surfaceflags = vec!();
+            videoflags = vec!(video::Fullscreen);
         } else {
-            surfaceflags = ~[video::SWSurface];
-            videoflags = ~[video::DoubleBuf];
+            surfaceflags = vec!(video::SWSurface);
+            videoflags = vec!(video::DoubleBuf);
         }
         if GLState::uses_sdl_ogl_support() {
             // SDL_OPENGL flag cannot be used in Windows as ANGLE should own the screen context.
@@ -167,7 +167,7 @@ impl Screen {
         }
 
         let screen = try!(video::set_video_mode(width as int, height as int, 32,
-                                                surfaceflags, videoflags));
+                                                surfaceflags.as_slice(), videoflags.as_slice()));
         let glstate = try!(GLState::new());
 
         gl::enable(gl::BLEND);

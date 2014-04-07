@@ -84,7 +84,7 @@ pub trait Scene {
 /// Runs given scene and other additionally spawned scenes.
 pub fn run_scene(scene: ~Scene:) {
     let mut current = scene;
-    let mut stack = ~[];
+    let mut stack = Vec::new();
     loop {
         let mut result = current.activate();
         match result {

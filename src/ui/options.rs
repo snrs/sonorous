@@ -142,7 +142,7 @@ pub enum ParsingResult {
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
 pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult {
-    let longargs: HashMap<~str,char> = (~[
+    let longargs: HashMap<~str,char> = vec!(
         (~"--help", 'h'), (~"--version", 'V'), (~"--speed", 'a'),
         (~"--autoplay", 'v'), (~"--exclusive", 'x'), (~"--sound-only", 'X'),
         (~"--windowed", 'w'), (~"--no-fullscreen", 'w'),
@@ -151,8 +151,8 @@ pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult 
         (~"--random", 'r'), (~"--random-ex", 'R'), (~"--preset", 'k'),
         (~"--key-spec", 'K'), (~"--bga", ' '), (~"--no-bga", 'B'),
         (~"--movie", ' '), (~"--no-movie", 'M'), (~"--joystick", 'j'),
-        (~"--encoding", 'E'), (~"--skin-root", 'Y'), (~"--debug", 'Z'),
-    ]).move_iter().collect();
+        (~"--encoding", 'E'), (~"--skin-root", 'Y'), (~"--debug", 'Z')
+    ).move_iter().collect();
 
     let nargs = args.len();
 

@@ -148,7 +148,7 @@ pub enum TextSource {
     ScalarText(Id, ScalarFormat),
     StaticText(~str),
     TextBlock(Block<~TextSource>),
-    TextConcat(~[TextSource]),
+    TextConcat(Vec<TextSource>),
 }
 
 /// The main skin commands.
@@ -164,11 +164,11 @@ pub enum Node {
     Text { pub at: Pos, pub size: f32, pub anchor: (f32,f32),
            pub color: Gradient, pub text: TextSource },
     // clipping group, resets the clipping region after the group
-    Group(~[Node]),
+    Group(Vec<Node>),
     // reclipping command
     Clip { pub at: Rect },
     // block
-    Block(Block<~[Node]>),
+    Block(Block<Vec<Node>>),
 }
 
 /// The top-level parsed skin data.
@@ -176,7 +176,7 @@ pub struct Skin {
     /// The predefined scalar values.
     pub scalars: HashMap<~str,Scalar<'static>>,
     /// The list of commands.
-    pub nodes: ~[Node],
+    pub nodes: Vec<Node>,
 }
 
 impl Skin {

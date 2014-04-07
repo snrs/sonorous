@@ -64,7 +64,7 @@ impl Renderer {
     pub fn render(&mut self, screen: &mut Screen, hook: &Hook) {
         let skin = self.skin.clone();
         let mut state = State::new(self, screen);
-        state.nodes(hook, skin.deref().nodes);
+        state.nodes(hook, skin.deref().nodes.as_slice());
         state.finish();
     }
 }
@@ -441,7 +441,7 @@ impl<'a> State<'a> {
                     let dy = self.dy;
                     let w = self.w;
                     let h = self.h;
-                    self.nodes(hook, *nodes);
+                    self.nodes(hook, nodes.as_slice());
                     self.dx = dx;
                     self.dy = dy;
                     self.w = w;
@@ -461,7 +461,7 @@ impl<'a> State<'a> {
                 }
                 Block(ref block) => {
                     State::block(hook, block, |hook_, nodes_| {
-                        self.nodes(hook_, *nodes_)
+                        self.nodes(hook_, nodes_.as_slice())
                     });
                 }
             }

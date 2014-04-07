@@ -62,7 +62,7 @@ pub fn preprocess_bms<'r,R:Rng>(
 /// Internal message from the worker task to the main task.
 enum Message {
     /// The worker has scanned more files.
-    PushFiles(~[Path]),
+    PushFiles(Vec<Path>),
     /// The worker has finished scanning files.
     NoMoreFiles,
     /// The worker has failed to read and/or load the BMS file. Error message follows.
@@ -71,7 +71,7 @@ enum Message {
     BmsHashRead(Path,[u8, ..16]),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
-    BmsLoaded(Path,~PreprocessedBms,~[(Option<uint>,bms::diag::BmsMessage)]),
+    BmsLoaded(Path,~PreprocessedBms,Vec<(Option<uint>,bms::diag::BmsMessage)>),
     /// The worker has loaded the banner image (the second `~str`) for the BMS file (the first
     /// `Path`). This may be sent after `BmsLoaded` message. Due to the same reason as above
     /// the main task should ignore the message with non-current paths.
@@ -89,13 +89,13 @@ pub struct PreloadedData {
     /// we don't know lengths of key sounds and BGMs yet.
     pub duration: f64,
     /// A list of diagnostic messages returned during the loading.
-    pub messages: ~[(Option<uint>,bms::diag::BmsMessage)],
+    pub messages: Vec<(Option<uint>,bms::diag::BmsMessage)>,
 }
 
 impl PreloadedData {
     /// Creates and calculates some necessary informations from given processed BMS and messages.
     pub fn new(preproc: ~PreprocessedBms,
-               messages: ~[(Option<uint>,bms::diag::BmsMessage)]) -> PreloadedData {
+               messages: Vec<(Option<uint>,bms::diag::BmsMessage)>) -> PreloadedData {
         let originoffset = preproc.infos.originoffset;
         let duration = preproc.bms.timeline.duration(originoffset, |_| 0.0);
         PreloadedData { preproc: preproc, banner: None, duration: duration, messages: messages }
@@ -136,7 +136,7 @@ pub struct SelectingScene {
     /// The root path of the scanner.
     pub root: Path,
     /// A list of scanned entries.
-    pub files: ~[Entry],
+    pub files: Vec<Entry>,
     /// Set to true when the scanner finished scanning.
     pub filesdone: bool,
     /// The index of the topmost entry visible on the screen.
@@ -202,8 +202,9 @@ impl SelectingScene {
         let root = os::make_absolute(root);
         let (sender, receiver) = comm::channel();
         ~SelectingScene {
-            screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)), root: root,
-            files: ~[], filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
+            screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)),
+            root: root, files: Vec::new(), filesdone: false,
+            scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
             receiver: receiver, sender: sender, keepgoing: Arc::new(RWLock::new(true)),
         }
     }
@@ -282,7 +283,7 @@ impl SelectingScene {
 
             let load_with_reader = |mut f| {
                 let mut r = task_rng();
-                let mut diags = ~[];
+                let mut diags = Vec::new();
                 let loaderopts = opts.deref().loader_options();
 
                 let preproc = {
@@ -329,7 +330,7 @@ impl SelectingScene {
     /// Returns a `Path` to the currently selected entry if any.
     pub fn current<'r>(&'r self) -> Option<&'r Path> {
         if self.offset < self.files.len() {
-            Some(&self.files[self.offset].path)
+            Some(&self.files.as_slice()[self.offset].path)
         } else {
             None
         }
@@ -489,7 +490,7 @@ impl Scene for SelectingScene {
                 }
                 comm::Data(BmsHashRead(bmspath,hash)) => {
                     if !self.is_current(&bmspath) { continue; }
-                    self.files[self.offset].hash = Some(hash);
+                    self.files.as_mut_slice()[self.offset].hash = Some(hash);
                 }
                 comm::Data(BmsLoaded(bmspath,preproc,messages)) => {
                     if !self.is_current(&bmspath) { continue; }

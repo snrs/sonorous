@@ -29,10 +29,10 @@ pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modf, r: &mu
                                   keyspec: &KeySpec, begin: uint, end: uint) {
     use timeline_modf = format::timeline::modf;
 
-    let mut lanes = ~[];
+    let mut lanes = Vec::new();
     for i in range(begin, end) {
-        let lane = keyspec.order[i];
-        let kind = keyspec.kinds[*lane];
+        let lane = keyspec.order.as_slice()[i];
+        let kind = keyspec.kinds.as_slice()[*lane];
         if modf == ShuffleExModf || modf == RandomExModf ||
                 kind.map_or(false, |kind| kind.counts_as_key()) {
             lanes.push(lane);
@@ -40,9 +40,9 @@ pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modf, r: &mu
     }
 
     match modf {
-        MirrorModf => timeline_modf::mirror(timeline, lanes),
-        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(timeline, r, lanes),
-        RandomModf | RandomExModf => timeline_modf::randomize(timeline, r, lanes)
+        MirrorModf => timeline_modf::mirror(timeline, lanes.as_slice()),
+        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(timeline, r, lanes.as_slice()),
+        RandomModf | RandomExModf => timeline_modf::randomize(timeline, r, lanes.as_slice())
     };
 }
 
@@ -144,16 +144,16 @@ pub struct Player {
 
     /// Set to true if the corresponding object in `bms.objs` had graded and should not be
     /// graded twice. Its length equals to that of `bms.objs`.
-    pub nograding: ~[bool],
+    pub nograding: Vec<bool>,
     /// Sound resources.
-    pub sndres: ~[SoundResource],
+    pub sndres: Vec<SoundResource>,
     /// A sound chunk used for beeps. It always plays on the channel #0.
     pub beep: ~sdl_mixer::Chunk,
     /// Last channels in which the corresponding sound in `sndres` was played.
-    pub sndlastch: ~[Option<uint>],
+    pub sndlastch: Vec<Option<uint>>,
     /// Indices to last sounds which the channel has played. For every `x`, if `sndlastch[x] ==
     /// Some(y)` then `sndlastchmap[y] == Some(x)` and vice versa.
-    pub lastchsnd: ~[Option<uint>],
+    pub lastchsnd: Vec<Option<uint>>,
     /// Currently active BGA layers.
     pub bga: BGAState,
 
@@ -180,7 +180,7 @@ pub struct Player {
     /// A pointer to the lower bound of the grading area containing `cur`.
     pub checked: BmsPointer,
     /// A pointer to objects for the start of LN which grading is in progress.
-    pub thru: ~[Option<BmsPointer>],
+    pub thru: Vec<Option<BmsPointer>>,
     /// The pointer to the first encountered `SetBPM` object with a negative value. This is
     /// a special casing for negative BPMs (ugh!); when this is set, the normal timeline routine is
     /// disabled and `cur` etc. always move backwards with given BPM. Everything except for
@@ -250,7 +250,7 @@ fn previous_speed_mark(current: f64) -> Option<f64> {
 
 /// Creates a beep sound played on the play speed change.
 fn create_beep() -> ~sdl_mixer::Chunk {
-    let samples: ~[i32] = slice::from_fn::<i32>(12000, // approx. 0.14 seconds
+    let samples: Vec<i32> = Vec::from_fn(12000, // approx. 0.14 seconds
         // sawtooth wave at 3150 Hz, quadratic decay after 0.02 seconds.
         |i| { let i = i as i32; (i%28-14) * cmp::min(2000, (12000-i)*(12000-i)/50000) });
     unsafe {
@@ -264,7 +264,7 @@ impl Player {
     /// Creates a new player object. The player object owns other related structures, including
     /// the options, BMS file, key specification, input mapping and sound resources.
     pub fn new(opts: Rc<Options>, bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec,
-               keymap: ~KeyMap, sndres: ~[SoundResource]) -> Player {
+               keymap: ~KeyMap, sndres: Vec<SoundResource>) -> Player {
         // we no longer need the full `Bms` structure.
         let Bms { meta, timeline, .. } = bms;
         let timeline = Rc::new(timeline);
@@ -282,18 +282,19 @@ impl Player {
         // set all pointers to the origin and let the `tick` do the initial calculation
         let origin = timeline.pointer(VirtualPos, originoffset);
         let duration = timeline.deref().duration(originoffset,
-                                                 |sref| sndres[**sref as uint].duration());
+            |sref| sndres.as_slice()[**sref as uint].duration());
         let mut player = Player {
             opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
             keyspec: keyspec, keymap: keymap,
 
-            nograding: slice::from_elem(nobjs, false), sndres: sndres, beep: create_beep(),
-            sndlastch: slice::from_elem(nsounds, None), lastchsnd: ~[], bga: initial_bga_state(),
+            nograding: Vec::from_elem(nobjs, false), sndres: sndres, beep: create_beep(),
+            sndlastch: Vec::from_elem(nsounds, None), lastchsnd: Vec::new(),
+            bga: initial_bga_state(),
 
             playspeed: initplayspeed, targetspeed: None, bpm: initbpm, now: now, origintime: now,
 
             origin: origin.clone(), cur: origin.clone(), checked: origin.clone(),
-            thru: slice::from_fn(NLANES, |_| None), reverse: None,
+            thru: Vec::from_fn(NLANES, |_| None), reverse: None,
 
             gradefactor: gradefactor, lastgrade: None, gradecounts: [0, ..NGRADES],
             lastcombo: 0, bestcombo: 0, score: 0, gauge: initialgauge, survival: survival,
@@ -398,16 +399,16 @@ impl Player {
     /// key sounds.
     pub fn play_sound(&mut self, sref: SoundRef, bgm: bool) {
         let sref = **sref as uint;
-        if self.sndres[sref].chunk().is_none() {
+        if self.sndres.as_slice()[sref].chunk().is_none() {
             return;
         }
-        let lastch = self.sndlastch[sref].map(|ch| ch as libc::c_int);
+        let lastch = self.sndlastch.as_slice()[sref].map(|ch| ch as libc::c_int);
 
         // try to play on the last channel if it is not occupied by other sounds (in this case
         // the last channel info is removed)
         let mut ch;
         loop {
-            ch = self.sndres[sref].chunk().unwrap().play(lastch, 0);
+            ch = self.sndres.as_slice()[sref].chunk().unwrap().play(lastch, 0);
             if ch >= 0 { break; }
             self.allocate_more_channels(32);
         }
@@ -417,9 +418,11 @@ impl Player {
         sdl_mixer::group_channel(Some(ch), Some(group));
 
         let ch = ch as uint;
-        for &idx in self.lastchsnd[ch].iter() { self.sndlastch[idx] = None; }
-        self.sndlastch[sref] = Some(ch);
-        self.lastchsnd[ch] = Some(sref);
+        for &idx in self.lastchsnd.as_slice()[ch].iter() {
+            self.sndlastch.as_mut_slice()[idx] = None;
+        }
+        self.sndlastch.as_mut_slice()[sref] = Some(ch);
+        self.lastchsnd.as_mut_slice()[ch] = Some(sref);
     }
 
     /// Plays a given sound if `sref` is not zero. This reflects the fact that an alphanumeric
@@ -476,7 +479,7 @@ impl Player {
         // if LN grading is in progress and it is not within the threshold then
         // MISS grade is issued
         let nextlndone =
-            self.thru[*lane].as_ref().and_then(|thru| {
+            self.thru.as_slice()[*lane].as_ref().and_then(|thru| {
                 thru.find_next_of_type(|obj| {
                     obj.object_lane() == Some(lane) &&
                     obj.is_lndone()
@@ -485,12 +488,12 @@ impl Player {
         for p in nextlndone.iter() {
             let delta = (p.loc.vtime - self.cur.loc.vtime) * self.gradefactor;
             if num::abs(delta) < BAD_CUTOFF {
-                self.nograding[p.index] = true;
+                self.nograding.as_mut_slice()[p.index] = true;
             } else {
                 self.update_grade_to_miss();
             }
         }
-        self.thru[*lane] = None;
+        self.thru.as_mut_slice()[*lane] = None;
     }
 
     /// Processes the press event at given lane:
@@ -513,11 +516,12 @@ impl Player {
                 obj.object_lane() == Some(lane) && obj.is_gradable()
             });
         for p in gradable.iter() {
-            if p.index >= self.checked.index && !self.nograding[p.index] && !p.is_lndone() {
+            if p.index >= self.checked.index && !self.nograding.as_slice()[p.index] &&
+                                                !p.is_lndone() {
                 let dist = (p.loc.vtime - self.cur.loc.vtime) * self.gradefactor;
                 if num::abs(dist) < BAD_CUTOFF {
-                    if p.is_lnstart() { self.thru[*lane] = Some(p.clone()); }
-                    self.nograding[p.index] = true;
+                    if p.is_lnstart() { self.thru.as_mut_slice()[*lane] = Some(p.clone()); }
+                    self.nograding.as_mut_slice()[p.index] = true;
                     self.update_grade_from_distance(dist);
                 }
             }
@@ -592,17 +596,17 @@ impl Player {
                 let dist = (self.cur.loc.vtime - p.loc.vtime) * self.gradefactor;
                 if dist < BAD_CUTOFF { break; }
 
-                if !self.nograding[p.index] {
+                if !self.nograding.as_slice()[p.index] {
                     for &Lane(lane) in p.object_lane().iter() {
                         let missable =
                             match p.data() {
                                 Visible(..) | LNStart(..) => true,
-                                LNDone(..) => self.thru[lane].is_some(),
+                                LNDone(..) => self.thru.as_slice()[lane].is_some(),
                                 _ => false,
                             };
                         if missable {
                             self.update_grade_to_miss();
-                            self.thru[lane] = None;
+                            self.thru.as_mut_slice()[lane] = None;
                         }
                     }
                 }
@@ -670,7 +674,7 @@ impl Player {
                 match p.data() {
                     Bomb(lane,sref,damage) if self.key_pressed(lane) => {
                         // ongoing long note is not graded twice
-                        self.thru[*lane] = None;
+                        self.thru.as_mut_slice()[*lane] = None;
                         for &sref in sref.iter() {
                             self.play_sound(sref, false);
                         }

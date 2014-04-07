@@ -38,8 +38,8 @@ impl<T:FromJson> FromJson for ~T {
     }
 }
 
-impl<T:FromJson> FromJson for ~[T] {
-    fn from_json(json: Json) -> Result<~[T],~str> {
+impl<T:FromJson> FromJson for Vec<T> {
+    fn from_json(json: Json) -> Result<Vec<T>,~str> {
         match json {
             List(l) => result::collect(l.move_iter().map(from_json::<T>)),
             _ => Err(~"expected a list"),

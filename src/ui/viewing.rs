@@ -214,7 +214,7 @@ pub struct ViewingScene {
     /// Display screen.
     pub screen: Rc<RefCell<Screen>>,
     /// Image resources.
-    pub imgres: ~[ImageResource],
+    pub imgres: Vec<ImageResource>,
     /// BGA canvas.
     pub bgacanvas: BGACanvas,
 }
@@ -222,9 +222,9 @@ pub struct ViewingScene {
 impl ViewingScene {
     /// Creates a new BGA-only scene context from the pre-created screen (usually by `init_video`)
     /// and pre-loaded image resources.
-    pub fn new(screen: Rc<RefCell<Screen>>, imgres: ~[ImageResource],
+    pub fn new(screen: Rc<RefCell<Screen>>, imgres: Vec<ImageResource>,
                player: Player) -> ~ViewingScene {
-        let bgacanvas = BGACanvas::new(imgres);
+        let bgacanvas = BGACanvas::new(imgres.as_slice());
         ~ViewingScene { parent: TextualViewingScene::new(player),
                         screen: screen, imgres: imgres, bgacanvas: bgacanvas }
     }
@@ -237,7 +237,7 @@ impl Scene for ViewingScene {
 
     fn tick(&mut self) -> SceneCommand {
         let cmd = self.parent.tick();
-        self.bgacanvas.update(&self.parent.player.bga, self.imgres);
+        self.bgacanvas.update(&self.parent.player.bga, self.imgres.as_slice());
         cmd
     }
 

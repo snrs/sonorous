@@ -296,7 +296,7 @@ pub trait ObjQueryOps<SoundRef:Clone,ImageRef:Clone> {
     /// Returns an associated lane if the data is an object.
     fn object_lane(&self) -> Option<Lane>;
     /// Returns all sounds associated to the data.
-    fn sounds(&self) -> ~[SoundRef];
+    fn sounds(&self) -> Vec<SoundRef>;
     /// Returns all sounds played when key is pressed.
     fn keydown_sound(&self) -> Option<SoundRef>;
     /// Returns all sounds played when key is unpressed.
@@ -305,7 +305,7 @@ pub trait ObjQueryOps<SoundRef:Clone,ImageRef:Clone> {
     /// currently pressed. Bombs are the only instance of this kind of sounds.
     fn through_sound(&self) -> Option<SoundRef>;
     /// Returns all images associated to the data.
-    fn images(&self) -> ~[ImageRef];
+    fn images(&self) -> Vec<ImageRef>;
     /// Returns an associated damage value when the object is activated.
     fn through_damage(&self) -> Option<Damage>;
 }
@@ -423,15 +423,15 @@ impl<S:Clone,I:Clone,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
         }
     }
 
-    fn sounds(&self) -> ~[S] {
+    fn sounds(&self) -> Vec<S> {
         match self.to_obj_data() {
-            Visible(_,Some(ref sref)) => ~[sref.clone()],
-            Invisible(_,Some(ref sref)) => ~[sref.clone()],
-            LNStart(_,Some(ref sref)) => ~[sref.clone()],
-            LNDone(_,Some(ref sref)) => ~[sref.clone()],
-            Bomb(_,Some(ref sref),_) => ~[sref.clone()],
-            BGM(ref sref) => ~[sref.clone()],
-            _ => ~[]
+            Visible(_,Some(ref sref)) |
+            Invisible(_,Some(ref sref)) |
+            LNStart(_,Some(ref sref)) |
+            LNDone(_,Some(ref sref)) |
+            Bomb(_,Some(ref sref),_) |
+            BGM(ref sref) => vec!(sref.clone()),
+            _ => Vec::new()
         }
     }
 
@@ -450,11 +450,11 @@ impl<S:Clone,I:Clone,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
         match self.to_obj_data() { Bomb(_,ref sref,_) => sref.clone(), _ => None }
     }
 
-    fn images(&self) -> ~[I] {
+    fn images(&self) -> Vec<I> {
         match self.to_obj_data() {
             SetBGA(_,ImageBGA(ref iref)) |
-            SetBGA(_,SlicedImageBGA(ref iref,_)) => ~[iref.clone()],
-            _ => ~[]
+            SetBGA(_,SlicedImageBGA(ref iref,_)) => vec!(iref.clone()),
+            _ => Vec::new()
         }
     }
 

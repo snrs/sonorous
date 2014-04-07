@@ -59,7 +59,7 @@ impl SearchContext {
                                  exts: &[&str]) -> Option<Path> {
         use std::ascii::StrAsciiExt;
 
-        let mut parts = ~[];
+        let mut parts = Vec::new();
         for part in path.split(|c: char| c == '/' || c == '\\') {
             if part.is_empty() { continue; }
             parts.push(part);

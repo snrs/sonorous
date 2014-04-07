@@ -4,7 +4,7 @@
 
 //! BMS loader. Uses a BMS parser (`format::bms::parse`) to produce `format::bms::Bms` structure.
 
-use std::{slice, iter, cmp};
+use std::{iter, cmp};
 use rand::Rng;
 
 use format::obj::*;
@@ -57,11 +57,11 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     let mut encoding = ("ascii", 0.0);
 
     let mut title = None;
-    let mut subtitles = ~[];
+    let mut subtitles = Vec::new();
     let mut genre = None;
     let mut artist = None;
-    let mut subartists = ~[];
-    let mut comments = ~[];
+    let mut subartists = Vec::new();
+    let mut comments = Vec::new();
     let mut stagefile = None;
     let mut banner = None;
     let mut basepath = None;
@@ -70,9 +70,9 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     let mut difficulty = None;
     let mut rank = 2;
     let /*mut*/ canvassize = (256, 256);
-    let mut sndpath = slice::from_elem(MAXKEY as uint, None);
-    let mut imgpath = slice::from_elem(MAXKEY as uint, None);
-    let mut imgslices = slice::from_elem(MAXKEY as uint, None);
+    let mut sndpath = Vec::from_elem(MAXKEY as uint, None);
+    let mut imgpath = Vec::from_elem(MAXKEY as uint, None);
+    let mut imgslices = Vec::from_elem(MAXKEY as uint, None);
 
     // A builder for objects.
     let mut builder = TimelineBuilder::new();
@@ -80,14 +80,14 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
     // A list of unprocessed data lines. They have to be sorted with a stable algorithm and
     // processed in the order of measure number.
-    let mut bmsline = ~[];
+    let mut bmsline = Vec::new();
     // A table of measure factors (#xxx02). They are eventually converted to `SetMeasureFactor`
     // objects.
-    let mut shortens = ~[];
+    let mut shortens = Vec::new();
     // A table of BPMs. Maps to BMS #BPMxx command.
-    let mut bpmtab = ~[DefaultBPM, ..MAXKEY];
+    let mut bpmtab = Vec::from_elem(MAXKEY as uint, DefaultBPM);
     // A table of the length of scroll stoppers. Maps to BMS #STOP/#STP commands.
-    let mut stoptab = ~[Seconds(0.0), ..MAXKEY];
+    let mut stoptab = Vec::from_elem(MAXKEY as uint, Seconds(0.0));
 
     // Allows LNs to be specified as a consecutive row of same or non-00 alphanumeric keys (MGQ
     // type, #LNTYPE 2). The default is to specify LNs as two endpoints (RDM type, #LNTYPE 1).
@@ -166,7 +166,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 if *bpm <= 0.0 {
                     diag!(BmsHasNonpositiveBPM at lineno);
                 }
-                bpmtab[i as uint] = bpm;
+                bpmtab.as_mut_slice()[i as uint] = bpm;
             }
 
             parse::BmsPlayer(1) => { mode = SinglePlay; }
@@ -200,17 +200,21 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 }
             }
 
-            parse::BmsWAV(Key(i), s) => { sndpath[i as uint] = Some(s.into_owned()); }
-            parse::BmsBMP(Key(i), s) => { imgpath[i as uint] = Some(s.into_owned()); }
+            parse::BmsWAV(Key(i), s) => {
+                sndpath.as_mut_slice()[i as uint] = Some(s.into_owned());
+            }
+            parse::BmsBMP(Key(i), s) => {
+                imgpath.as_mut_slice()[i as uint] = Some(s.into_owned());
+            }
             parse::BmsBGA(Key(i), Key(j), slice) => {
-                imgslices[i as uint] = Some((ImageRef(Key(j)), slice));
+                imgslices.as_mut_slice()[i as uint] = Some((ImageRef(Key(j)), slice));
             }
 
             parse::BmsStop(Key(i), dur) => {
                 if dur.sign() < 0 {
                     diag!(BmsHasNegativeSTOPDuration at lineno);
                 } else {
-                    stoptab[i as uint] = dur;
+                    stoptab.as_mut_slice()[i as uint] = dur;
                 }
             }
             parse::BmsStp(pos, dur) => {
@@ -281,7 +285,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // Replaces the reference to #BGA/#@BGA keys into a pair of the reference to #BMP keys
     // and corresponding `ImageSlice`, if possible.
     let imgref_to_bgaref = |iref: ImageRef| -> BGARef<ImageRef> {
-        match imgslices[**iref as uint] {
+        match imgslices.as_slice()[**iref as uint] {
             Some((iref, ref slice)) => SlicedImageBGA(iref.clone(), ~slice.clone()),
             None => ImageBGA(iref),
         }
@@ -317,10 +321,10 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 7 => { builder.add(t, SetBGA(Layer2, imgref_to_bgaref(ImageRef(v)))); }
 
                 // channel #08: BPM defined by #BPMxx
-                8 => { builder.add(t, SetBPM(bpmtab[*v as uint])); }
+                8 => { builder.add(t, SetBPM(bpmtab.as_slice()[*v as uint])); }
 
                 // channel #09: scroll stopper defined by #STOPxx
-                9 => { builder.add(t, Stop(stoptab[*v as uint])); }
+                9 => { builder.add(t, Stop(stoptab.as_slice()[*v as uint])); }
 
                 // channel #0A: BGA layer 3
                 10 => { builder.add(t, SetBGA(Layer3, imgref_to_bgaref(ImageRef(v)))); }
@@ -422,7 +426,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
         bmsline.sort_by(|a, b| (a.measure, a.chan).cmp(&(b.measure, b.chan)));
         for line in bmsline.iter() {
             let measure = line.measure as f64;
-            let data: ~[char] = line.data.chars().collect();
+            let data: Vec<char> = line.data.chars().collect();
             let max = data.len() / 2 * 2;
             let count = max as f64;
             for i in iter::range_step(0, max, 2) {

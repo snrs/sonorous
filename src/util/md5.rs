@@ -423,7 +423,7 @@ mod tests {
 
     #[bench]
     fn bench_md5_1k_update(harness: &mut test::BenchHarness) {
-        let mut buf: ~[u8] = ~[];
+        let mut buf: Vec<u8> = Vec::new();
         for i in range(0u, 0x400) {
             buf.push(i as u8);
         }
@@ -437,7 +437,7 @@ mod tests {
 
     #[bench]
     fn bench_md5_1k_update_then_final(harness: &mut test::BenchHarness) {
-        let mut buf: ~[u8] = ~[];
+        let mut buf: Vec<u8> = Vec::new();
         for i in range(0u, 0x400) {
             buf.push(i as u8);
         }

@@ -65,15 +65,15 @@ pub struct Font {
      * The group bits 15 (1+2+4+8) always draw the whole square, so in the zoom factor 1 only
      * pixels with group bits 15 will be drawn.
      */
-    glyphs: ~[u16],
+    glyphs: Vec<u16>,
 
     /// Precalculated zoomed font per zoom factor. It is three-dimensional array which indices
     /// are zoom factor, glyph number and row respectively. Assumes that each element has
     /// at least zoom factor times 8 (columns per row) bits.
-    pixels: ~[~[~[ZoomedFontRow]]],
+    pixels: Vec<Vec<Vec<ZoomedFontRow>>>,
 
     /// Precalculated polygons for glyphs.
-    polygons: ~[~[FontPolygon]],
+    polygons: Vec<Vec<FontPolygon>>,
 }
 
 /// An alignment mode of `Font::print_string`.
@@ -117,8 +117,8 @@ impl Font {
               M$U!Ck@a[]!G8.M(U$[!Ca[i:78&J&Jc$%[g*7?e<g0w$cD#iVAg*$[g~dB]NaaPGft~!f!7[.W(O";
 
         /// Decompresses a font data from `dwords` and `indices`.
-        fn decompress(dwords: &[u16], indices: &str) -> ~[u16] {
-            let mut words = ~[0];
+        fn decompress(dwords: &[u16], indices: &str) -> Vec<u16> {
+            let mut words = vec!(0);
             for &delta in dwords.iter() {
                 let last = *words.last().unwrap();
                 words.push(last + delta);
@@ -126,19 +126,20 @@ impl Font {
 
             let nindices = indices.len();
             let mut i = 0;
-            let mut glyphs = ~[];
+            let mut glyphs = Vec::new();
             while i < nindices {
                 let code = indices[i] as uint;
                 i += 1;
                 match code {
-                    33..97 => { glyphs.push(words[code - 33]); }
+                    33..97 => { glyphs.push(words.as_slice()[code - 33]); }
                     98..126 => {
                         let length = code - 95; // code=98 -> length=3
                         let distance = indices[i] as uint - 32;
                         i += 1;
                         let start = glyphs.len() - distance;
                         for i in range(start, start + length) {
-                            glyphs.push(glyphs[i]);
+                            let v = glyphs.as_slice()[i];
+                            glyphs.push(v);
                         }
                     }
                     _ => fail!(~"unexpected codeword")
@@ -148,10 +149,10 @@ impl Font {
         }
 
         /// Calculates polygons for given glyph data.
-        fn calculate_polygons(rows: &[u16], width: uint) -> ~[FontPolygon] {
+        fn calculate_polygons(rows: &[u16], width: uint) -> Vec<FontPolygon> {
             assert!(rows.len() % 2 == 0);
 
-            let mut polygons = ~[];
+            let mut polygons = Vec::new();
             let mut y = 0;
             while y < rows.len() {
                 let mut data = (rows[y] as u32 << 16) | (rows[y+1] as u32);
@@ -230,12 +231,12 @@ impl Font {
         let glyphs = decompress(dwords, indices);
         assert!(glyphs.len() == 3072);
 
-        let mut polygons = ~[];
+        let mut polygons = Vec::new();
         for base in iter::range_step(0, glyphs.len(), NROWS * 2) {
             polygons.push(calculate_polygons(glyphs.slice(base, base + NROWS * 2), NCOLUMNS));
         }
 
-        Font { glyphs: glyphs, pixels: ~[], polygons: polygons }
+        Font { glyphs: glyphs, pixels: Vec::new(), polygons: polygons }
     }
 }
 
@@ -262,7 +263,7 @@ impl FontDrawingUtils for ShadedDrawing {
         assert!(zoom > 0.0);
         assert!(self.prim == gl::TRIANGLES);
         let zoom = zoom * 0.5;
-        for &polygon in font.polygons[glyph].iter() {
+        for &polygon in font.polygons.as_slice()[glyph].iter() {
             let flat1 = polygon.x11 == polygon.xm1 && polygon.xm1 == polygon.x21;
             let flat2 = polygon.x12 == polygon.xm2 && polygon.xm2 == polygon.x22;
             let x11 = x + polygon.x11 as f32 * zoom;

@@ -99,7 +99,7 @@ impl VirtualInput {
     /// Returns true if the virtual input has a specified key kind in the key specification.
     pub fn active_in_key_spec(&self, kind: KeyKind, keyspec: &KeySpec) -> bool {
         match *self {
-            LaneInput(Lane(lane)) => keyspec.kinds[lane] == Some(kind),
+            LaneInput(Lane(lane)) => keyspec.kinds.as_slice()[lane] == Some(kind),
             SpeedDownInput | SpeedUpInput => true
         }
     }
@@ -233,7 +233,7 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
 
     for &lane in keyspec.order.iter() {
         let key = Key(36 + *lane as int);
-        let kind = keyspec.kinds[*lane].unwrap();
+        let kind = keyspec.kinds.as_slice()[*lane].unwrap();
         let envvar = format!("SNRS_{}{}_KEY", key.to_str(), kind.to_char());
         let envvar2 = format!("ANGOLMOIS_{}{}_KEY", key.to_str(), kind.to_char());
         for s in getenv(envvar).or(getenv(envvar2)).iter() {

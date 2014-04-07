@@ -39,13 +39,12 @@
  * correlated with the row index of character sets.
  */
 
-use std::slice;
 use std::num::Round;
 use util::maybe_owned::{MaybeOwnedVec, IntoMaybeOwnedVec};
 
 /// An iterator returned by `CharClass::classes`.
 pub struct CharClasses {
-    seen: ~[u64],
+    seen: Vec<u64>,
     index: uint,
 }
 
@@ -54,7 +53,7 @@ impl Iterator<uint> for CharClasses {
         let limit = self.seen.len() * 64;
         let mut i = self.index;
         while i < limit {
-            if (self.seen[i/64] >> (i%64)) & 1 == 1 {
+            if (self.seen.as_slice()[i/64] >> (i%64)) & 1 == 1 {
                 self.index = i + 1;
                 return Some(i);
             }
@@ -85,11 +84,11 @@ pub trait CharClass {
     /// Returns an iterator over character classes present in given string.
     /// Currently returns distinct classes.
     fn classes(&self, s: &str) -> CharClasses {
-        let mut seen = slice::from_elem((self.num_classes() + 63) / 64, 0u64);
+        let mut seen = Vec::from_elem((self.num_classes() + 63) / 64, 0u64);
         for c in s.chars() {
             match self.from_char(c) {
-                Some(cls) if (seen[cls/64] >> (cls%64)) & 1 == 0 => {
-                    seen[cls/64] |= 1 << (cls%64);
+                Some(cls) if (seen.as_slice()[cls/64] >> (cls%64)) & 1 == 0 => {
+                    seen.as_mut_slice()[cls/64] |= 1 << (cls%64);
                 }
                 _ => {}
             }
@@ -190,22 +189,23 @@ pub struct Trainer<CC> {
     /// Character classes definition.
     cc: CC,
     /// Weighted "positive" and "negative" frequencies for each character class.
-    weights: ~[(f64,f64)],
+    weights: Vec<(f64,f64)>,
 }
 
 impl<CC:CharClass> Trainer<CC> {
     /// Returns a trainer without any data.
     pub fn new(cc: CC) -> Trainer<CC> {
         let nclasses = cc.num_classes();
-        Trainer { cc: cc, weights: slice::from_elem(nclasses, (0.0f64, 0.0f64)) }
+        Trainer { cc: cc, weights: Vec::from_elem(nclasses, (0.0f64, 0.0f64)) }
     }
 
     /// Adds a set of default frequencies to the trainer.
     pub fn add_default(&mut self) {
         for cls in range(0, self.weights.len()) {
-            let (pos, neg) = self.weights[cls];
+            let (ref mut pos, ref mut neg) = self.weights.as_mut_slice()[cls];
             let (pos_, neg_) = self.cc.default_freq(cls);
-            self.weights[cls] = (pos + pos_, neg + neg_);
+            *pos += pos_;
+            *neg += neg_;
         }
     }
 
@@ -215,16 +215,18 @@ impl<CC:CharClass> Trainer<CC> {
         let posw = if positive {1.0} else {0.0};
         let negw = if positive {0.0} else {1.0};
         for cls in self.cc.classes(s) {
-            let (pos, neg) = self.weights[cls];
-            self.weights[cls] = (pos + posw, neg + negw);
+            let (ref mut pos, ref mut neg) = self.weights.as_mut_slice()[cls];
+            *pos += posw;
+            *neg += negw;
         }
     }
 
     /// Scales the frequencies with given factor.
     pub fn scale(&mut self, scale: f64) {
         for cls in range(0, self.weights.len()) {
-            let (pos, neg) = self.weights[cls];
-            self.weights[cls] = (pos * scale, neg * scale);
+            let (ref mut pos, ref mut neg) = self.weights.as_mut_slice()[cls];
+            *pos *= scale;
+            *neg *= scale;
         }
     }
 
@@ -232,16 +234,17 @@ impl<CC:CharClass> Trainer<CC> {
     pub fn merge(&mut self, trainer: Trainer<CC>) {
         assert!(self.weights.len() == trainer.weights.len());
         for cls in range(0, self.weights.len()) {
-            let (pos, neg) = self.weights[cls];
-            let (pos_, neg_) = trainer.weights[cls];
-            self.weights[cls] = (pos + pos_, neg + neg_);
+            let (ref mut pos, ref mut neg) = self.weights.as_mut_slice()[cls];
+            let (pos_, neg_) = trainer.weights.as_slice()[cls];
+            *pos += pos_;
+            *neg += neg_;
         }
     }
 
     /// Calculates the probabilities for the classifier. The original trainer is destroyed.
     pub fn into_classifier(self) -> Classifier<CC> {
         let Trainer { weights, cc } = self;
-        let logprobs: ~[i32] = weights.move_iter().map(|(pos, neg)| {
+        let logprobs: Vec<i32> = weights.move_iter().map(|(pos, neg)| {
             let p = (pos + 1.0) / (pos + neg + 2.0);
             (((1.0 - p).ln() - p.ln()) * 65536.0).round() as i32
         }).collect();

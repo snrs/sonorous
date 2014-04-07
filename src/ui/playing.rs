@@ -126,12 +126,12 @@ impl LaneStyle {
 
 /// Builds a list of `LaneStyle`s from the key specification.
 fn build_lane_styles(keyspec: &KeySpec) ->
-                                Result<(uint, Option<uint>, ~[(Lane,LaneStyle)]), ~str> {
+                                Result<(uint, Option<uint>, Vec<(Lane,LaneStyle)>), ~str> {
     let mut leftmost = 0;
     let mut rightmost = SCREENW;
-    let mut styles = ~[];
+    let mut styles = Vec::new();
     for &lane in keyspec.left_lanes().iter() {
-        let kind = keyspec.kinds[*lane];
+        let kind = keyspec.kinds.as_slice()[*lane];
         assert!(kind.is_some());
         let kind = kind.unwrap();
         let style = LaneStyle::from_kind(kind, leftmost, false);
@@ -142,7 +142,7 @@ fn build_lane_styles(keyspec: &KeySpec) ->
         }
     }
     for &lane in keyspec.right_lanes().rev_iter() {
-        let kind = keyspec.kinds[*lane];
+        let kind = keyspec.kinds.as_slice()[*lane];
         assert!(kind.is_some());
         let kind = kind.unwrap();
         let style = LaneStyle::from_kind(kind, rightmost, true);
@@ -158,19 +158,15 @@ fn build_lane_styles(keyspec: &KeySpec) ->
     let cutoff = 165;
     if leftmost < cutoff {
         for i in range(0, keyspec.split) {
-            let (lane, style) = styles[i];
-            let mut style = style;
+            let (_lane, ref mut style) = styles.as_mut_slice()[i];
             style.left += (cutoff - leftmost) / 2;
-            styles[i] = (lane, style);
         }
         leftmost = cutoff;
     }
     if rightmost.map_or(false, |x| x > SCREENW - cutoff) {
         for i in range(keyspec.split, styles.len()) {
-            let (lane, style) = styles[i];
-            let mut style = style;
+            let (_lane, ref mut style) = styles.as_mut_slice()[i];
             style.left -= (rightmost.unwrap() - (SCREENW - cutoff)) / 2;
-            styles[i] = (lane, style);
         }
         rightmost = Some(SCREENW - cutoff);
     }
@@ -249,7 +245,7 @@ pub struct PlayingScene {
     /// Display screen.
     pub screen: Rc<RefCell<Screen>>,
     /// Image resources.
-    pub imgres: ~[ImageResource],
+    pub imgres: Vec<ImageResource>,
 
     /// The leftmost X coordinate of the area next to the lanes, that is, the total width of
     /// left-hand-side lanes.
@@ -259,7 +255,7 @@ pub struct PlayingScene {
     /// right-hand-side lanes.
     pub rightmost: Option<uint>,
     /// The order and appearance of lanes.
-    pub lanestyles: ~[(Lane,LaneStyle)],
+    pub lanestyles: Vec<(Lane,LaneStyle)>,
     /// The left coordinate of the BGA.
     pub bgax: uint,
     /// The top coordinate of the BGA.
@@ -279,7 +275,7 @@ impl PlayingScene {
     /// screen and pre-loaded image resources. Other resources including pre-loaded sound resources
     /// are included in the `player`.
     pub fn new(player: Player, screen: Rc<RefCell<Screen>>,
-               imgres: ~[ImageResource]) -> Result<~PlayingScene,~str> {
+               imgres: Vec<ImageResource>) -> Result<~PlayingScene,~str> {
         let (leftmost, rightmost, styles) = match build_lane_styles(player.keyspec) {
             Ok(styles) => styles,
             Err(err) => { return Err(err); }
@@ -287,8 +283,8 @@ impl PlayingScene {
         let centerwidth = rightmost.unwrap_or(SCREENW) - leftmost;
         let bgax = leftmost + (centerwidth - BGAW) / 2;
         let bgay = (SCREENH - BGAH) / 2;
-        let sprite = create_sprite(leftmost, rightmost, styles);
-        let bgacanvas = BGACanvas::new(imgres);
+        let sprite = create_sprite(leftmost, rightmost, styles.as_slice());
+        let bgacanvas = BGACanvas::new(imgres.as_slice());
 
         Ok(~PlayingScene {
             player: player, sprite: sprite, screen: screen, imgres: imgres,
@@ -317,23 +313,19 @@ impl Scene for PlayingScene {
         // TODO `QuitEvent` should be handled by the scene and not the player!
         if self.player.tick() {
             // update display states
-            let mut poorlimit = self.poorlimit;
-            let mut gradelimit = self.gradelimit;
             for &(grade,when) in self.player.lastgrade.iter() {
                 if grade == MISS {
                     // switches to the normal BGA after 600ms
                     let minlimit = when + 600;
-                    poorlimit.mutate_or_set(minlimit, |t| cmp::max(t, minlimit));
+                    self.poorlimit.mutate_or_set(minlimit, |t| cmp::max(t, minlimit));
                 }
                 // grade disappears after 700ms
                 let minlimit = when + 700;
-                gradelimit.mutate_or_set(minlimit, |t| cmp::max(t, minlimit));
+                self.gradelimit.mutate_or_set(minlimit, |t| cmp::max(t, minlimit));
             }
-            if poorlimit < Some(self.player.now) { poorlimit = None; }
-            if gradelimit < Some(self.player.now) { gradelimit = None; }
-            self.bgacanvas.update(&self.player.bga, self.imgres);
-            *&mut self.poorlimit = poorlimit;
-            *&mut self.gradelimit = gradelimit;
+            if self.poorlimit < Some(self.player.now) { self.poorlimit = None; }
+            if self.gradelimit < Some(self.player.now) { self.gradelimit = None; }
+            self.bgacanvas.update(&self.player.bga, self.imgres.as_slice());
 
             Continue
         } else {

@@ -38,7 +38,7 @@ pub enum BmsCommand<'r> {
     BmsBPM(BPM),                                // #BPM (without a following alphanumeric key)
     BmsExBPM(Key, BPM),                         // #EXBPM or #BPMxx
     BmsPlayer(int),                             // #PLAYER
-    BmsLanes(~[(Key, MaybeOwned<'r>)]),         // #SNRS:LANES (experimental)
+    BmsLanes(Vec<(Key, MaybeOwned<'r>)>),       // #SNRS:LANES (experimental)
     BmsPlayLevel(int),                          // #PLAYLEVEL
     BmsDifficulty(int),                         // #DIFFICULTY
     BmsRank(int),                               // #RANK
@@ -75,7 +75,7 @@ pub enum BmsCommand<'r> {
 
 impl<'r> BmsCommand<'r> {
     /// Converts the command that refers to the borrowed slice into the command that doesn't.
-    fn into_send(self) -> BmsCommand<'static> {
+    pub fn into_send(self) -> BmsCommand<'static> {
         fn into_send_str<'r>(s: MaybeOwned<'r>) -> MaybeOwned<'static> {
             s.into_owned().into_maybe_owned()
         }
@@ -272,6 +272,15 @@ impl<'r> Parsed<'r> {
     pub fn encoding<'a>(&'a self) -> Option<(&'static str, f64)> {
         match *self { Encoding(encname, confidence) => Some((encname, confidence)), _ => None }
     }
+
+    /// Converts the parsed item to the sendable form.
+    pub fn into_send(self) -> Parsed<'static> {
+        match self {
+            Command(lineno, cmd) => Command(lineno, cmd.into_send()),
+            Message(lineno, msg) => Message(lineno, msg),
+            Encoding(encname, confidence) => Encoding(encname, confidence),
+        }
+    }
 }
 
 /// Parser options for BMS format.
@@ -327,7 +336,7 @@ pub struct ParsingIterator<'r> {
     /// Parser options.
     opts: &'r ParserOptions,
     /// Queued items to be returned at the next invocations of `next`.
-    queued: ~[Parsed<'r>],
+    queued: Vec<Parsed<'r>>,
 }
 
 impl<'r> Parser<'r> {
@@ -344,7 +353,7 @@ impl<'r> Parser<'r> {
     pub fn iter<'a>(&'a self) -> ParsingIterator<'a> {
         let (encname, confidence) = self.encoding;
         ParsingIterator { iter: self.file.split('\u000a'), lineno: 0, opts: self.opts,
-                          queued: ~[Encoding(encname, confidence)] }
+                          queued: vec!(Encoding(encname, confidence)) }
     }
 }
 
@@ -564,15 +573,20 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             })
 
             if_prefix!("SNRS:LANES" |line| { // #SNRS:LANES <key> <spec> <key> <spec> ...
-                let words: ~[&str] = line.words().collect();
+                let words: Vec<&str> = line.words().collect();
                 if !words.is_empty() && words.len() % 2 == 0 {
-                    let mut lanes = ~[];
+                    let mut lanes = Vec::new();
                     let mut okay = true;
                     for i in iter::range_step(0, words.len(), 2) {
-                        if words[i].len() != 2 { okay = false; break; }
-                        match Key::from_str(words[i]) {
-                            Some(key) => { lanes.push((key, words[i+1].into_maybe_owned())); }
-                            None => { okay = false; break; }
+                        if words.as_slice()[i].len() != 2 { okay = false; break; }
+                        match Key::from_str(words.as_slice()[i]) {
+                            Some(key) => {
+                                lanes.push((key, words.as_slice()[i+1].into_maybe_owned()));
+                            }
+                            None => {
+                                okay = false;
+                                break;
+                            }
                         }
                     }
                     if okay {
@@ -808,7 +822,9 @@ pub struct PreprocessingParsingIterator<'r,R> {
     done: bool,
     /// Queued items to be returned at the next invocations of `next`.
     /// They take precedence over the parsing iterator's own queued items.
-    queued: ~[Parsed<'r>]
+    //
+    // Rust: this can't be `Vec<Parsed<'r>>` for some unknown reason.
+    queued: Vec<Parsed<'static>>
 }
 
 impl<'r,R:Rng> PreprocessingParser<'r,R> {
@@ -821,12 +837,12 @@ impl<'r,R:Rng> PreprocessingParser<'r,R> {
     /// Returns a parsing iterator over this BMS file.
     pub fn iter<'a>(&'a mut self) -> PreprocessingParsingIterator<'a,R> {
         PreprocessingParsingIterator { pp: Preprocessor::new(self.r), iter: self.parser.iter(),
-                                       done: false, queued: ~[] }
+                                       done: false, queued: Vec::new() }
     }
 }
 
-impl<'r,R:Rng> Iterator<Parsed<'r>> for PreprocessingParsingIterator<'r,R> {
-    fn next(&mut self) -> Option<Parsed<'r>> {
+impl<'r,R:Rng> Iterator<Parsed<'static>> for PreprocessingParsingIterator<'r,R> {
+    fn next(&mut self) -> Option<Parsed<'static>> {
         loop {
             // return the queued items first
             match self.queued.shift() {
@@ -840,14 +856,14 @@ impl<'r,R:Rng> Iterator<Parsed<'r>> for PreprocessingParsingIterator<'r,R> {
 
             match self.iter.next() {
                 Some(Command(lineno, cmd)) => {
-                    let mut messages = ~[];
-                    let mut out = ~[];
-                    match cmd {
+                    let mut messages = Vec::new();
+                    let mut out = Vec::new();
+                    match cmd.into_send() {
                         BmsFlow(ref flowcmd) => {
                             self.pp.feed_flow(lineno, flowcmd, &mut messages, &mut out);
                         }
                         cmd => {
-                            self.pp.feed_other((lineno, cmd.into_send()), &mut messages, &mut out);
+                            self.pp.feed_other((lineno, cmd), &mut messages, &mut out);
                         }
                     }
 
@@ -856,13 +872,13 @@ impl<'r,R:Rng> Iterator<Parsed<'r>> for PreprocessingParsingIterator<'r,R> {
                     // now the next iteration will return a queued item if any
                 }
                 Some(parsed) => {
-                    return Some(parsed);
+                    return Some(parsed.into_send());
                 }
                 None => {
                     self.done = true; // won't call `self.parser.next()` again
 
-                    let mut messages = ~[];
-                    let mut out = ~[];
+                    let mut messages = Vec::new();
+                    let mut out = Vec::new();
                     self.pp.finish(&mut messages, &mut out);
                     self.queued.extend(messages.move_iter().map(|msg| Message(None, msg)));
                     self.queued.extend(out.move_iter().map(|(line, cmd)| Command(line, cmd)));

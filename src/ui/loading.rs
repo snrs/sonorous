@@ -4,7 +4,6 @@
 
 //! Loading screen. Displays the STAGEFILE image and metadata while loading resources.
 
-use std::slice;
 use std::rc::Rc;
 use std::cell::RefCell;
 use collections::{Deque, DList};
@@ -65,9 +64,9 @@ pub struct LoadingContext {
     /// A loaded OpenGL texture for #STAGEFILE image.
     pub stagefile: Option<Rc<Texture2D>>,
     /// A list of loaded sound resources. Initially populated with `NoSound`.
-    pub sndres: ~[SoundResource],
+    pub sndres: Vec<SoundResource>,
     /// A list of loaded image resources. Initially populated with `NoImage`.
-    pub imgres: ~[ImageResource],
+    pub imgres: Vec<ImageResource>,
 }
 
 impl LoadingContext {
@@ -75,8 +74,8 @@ impl LoadingContext {
     pub fn new(bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec, keymap: ~KeyMap,
                opts: Rc<Options>) -> LoadingContext {
         let basedir = bms.meta.basepath.clone().unwrap_or(Path::new("."));
-        let sndres = slice::from_fn(bms.meta.sndpath.len(), |_| NoSound);
-        let imgres = slice::from_fn(bms.meta.imgpath.len(), |_| NoImage);
+        let sndres = Vec::from_fn(bms.meta.sndpath.len(), |_| NoSound);
+        let imgres = Vec::from_fn(bms.meta.imgpath.len(), |_| NoImage);
 
         let mut jobs = DList::new();
         if opts.deref().has_bga() { // should go first
@@ -129,26 +128,34 @@ impl LoadingContext {
 
     /// Loads the sound and creates a `Chunk` for it.
     pub fn load_sound(&mut self, i: uint) {
-        let path = self.bms.meta.sndpath[i].get_ref().clone();
+        let path = self.bms.meta.sndpath.as_slice()[i].get_ref().clone();
         self.lastpath = Some(path.clone());
         let fullpath = self.search.resolve_relative_path_for_sound(path, &self.basedir);
 
         match fullpath.and_then(|path| LoadedSoundResource::new(&path)) {
-            Ok(res) => { self.sndres[i] = res.wrap(); }
-            Err(_) => { warn!("failed to load sound \\#WAV{} ({})", Key(i as int).to_str(), path); }
+            Ok(res) => {
+                self.sndres.as_mut_slice()[i] = res.wrap();
+            }
+            Err(_) => {
+                warn!("failed to load sound \\#WAV{} ({})", Key(i as int).to_str(), path);
+            }
         }
     }
 
     /// Loads the image or movie and creates an OpenGL texture for it.
     pub fn load_image(&mut self, i: uint) {
-        let path = self.bms.meta.imgpath[i].get_ref().clone();
+        let path = self.bms.meta.imgpath.as_slice()[i].get_ref().clone();
         self.lastpath = Some(path.clone());
         let fullpath = self.search.resolve_relative_path_for_image(path, &self.basedir);
 
         let has_movie = self.opts.deref().has_movie();
         match fullpath.and_then(|path| LoadedImageResource::new(&path, has_movie)) {
-            Ok(res) => { self.imgres[i] = res.wrap(); }
-            Err(_) => { warn!("failed to load image \\#BMP{} ({})", Key(i as int).to_str(), path); }
+            Ok(res) => {
+                self.imgres.as_mut_slice()[i] = res.wrap();
+            }
+            Err(_) => {
+                warn!("failed to load image \\#BMP{} ({})", Key(i as int).to_str(), path);
+            }
         }
     }
 
@@ -168,7 +175,7 @@ impl LoadingContext {
     }
 
     /// Returns completely loaded `Player` and `ImageResource`s.
-    pub fn to_player(self) -> (Player,~[ImageResource]) {
+    pub fn to_player(self) -> (Player,Vec<ImageResource>) {
         let LoadingContext { opts, bms, infos, keyspec, keymap, jobs, sndres, imgres, .. } = self;
         assert!(jobs.is_empty());
         (Player::new(opts, bms, infos, keyspec, keymap, sndres), imgres)

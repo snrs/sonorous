@@ -14,7 +14,7 @@ pub struct Timeline<SoundRef,ImageRef> {
     /// Initial BPM.
     pub initbpm: BPM,
     /// List of objects sorted by the position.
-    pub objs: ~[Obj<SoundRef,ImageRef>],
+    pub objs: Vec<Obj<SoundRef,ImageRef>>,
 }
 
 /// Derived Timeline information.
@@ -266,8 +266,8 @@ pub mod builder {
 
     /// Derives other three axes from the virtual position.
     fn precalculate_time<S:Clone,I:Clone>(initbpm: BPM, objs: &[ObjDataWithVpos<S,I>],
-                                          endvpos: f64) -> ~[Obj<S,I>] {
-        let mut ret = ~[];
+                                          endvpos: f64) -> Vec<Obj<S,I>> {
+        let mut ret = Vec::new();
 
         // last discontinuity for vpos-pos relation
         let mut shorten = 1.0;
@@ -337,7 +337,7 @@ pub mod builder {
         /// Same as `Timeline::initbpm`.
         pub initbpm: Option<BPM>,
         /// Same as `Timeline::objs` but not yet sorted and only has a virtual position.
-        pub objs: ~[ObjDataWithVpos<SoundRef,ImageRef>],
+        pub objs: Vec<ObjDataWithVpos<SoundRef,ImageRef>>,
         /// End position. Every object must have the virtual position less than this value.
         pub endvpos: f64,
     }
@@ -349,7 +349,7 @@ pub mod builder {
     impl<S:Eq+Clone,I:Eq+Clone> TimelineBuilder<S,I> {
         /// Creates a new timeline builder.
         pub fn new() -> ~TimelineBuilder<S,I> {
-            ~TimelineBuilder { initbpm: None, objs: ~[], endvpos: 0.0 }
+            ~TimelineBuilder { initbpm: None, objs: Vec::new(), endvpos: 0.0 }
         }
 
         /// Sets an initial BPM.
@@ -381,7 +381,7 @@ pub mod builder {
         pub fn mutate(&mut self, mark: Mark, f: |f64,ObjData<S,I>| -> (f64,ObjData<S,I>)) {
             let Mark(mark) = mark;
             assert!(mark < self.objs.len());
-            let obj = &mut self.objs[mark];
+            let obj = &mut self.objs.as_mut_slice()[mark];
             let (vpos, data) = f(obj.vpos, obj.data.clone()); // XXX can we just move the data?
             assert!(vpos >= 0.0);
             obj.vpos = vpos;
@@ -398,9 +398,9 @@ pub mod builder {
             let ~TimelineBuilder { initbpm: initbpm, objs: objs, endvpos: endvpos } = self;
             let initbpm = initbpm.expect("initial BPM should have been set");
             let mut objs = objs;
-            sort_objs(objs);
-            sanitize_objs(objs);
-            let objs = precalculate_time(initbpm, objs, endvpos);
+            sort_objs(objs.as_mut_slice());
+            sanitize_objs(objs.as_mut_slice());
+            let objs = precalculate_time(initbpm, objs.as_slice(), endvpos);
             Timeline { initbpm: initbpm, objs: objs }
         }
     }
@@ -409,21 +409,21 @@ pub mod builder {
 /// Modifiers available to timelines. They are safe to run through the existing timeline, as long as
 /// the original timeline is no longer used.
 pub mod modf {
-    use std::{slice, f64};
+    use std::f64;
     use rand::Rng;
     use format::obj::*;
     use super::Timeline;
 
     /// Removes objects not in given lanes by replacing them to BGMs.
     pub fn filter_lanes<S:Clone,I:Clone>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
-        let mut keep = slice::from_elem(NLANES, false);
+        let mut keep = Vec::from_elem(NLANES, false);
         for &Lane(lane) in lanes.iter() {
-            keep[lane] = true;
+            keep.as_mut_slice()[lane] = true;
         }
 
         for obj in timeline.objs.mut_iter() {
             match (*obj).object_lane() {
-                Some(lane) if !keep[*lane] => { obj.data = obj.data.to_effect(); }
+                Some(lane) if !keep.as_slice()[*lane] => { obj.data = obj.data.to_effect(); }
                 _ => {}
             }
         }
@@ -441,27 +441,27 @@ pub mod modf {
 
     /// Swaps given lanes in the reverse order.
     pub fn mirror<S:Clone,I:Clone>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
-        let mut map = slice::from_fn(NLANES, |lane| Lane(lane));
+        let mut map = Vec::from_fn(NLANES, |lane| Lane(lane));
         for (&Lane(from), &to) in lanes.iter().zip(lanes.rev_iter()) {
-            map[from] = to;
+            map.as_mut_slice()[from] = to;
         }
 
         for obj in timeline.objs.mut_iter() {
-            map_object_lane(obj, map);
+            map_object_lane(obj, map.as_slice());
         }
     }
 
     /// Swaps given lanes in the random order.
     pub fn shuffle<S:Clone,I:Clone,R:Rng>(timeline: &mut Timeline<S,I>, r: &mut R, lanes: &[Lane]) {
-        let mut shuffled = lanes.to_owned();
-        r.shuffle(shuffled);
-        let mut map = slice::from_fn(NLANES, |lane| Lane(lane));
+        let mut shuffled = Vec::from_slice(lanes);
+        r.shuffle(shuffled.as_mut_slice());
+        let mut map = Vec::from_fn(NLANES, |lane| Lane(lane));
         for (&Lane(from), &to) in lanes.iter().zip(shuffled.iter()) {
-            map[from] = to;
+            map.as_mut_slice()[from] = to;
         }
 
         for obj in timeline.objs.mut_iter() {
-            map_object_lane(obj, map);
+            map_object_lane(obj, map.as_slice());
         }
     }
 
@@ -470,14 +470,14 @@ pub mod modf {
     /// close time position to the same lane.
     pub fn randomize<S:Clone,I:Clone,R:Rng>(timeline: &mut Timeline<S,I>, r: &mut R,
                                             lanes: &[Lane]) {
-        let mut movable = lanes.to_owned();
-        let mut map = slice::from_fn(NLANES, |lane| Lane(lane));
+        let mut movable = Vec::from_slice(lanes);
+        let mut map = Vec::from_fn(NLANES, |lane| Lane(lane));
 
         let mut lasttime = f64::NEG_INFINITY;
         for obj in timeline.objs.mut_iter() {
             if (*obj).is_lnstart() {
                 let lane = (*obj).object_lane().unwrap();
-                match movable.position_elem(&lane) {
+                match movable.iter().position(|&i| i == lane) {
                     Some(i) => { movable.swap_remove(i); }
                     None => fail!(~"non-sanitized timeline")
                 }
@@ -485,16 +485,16 @@ pub mod modf {
             if lasttime < obj.loc.time { // reshuffle required
                 lasttime = obj.loc.time; // XXX should we use this restriction on very quick notes?
                 let mut shuffled = movable.clone();
-                r.shuffle(shuffled);
+                r.shuffle(shuffled.as_mut_slice());
                 for (&Lane(from), &to) in movable.iter().zip(shuffled.iter()) {
-                    map[from] = to;
+                    map.as_mut_slice()[from] = to;
                 }
             }
             if (*obj).is_lnstart() {
                 let lane = (*obj).object_lane().unwrap();
                 movable.push(lane);
             }
-            map_object_lane(obj, map);
+            map_object_lane(obj, map.as_slice());
         }
     }
 }
