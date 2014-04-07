@@ -13,8 +13,8 @@
 pub mod ll {
     #![allow(non_camel_case_types, uppercase_variables)]
 
-    use std::libc::{c_int, c_uint, c_void};
-    use std::libc::{BOOL, CHAR, WORD, DWORD, HANDLE, LPCSTR, LPWSTR, LPCWSTR};
+    use libc::{c_int, c_uint, c_void};
+    use libc::{BOOL, CHAR, WORD, DWORD, HANDLE, LPCSTR, LPWSTR, LPCWSTR};
 
     pub type HWND = HANDLE;
     pub type HDC = HANDLE;

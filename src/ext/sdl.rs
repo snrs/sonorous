@@ -10,12 +10,12 @@
 
 #[cfg(target_os = "win32")]
 pub mod syswm {
-    use std::libc::{HANDLE, INVALID_HANDLE_VALUE};
+    use libc::{HANDLE, INVALID_HANDLE_VALUE};
 
     pub mod ll {
         #![allow(non_camel_case_types)]
 
-        use std::libc::{HANDLE, c_int};
+        use libc::{HANDLE, c_int};
 
         pub struct SDL_version {
             pub major: u8,
