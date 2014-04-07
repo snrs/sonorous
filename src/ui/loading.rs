@@ -78,13 +78,13 @@ impl LoadingContext {
         let imgres = Vec::from_fn(bms.meta.imgpath.len(), |_| NoImage);
 
         let mut jobs = DList::new();
-        if opts.deref().has_bga() { // should go first
+        if opts.has_bga() { // should go first
             jobs.push_back(LoadStageFile);
         }
         for (i, path) in bms.meta.sndpath.iter().enumerate() {
             if path.is_some() { jobs.push_back(LoadSound(i)); }
         }
-        if opts.deref().has_bga() {
+        if opts.has_bga() {
             for (i, path) in bms.meta.imgpath.iter().enumerate() {
                 if path.is_some() { jobs.push_back(LoadImage(i)); }
             }
@@ -148,7 +148,7 @@ impl LoadingContext {
         self.lastpath = Some(path.clone());
         let fullpath = self.search.resolve_relative_path_for_image(path, &self.basedir);
 
-        let has_movie = self.opts.deref().has_movie();
+        let has_movie = self.opts.has_movie();
         match fullpath.and_then(|path| LoadedImageResource::new(&path, has_movie)) {
             Ok(res) => {
                 self.imgres.as_mut_slice()[i] = res.wrap();
@@ -199,7 +199,7 @@ impl LoadingScene {
     /// Creates a scene context required for rendering the graphical loading screen.
     pub fn new(screen: Rc<RefCell<Screen>>, bms: Bms, infos: TimelineInfo,
                keyspec: ~KeySpec, keymap: ~KeyMap, opts: Rc<Options>) -> ~LoadingScene {
-        let skin = match opts.deref().load_skin("loading.json") {
+        let skin = match opts.load_skin("loading.json") {
             Ok(skin) => skin,
             Err(err) => die!("{}", err),
         };
@@ -233,12 +233,10 @@ impl Scene for LoadingScene {
     }
 
     fn render(&self) {
-        let screen__ = self.screen.deref();
-        let mut screen_ = screen__.borrow_mut();
-        let screen = screen_.deref_mut();
+        let mut screen = self.screen.borrow_mut();
 
         screen.clear();
-        self.skin.borrow_mut().deref_mut().render(screen, &self.context);
+        self.skin.borrow_mut().render(screen.deref_mut(), &self.context);
         screen.swap_buffers();
     }
 
@@ -273,7 +271,7 @@ impl TextualLoadingScene {
 
 impl Scene for TextualLoadingScene {
     fn activate(&mut self) -> SceneCommand {
-        if self.context.opts.deref().showinfo {
+        if self.context.opts.showinfo {
             printerr(format!("\
 ----------------------------------------------------------------------------------------------
 Title:    {title}",
@@ -317,7 +315,7 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
     }
 
     fn render(&self) {
-        if self.context.opts.deref().showinfo {
+        if self.context.opts.showinfo {
             match self.context.lastpath {
                 Some(ref path) => {
                     use util::std::str::StrUtil;
@@ -331,7 +329,7 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
     }
 
     fn deactivate(&mut self) {
-        if self.context.opts.deref().showinfo {
+        if self.context.opts.showinfo {
             update_line("");
         }
     }
@@ -356,7 +354,7 @@ impl Hook for LoadingContext {
             "loading.ratio" => Some(self.processed_jobs_ratio().into_scalar()),
             "meta.stagefile" => self.stagefile.as_ref().map(|s| s.as_scalar()),
             _ => {
-                self.opts.deref().scalar_hook(id)
+                self.opts.scalar_hook(id)
                     .or_else(|| self.bms.scalar_hook(id))
                     .or_else(|| self.infos.scalar_hook(id))
                     .or_else(|| self.keyspec.scalar_hook(id))
@@ -369,7 +367,7 @@ impl Hook for LoadingContext {
             "loading" => { self.lastpath.is_some() && body(parent, ""); }
             "meta.stagefile" => { self.stagefile.is_some() && body(parent, ""); }
             _ => {
-                return self.opts.deref().run_block_hook(id, parent, &body) ||
+                return self.opts.run_block_hook(id, parent, &body) ||
                        self.bms.run_block_hook(id, parent, &body) ||
                        self.infos.run_block_hook(id, parent, &body) ||
                        self.keyspec.run_block_hook(id, parent, &body);

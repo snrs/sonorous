@@ -195,7 +195,7 @@ static PRELOAD_DELAY: uint = 300;
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
     pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> ~SelectingScene {
-        let skin = match opts.deref().load_skin("selecting.json") {
+        let skin = match opts.load_skin("selecting.json") {
             Ok(skin) => skin,
             Err(err) => die!("{}", err),
         };
@@ -284,7 +284,7 @@ impl SelectingScene {
             let load_with_reader = |mut f| {
                 let mut r = task_rng();
                 let mut diags = Vec::new();
-                let loaderopts = opts.deref().loader_options();
+                let loaderopts = opts.loader_options();
 
                 let preproc = {
                     let callback = |line: Option<uint>, msg: bms::diag::BmsMessage| {
@@ -530,9 +530,7 @@ impl Scene for SelectingScene {
     }
 
     fn render(&self) {
-        let screen__ = self.screen.deref();
-        let mut screen_ = screen__.borrow_mut();
-        let screen = screen_.deref_mut();
+        let mut screen = self.screen.borrow_mut();
 
         screen.clear();
 
@@ -546,7 +544,7 @@ impl Scene for SelectingScene {
                    7.0, 2.0 + (top + NUMENTRIES) as f32 * pixelsperslot, RGB(0xc0,0xc0,0xc0));
         });
 
-        self.skin.borrow_mut().deref_mut().render(screen, self);
+        self.skin.borrow_mut().render(screen.deref_mut(), self);
 
         screen.swap_buffers();
     }
@@ -629,7 +627,7 @@ impl Hook for PreloadedData {
 
 impl Hook for SelectingScene {
     fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
-        self.opts.deref().scalar_hook(id)
+        self.opts.scalar_hook(id)
     }
 
     fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
@@ -651,7 +649,7 @@ impl Hook for SelectingScene {
                     body(&parent.add_text("preload.error", *err), "failed");
                 }
             },
-            _ => { return self.opts.deref().run_block_hook(id, parent, &body); }
+            _ => { return self.opts.run_block_hook(id, parent, &body); }
         }
         true
     }

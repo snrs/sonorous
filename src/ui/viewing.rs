@@ -187,7 +187,7 @@ impl Scene for TextualViewingScene {
     }
 
     fn render(&self) {
-        if !self.player.opts.deref().showinfo { return; }
+        if !self.player.opts.showinfo { return; }
 
         let elapsed = (self.player.now - self.player.origintime) / 100;
         let duration = (self.player.duration * 10.0) as uint;
@@ -242,14 +242,12 @@ impl Scene for ViewingScene {
     }
 
     fn render(&self) {
-        let screen__ = self.screen.deref();
-        let mut screen_ = screen__.borrow_mut();
-        let screen = screen_.deref_mut();
+        let mut screen = self.screen.borrow_mut();
 
         screen.clear();
 
         let layers = &[Layer1, Layer2, Layer3];
-        self.bgacanvas.render_to_texture(screen, layers);
+        self.bgacanvas.render_to_texture(screen.deref_mut(), layers);
         screen.draw_textured(self.bgacanvas.as_texture(), |d| {
             d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
         });

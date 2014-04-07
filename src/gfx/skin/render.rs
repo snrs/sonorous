@@ -64,7 +64,7 @@ impl Renderer {
     pub fn render(&mut self, screen: &mut Screen, hook: &Hook) {
         let skin = self.skin.clone();
         let mut state = State::new(self, screen);
-        state.nodes(hook, skin.deref().nodes.as_slice());
+        state.nodes(hook, skin.nodes.as_slice());
         state.finish();
     }
 }
@@ -295,7 +295,7 @@ impl<'a> State<'a> {
     fn texture<'a>(&'a mut self, hook: &'a Hook, id: &str) -> Option<&'a Rc<Texture2D>> {
         let mut scalar = hook.scalar_hook(id);
         if scalar.is_none() {
-            scalar = self.renderer.skin.deref().scalars.find_equiv(&id).map(|v| v.clone());
+            scalar = self.renderer.skin.scalars.find_equiv(&id).map(|v| v.clone());
         }
         match scalar {
             Some(TextureScalar(tex)) => Some(tex),
@@ -407,10 +407,7 @@ impl<'a> State<'a> {
                     };
                     match (texture, *clip) {
                         (Some(ref tex), Some(ref clip)) => {
-                            let (tw, th) = {
-                                let tex = tex.deref();
-                                (tex.width as f32, tex.height as f32)
-                            };
+                            let (tw, th) = (tex.width as f32, tex.height as f32);
                             let tx1 = State::expr(hook, &clip.p.x, tw);
                             let ty1 = State::expr(hook, &clip.p.y, th);
                             let tx2 = State::expr(hook, &clip.q.x, tw);
