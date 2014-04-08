@@ -49,8 +49,8 @@ static LOG_PROBS_JA: &'static [i32] = &[
 /// Reads the whole stream with given encoding. Any error would be substituted with U+FFFD.
 pub fn decode_stream(f: &mut Reader, encoding: EncodingRef) -> ~str {
     // TODO use incremental decoding when available
-    let s = f.read_to_end().ok().unwrap_or_else(|| ~[]);
-    encoding.decode(s, DecodeReplace).unwrap()
+    let s = f.read_to_end().ok().unwrap_or_else(|| Vec::new());
+    encoding.decode(s.as_slice(), DecodeReplace).unwrap()
 }
 
 /// Tries to guess the encoding of the stream and reads it accordingly.
@@ -61,11 +61,12 @@ pub fn decode_stream(f: &mut Reader, encoding: EncodingRef) -> ~str {
 // Rust: cannot change this to return `EncodingRef`, it seems to "infect" other uses of
 //       `UTF_8.decode(...)` etc. to fail to resolve.
 pub fn guess_decode_stream(f: &mut Reader) -> (~str, &'static Encoding, f64) {
-    let s: ~[u8] = f.read_to_end().ok().unwrap_or_else(|| ~[]);
+    let s: Vec<u8> = f.read_to_end().ok().unwrap_or_else(|| Vec::new());
 
     // check for BOM (Sonorous proposal #1)
     if s.len() >= 3 && [0xef, 0xbb, 0xbf].equiv(&s.slice_to(3)) {
-        return (UTF_8.decode(s, DecodeReplace).unwrap(), UTF_8 as &'static Encoding, 1.0);
+        return (UTF_8.decode(s.as_slice(), DecodeReplace).unwrap(),
+                UTF_8 as &'static Encoding, 1.0);
     }
 
     // check for UTF-8 first line (Sonorous proposal #2)
@@ -73,17 +74,19 @@ pub fn guess_decode_stream(f: &mut Reader) -> (~str, &'static Encoding, f64) {
     let first1keol = first1k.iter().position(|&c| c == 0x0a).unwrap_or(first1k.len());
     let firstline = first1k.slice_to(first1keol);
     if firstline.iter().any(|&c| c >= 0x80) && UTF_8.decode(firstline, DecodeStrict).is_ok() {
-        return (UTF_8.decode(s, DecodeReplace).unwrap(), UTF_8 as &'static Encoding, 1.0);
+        return (UTF_8.decode(s.as_slice(), DecodeReplace).unwrap(),
+                UTF_8 as &'static Encoding, 1.0);
     }
 
     // ASCII: do we have to decode at all?
     if s.iter().all(|&c| c < 0x80) {
-        return (ASCII.decode(s, DecodeReplace).unwrap(), ASCII as &'static Encoding, 1.0);
+        return (ASCII.decode(s.as_slice(), DecodeReplace).unwrap(),
+                ASCII as &'static Encoding, 1.0);
     }
 
     // Windows-949/31J: guess
-    let ko = WINDOWS_949.decode(s, DecodeReplace).unwrap();
-    let ja = WINDOWS_31J.decode(s, DecodeReplace).unwrap();
+    let ko = WINDOWS_949.decode(s.as_slice(), DecodeReplace).unwrap();
+    let ja = WINDOWS_31J.decode(s.as_slice(), DecodeReplace).unwrap();
     let koconfidence = Classifier::new(CharClassKo, LOG_PROBS_KO).raw_confidence(ko);
     let jaconfidence = Classifier::new(CharClassJa, LOG_PROBS_JA).raw_confidence(ja);
     let (s, encoding, confidence) =

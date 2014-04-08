@@ -310,8 +310,8 @@ impl SelectingScene {
 
             match io::File::open(&bmspath) {
                 Ok(mut f) => {
-                    let buf = f.read_to_end().ok().unwrap_or_else(|| ~[]);
-                    let hash = MD5::from_buffer(buf).final();
+                    let buf = f.read_to_end().ok().unwrap_or_else(|| Vec::new());
+                    let hash = MD5::from_buffer(buf.as_slice()).final();
                     sender.try_send(BmsHashRead(bmspath.clone(), hash));
 
                     // since we have read the file we don't want the parser to read it again.

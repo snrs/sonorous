@@ -283,7 +283,9 @@ impl<'a> State<'a> {
     fn text<'a>(hook: &'a Hook, text: &'a TextSource) -> str::MaybeOwned<'a> {
         let mut out = MemWriter::new();
         match State::text_source(hook, text, &mut out) {
-            Ok(()) => str::from_utf8_owned(out.unwrap()).unwrap().into_maybe_owned(),
+            Ok(()) => {
+                str::from_utf8(out.unwrap().as_slice()).unwrap().to_owned().into_maybe_owned()
+            },
             Err(err) => {
                 warn!("skin: I/O error on text_source({}), will ignore", err);
                 "".into_maybe_owned()
