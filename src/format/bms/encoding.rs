@@ -47,7 +47,7 @@ static LOG_PROBS_JA: &'static [i32] = &[
 ];
 
 /// Reads the whole stream with given encoding. Any error would be substituted with U+FFFD.
-pub fn decode_stream(f: &mut Reader, encoding: EncodingRef) -> ~str {
+pub fn decode_stream(f: &mut Reader, encoding: EncodingRef) -> StrBuf {
     // TODO use incremental decoding when available
     let s = f.read_to_end().ok().unwrap_or_else(|| Vec::new());
     encoding.decode(s.as_slice(), DecodeReplace).unwrap()
@@ -60,7 +60,7 @@ pub fn decode_stream(f: &mut Reader, encoding: EncodingRef) -> ~str {
 //
 // Rust: cannot change this to return `EncodingRef`, it seems to "infect" other uses of
 //       `UTF_8.decode(...)` etc. to fail to resolve.
-pub fn guess_decode_stream(f: &mut Reader) -> (~str, &'static Encoding, f64) {
+pub fn guess_decode_stream(f: &mut Reader) -> (StrBuf, &'static Encoding, f64) {
     let s: Vec<u8> = f.read_to_end().ok().unwrap_or_else(|| Vec::new());
 
     // check for BOM (Sonorous proposal #1)
@@ -87,8 +87,8 @@ pub fn guess_decode_stream(f: &mut Reader) -> (~str, &'static Encoding, f64) {
     // Windows-949/31J: guess
     let ko = WINDOWS_949.decode(s.as_slice(), DecodeReplace).unwrap();
     let ja = WINDOWS_31J.decode(s.as_slice(), DecodeReplace).unwrap();
-    let koconfidence = Classifier::new(CharClassKo, LOG_PROBS_KO).raw_confidence(ko);
-    let jaconfidence = Classifier::new(CharClassJa, LOG_PROBS_JA).raw_confidence(ja);
+    let koconfidence = Classifier::new(CharClassKo, LOG_PROBS_KO).raw_confidence(ko.as_slice());
+    let jaconfidence = Classifier::new(CharClassJa, LOG_PROBS_JA).raw_confidence(ja.as_slice());
     let (s, encoding, confidence) =
         if koconfidence < jaconfidence {
             (ko, WINDOWS_949 as &'static Encoding, koconfidence)

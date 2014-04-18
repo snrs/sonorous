@@ -168,7 +168,7 @@ fn is_bms_file(path: &Path) -> bool {
 /// Spawns an worker task. We are required to use `libnative` due to the SDL event loop.
 /// Also we need to use our own wrapper to avoid "sending on a closed channel" error from
 /// the default `future_result` wrapper.
-fn spawn_worker_task(name: ~str, body: proc:Send(), on_error: proc:Send()) {
+fn spawn_worker_task(name: ~str, body: proc():Send, on_error: proc():Send) {
     task::task().named(name + " wrapper").spawn(proc() {
         let ret = task::task().named(name).try(body);
         if ret.is_err() { on_error(); }
@@ -224,7 +224,7 @@ impl SelectingScene {
                     let (dirs, files) = search.get_entries(&root);
                     (dirs.to_owned(), files.iter().map(|e| e.clone()).filter(is_bms_file).collect())
                 }; // so that we can reborrow `search`
-                sender.try_send(PushFiles(files));
+                sender.send(PushFiles(files));
                 for dir in dirs.move_iter() {
                     if !recur(search, dir, sender, keepgoing) { return false; }
                 }
@@ -232,10 +232,10 @@ impl SelectingScene {
             }
             let mut search = SearchContext::new();
             if recur(&mut search, root.clone(), &sender, &keepgoing) {
-                sender.try_send(NoMoreFiles);
+                sender.send(NoMoreFiles);
             }
         }, proc() {
-            sender_.try_send(NoMoreFiles);
+            sender_.send(NoMoreFiles);
         });
     }
 
@@ -274,8 +274,8 @@ impl SelectingScene {
                 let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
                 match res {
                     Ok(LoadedImage(surface)) => {
-                        sender.try_send(BmsBannerLoaded(bmspath.clone(), bannerpath,
-                                                        Envelope::new(surface)));
+                        sender.send(BmsBannerLoaded(bmspath.clone(), bannerpath,
+                                                    Envelope::new(surface)));
                     }
                     _ => {}
                 }
@@ -297,13 +297,13 @@ impl SelectingScene {
                     Ok(preproc) => {
                         let banner = preproc.bms.meta.banner.clone();
                         let basepath = preproc.bms.meta.basepath.clone();
-                        sender.try_send(BmsLoaded(bmspath.clone(), preproc, diags));
+                        sender.send(BmsLoaded(bmspath.clone(), preproc, diags));
                         if banner.is_some() {
                             load_banner(banner.unwrap(), basepath);
                         }
                     }
                     Err(err) => {
-                        sender.try_send(BmsFailed(bmspath.clone(), err));
+                        sender.send(BmsFailed(bmspath.clone(), err));
                     }
                 }
             };
@@ -312,18 +312,18 @@ impl SelectingScene {
                 Ok(mut f) => {
                     let buf = f.read_to_end().ok().unwrap_or_else(|| Vec::new());
                     let hash = MD5::from_buffer(buf.as_slice()).final();
-                    sender.try_send(BmsHashRead(bmspath.clone(), hash));
+                    sender.send(BmsHashRead(bmspath.clone(), hash));
 
                     // since we have read the file we don't want the parser to read it again.
                     load_with_reader(io::MemReader::new(buf));
                 }
                 Err(err) => {
-                    sender.try_send(BmsFailed(bmspath.clone(), err.to_str()));
+                    sender.send(BmsFailed(bmspath.clone(), err.to_str()));
                 }
             }
         }, proc() {
             // the task failed to send the error message, so the wrapper sends it instead
-            sender_.try_send(BmsFailed(bmspath_, ~"unexpected error"));
+            sender_.send(BmsFailed(bmspath_, ~"unexpected error"));
         });
     }
 
@@ -471,9 +471,7 @@ impl Scene for SelectingScene {
 
         loop {
             match self.receiver.try_recv() {
-                comm::Empty | comm::Disconnected => { break; }
-
-                comm::Data(PushFiles(paths)) => {
+                Ok(PushFiles(paths)) => {
                     if self.files.is_empty() { // immediately preloads the first entry
                         self.preloaded = PreloadAfter(0);
                     }
@@ -481,22 +479,22 @@ impl Scene for SelectingScene {
                         self.files.push(Entry { path: path, hash: None });
                     }
                 }
-                comm::Data(NoMoreFiles) => {
+                Ok(NoMoreFiles) => {
                     self.filesdone = true;
                 }
-                comm::Data(BmsFailed(bmspath,err)) => {
+                Ok(BmsFailed(bmspath,err)) => {
                     if !self.is_current(&bmspath) { continue; }
                     self.preloaded = PreloadFailed(err);
                 }
-                comm::Data(BmsHashRead(bmspath,hash)) => {
+                Ok(BmsHashRead(bmspath,hash)) => {
                     if !self.is_current(&bmspath) { continue; }
                     self.files.as_mut_slice()[self.offset].hash = Some(hash);
                 }
-                comm::Data(BmsLoaded(bmspath,preproc,messages)) => {
+                Ok(BmsLoaded(bmspath,preproc,messages)) => {
                     if !self.is_current(&bmspath) { continue; }
                     self.preloaded = Preloaded(PreloadedData::new(preproc, messages));
                 }
-                comm::Data(BmsBannerLoaded(bmspath,imgpath,prepared)) => {
+                Ok(BmsBannerLoaded(bmspath,imgpath,prepared)) => {
                     if !self.is_current(&bmspath) { continue; }
                     match self.preloaded {
                         Preloaded(ref mut data) if data.banner.is_none() => {
@@ -510,6 +508,7 @@ impl Scene for SelectingScene {
                         _ => {}
                     }
                 }
+                Err(_) => { break; }
             }
         }
 

@@ -376,13 +376,13 @@ pub trait ToHex {
 impl<'r> ToHex for &'r [u8] {
     fn to_hex(&self) -> ~str {
         // XXX not quite fast.
-        let mut ret = ~"";
+        let mut ret = StrBuf::new();
         static HEXDIGITS: &'static [u8] = bytes!("0123456789abcdef");
         for &c in self.iter() {
             ret.push_char(HEXDIGITS[(c >> 4) as uint] as char);
             ret.push_char(HEXDIGITS[(c & 15) as uint] as char);
         }
-        ret
+        ret.into_owned()
     }
 }
 

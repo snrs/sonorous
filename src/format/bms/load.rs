@@ -38,7 +38,7 @@ struct BmsLine {
 
 /// A callback function for messages during parsing. The line is optional for global messages.
 /// The callback may return `false` to stop the processing.
-pub type Callback<'r> = 'r |line: Option<uint>, msg: BmsMessage| -> bool;
+pub type Callback<'r> = |line: Option<uint>, msg: BmsMessage|: 'r -> bool;
 
 /// Reads the BMS file with given RNG from given reader. Diagnostic messages are sent via callback.
 pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,

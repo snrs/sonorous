@@ -46,7 +46,7 @@ pub fn console_encoding() -> EncodingRef {
 
 /// An encoder trap function used for `to_console_encoding`.
 fn hex_ncr_escape(_encoder: &Encoder, input: &str, output: &mut ByteWriter) -> bool {
-    let mut escapes = ~"";
+    let mut escapes = StrBuf::new();
     for ch in input.chars() { escapes.push_str(format!("&\\#x{:X};", ch as int)); }
     output.write_bytes(escapes.as_bytes());
     true

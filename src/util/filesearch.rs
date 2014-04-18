@@ -15,7 +15,7 @@ use collections::HashMap;
 /// Context for searching files.
 pub struct SearchContext {
     /// Cached return values of `get_entries`.
-    pub get_entries_cache: HashMap<Path,(Rc<~[Path]>,Rc<~[Path]>)>,
+    pub get_entries_cache: HashMap<Path,(Rc<Vec<Path>>,Rc<Vec<Path>>)>,
 }
 
 impl SearchContext {
@@ -32,7 +32,7 @@ impl SearchContext {
         // invalidate any cache items since it turned out that `os::list_dir` is very, very slow.
         // for example, it is not rare for `list_dir` to take more than 100ms in Windows.
         let &(ref dirs, ref files) = self.get_entries_cache.find_or_insert_with(dir.clone(), |_| {
-            let entries = io::fs::readdir(dir).ok().unwrap_or_else(|| ~[]);
+            let entries = io::fs::readdir(dir).ok().unwrap_or_else(|| Vec::new());
             let (dirs, files) = entries.partition(|path| path.is_dir());
             (Rc::new(dirs), Rc::new(files))
         });

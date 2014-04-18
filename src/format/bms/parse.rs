@@ -180,8 +180,8 @@ impl<'r> fmt::Show for BmsCommand<'r> {
             BmsWAVCmd(cmd, key, v) => write!(f.buf, "\\#WAVCMD {:02} {}{}", cmd, key, v),
             BmsExWAV(_key, None, None, None, ref _s) => fail!(~"unsupported"),
             BmsExWAV(key, pan, vol, freq, ref s) => {
-                let mut flags = ~"";
-                let mut opts = ~"";
+                let mut flags = StrBuf::new();
+                let mut opts = StrBuf::new();
                 if pan.is_some() {
                     flags.push_char('p');
                     opts.push_str(format!(" {}", pan.unwrap()));
@@ -315,7 +315,7 @@ pub struct Parser<'r> {
     opts: &'r ParserOptions,
     /// The file contents decoded with a detected encoding.
     /// This is why we have a separate parsing iterator: we need to be able to refer its lifetime.
-    file: ~str,
+    file: StrBuf,
     /// The detected encoding and its confidence in `[0,1]`.
     encoding: (&'static str, f64),
 }
@@ -352,7 +352,7 @@ impl<'r> Parser<'r> {
     /// Returns a parsing iterator over this BMS file.
     pub fn iter<'a>(&'a self) -> ParsingIterator<'a> {
         let (encname, confidence) = self.encoding;
-        ParsingIterator { iter: self.file.split('\u000a'), lineno: 0, opts: self.opts,
+        ParsingIterator { iter: self.file.as_slice().split('\u000a'), lineno: 0, opts: self.opts,
                           queued: vec!(Encoding(encname, confidence)) }
     }
 }

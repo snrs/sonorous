@@ -344,17 +344,19 @@ pub fn chardet_train(args: &[~str]) -> int {
         }
         match WINDOWS_949.encode(w, EncodeStrict) {
             Ok(w_) => {
+                let w_ = WINDOWS_31J.decode(w_.as_slice(), DecodeReplace).unwrap();
                 nkowords += 1;
                 kotrainerko.train(w, true);
-                jatrainerko.train(WINDOWS_31J.decode(w_.as_slice(), DecodeReplace).unwrap(), false);
+                jatrainerko.train(w_.as_slice(), false);
             }
             Err(..) => {}
         }
         match WINDOWS_31J.encode(w, EncodeStrict) {
             Ok(w_) => {
+                let w_ = WINDOWS_949.decode(w_.as_slice(), DecodeReplace).unwrap();
                 njawords += 1;
                 jatrainerja.train(w, true);
-                kotrainerja.train(WINDOWS_949.decode(w_.as_slice(), DecodeReplace).unwrap(), false);
+                kotrainerja.train(w_.as_slice(), false);
             }
             Err(..) => {}
         }
