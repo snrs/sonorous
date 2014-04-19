@@ -8,7 +8,7 @@
 
 //! A (sort of) parser for Scene description language.
 
-use std::{num, result};
+use std::{num, result, mem};
 use collections::{TreeMap, HashMap};
 use serialize::json::{Json, Null, Boolean, Number, String, List, Object};
 use serialize::json::from_reader;
@@ -208,10 +208,9 @@ impl FromJson for Gradient {
         match json {
             // ["#rgb", [r,g,b]] etc.
             List(ref mut l) => if l.len() == 2 {
-                let one = l.pop().unwrap();
-                let zero = l.pop().unwrap();
-                let zero = try!(from_json(zero));
-                let one = try!(from_json(one));
+                let mut it = mem::replace(l, ~[]).move_iter();
+                let zero = try!(from_json(it.next().unwrap()));
+                let one = try!(from_json(it.next().unwrap()));
                 return Ok(Gradient { zero: zero, one: one });
             },
 
@@ -283,15 +282,14 @@ impl FromJson for Expr {
 }
 
 impl FromJson for Pos {
-    fn from_json(json: Json) -> Result<Pos,~str> {
+    fn from_json(mut json: Json) -> Result<Pos,~str> {
         match json {
             // [x, y]
-            List(mut l) => match l.len() {
+            List(ref mut l) => match l.len() {
                 2 => {
-                    let y = l.pop().unwrap();
-                    let x = l.pop().unwrap();
-                    let x = try!(from_json(x));
-                    let y = try!(from_json(y));
+                    let mut it = mem::replace(l, ~[]).move_iter();
+                    let x = try!(from_json(it.next().unwrap()));
+                    let y = try!(from_json(it.next().unwrap()));
                     Ok(Pos { x: x, y: y })
                 },
                 _ => Err(~"expected a position pair"),
@@ -311,28 +309,24 @@ impl FromJson for Pos {
 }
 
 impl FromJson for Rect {
-    fn from_json(json: Json) -> Result<Rect,~str> {
+    fn from_json(mut json: Json) -> Result<Rect,~str> {
         match json {
-            List(mut l) => match l.len() {
+            List(ref mut l) => match l.len() {
                 // [[px, py], [qx, qy]] (preferred)
                 2 => {
-                    let q = l.pop().unwrap();
-                    let p = l.pop().unwrap();
-                    let p = try!(from_json(p));
-                    let q = try!(from_json(q));
+                    let mut it = mem::replace(l, ~[]).move_iter();
+                    let p = try!(from_json(it.next().unwrap()));
+                    let q = try!(from_json(it.next().unwrap()));
                     Ok(Rect { p: p, q: q })
                 },
 
                 // [px, py, qx, qy]
                 4 => {
-                    let qy = l.pop().unwrap();
-                    let qx = l.pop().unwrap();
-                    let py = l.pop().unwrap();
-                    let px = l.pop().unwrap();
-                    let px = try!(from_json(px));
-                    let py = try!(from_json(py));
-                    let qx = try!(from_json(qx));
-                    let qy = try!(from_json(qy));
+                    let mut it = mem::replace(l, ~[]).move_iter();
+                    let px = try!(from_json(it.next().unwrap()));
+                    let py = try!(from_json(it.next().unwrap()));
+                    let qx = try!(from_json(it.next().unwrap()));
+                    let qy = try!(from_json(it.next().unwrap()));
                     Ok(Rect { p: Pos { x: px, y: py }, q: Pos { x: qx, y: qy } })
                 },
 
