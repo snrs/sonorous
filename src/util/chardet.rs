@@ -39,7 +39,6 @@
  * correlated with the row index of character sets.
  */
 
-use std::num::Round;
 use util::maybe_owned::{MaybeOwnedVec, IntoMaybeOwnedVec};
 
 /// An iterator returned by `CharClass::classes`.

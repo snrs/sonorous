@@ -362,15 +362,15 @@ impl Hook for LoadingContext {
         }
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
         match id {
             "loading" => { self.lastpath.is_some() && body(parent, ""); }
             "meta.stagefile" => { self.stagefile.is_some() && body(parent, ""); }
             _ => {
-                return self.opts.run_block_hook(id, parent, &body) ||
-                       self.bms.run_block_hook(id, parent, &body) ||
-                       self.infos.run_block_hook(id, parent, &body) ||
-                       self.keyspec.run_block_hook(id, parent, &body);
+                return self.opts.run_block_hook(id, parent, &mut body) ||
+                       self.bms.run_block_hook(id, parent, &mut body) ||
+                       self.infos.run_block_hook(id, parent, &mut body) ||
+                       self.keyspec.run_block_hook(id, parent, &mut body);
             }
         }
         true

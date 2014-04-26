@@ -66,7 +66,7 @@ pub trait Hook {
     /// Runs the block hook from other block hooks.
     /// Note that `body` is now a reference to the closure (easier to call it in this way).
     /// Same as `block_hook` but does not wreck the delegation chain.
-    fn run_block_hook(&self, id: &str, parent: &Hook, body: &|&Hook, &str| -> bool) -> bool {
+    fn run_block_hook(&self, id: &str, parent: &Hook, body: &mut |&Hook, &str| -> bool) -> bool {
         self.block_hook(id, parent, |hook,alt| (*body)(&parent.delegate(hook),alt))
     }
 
@@ -123,9 +123,9 @@ impl<'a> Hook for Delegate<'a> {
             .or_else(|| self.base.scalar_hook(id))
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
-        self.delegated.run_block_hook(id, parent, &body) ||
-            self.base.run_block_hook(id, parent, &body)
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
+        self.delegated.run_block_hook(id, parent, &mut body) ||
+            self.base.run_block_hook(id, parent, &mut body)
     }
 }
 
@@ -145,8 +145,8 @@ impl<'a> Hook for AddText<'a> {
         }
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
-        self.base.run_block_hook(id, parent, &body)
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
+        self.base.run_block_hook(id, parent, &mut body)
     }
 }
 

@@ -169,8 +169,8 @@ fn is_bms_file(path: &Path) -> bool {
 /// Also we need to use our own wrapper to avoid "sending on a closed channel" error from
 /// the default `future_result` wrapper.
 fn spawn_worker_task(name: ~str, body: proc():Send, on_error: proc():Send) {
-    task::task().named(name + " wrapper").spawn(proc() {
-        let ret = task::task().named(name).try(body);
+    task::TaskBuilder::new().named(name + " wrapper").spawn(proc() {
+        let ret = task::TaskBuilder::new().named(name).try(body);
         if ret.is_err() { on_error(); }
     });
 }
@@ -566,10 +566,10 @@ impl Hook for PreprocessedBms {
             .or_else(|| self.keyspec.scalar_hook(id))
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
-        self.bms.run_block_hook(id, parent, &body) ||
-            self.infos.run_block_hook(id, parent, &body) ||
-            self.keyspec.run_block_hook(id, parent, &body)
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
+        self.bms.run_block_hook(id, parent, &mut body) ||
+            self.infos.run_block_hook(id, parent, &mut body) ||
+            self.keyspec.run_block_hook(id, parent, &mut body)
     }
 }
 
@@ -611,14 +611,14 @@ impl Hook for PreloadedData {
         }
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
         match id {
             "messages" => {
                 // TODO 20 messages limit is arbitrary, should really be handled by skin
                 self.messages.iter().take(20).advance(|msg| body(&parent.delegate(msg), ""));
             }
             "meta.banner" => { self.banner.is_some() && body(parent, ""); }
-            _ => { return self.preproc.run_block_hook(id, parent, &body); }
+            _ => { return self.preproc.run_block_hook(id, parent, &mut body); }
         }
         true
     }
@@ -629,7 +629,7 @@ impl Hook for SelectingScene {
         self.opts.scalar_hook(id)
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
         match id {
             "scanning" => { self.filesdone || body(parent, ""); }
             "entries" => {
@@ -648,7 +648,7 @@ impl Hook for SelectingScene {
                     body(&parent.add_text("preload.error", *err), "failed");
                 }
             },
-            _ => { return self.opts.run_block_hook(id, parent, &body); }
+            _ => { return self.opts.run_block_hook(id, parent, &mut body); }
         }
         true
     }
@@ -668,12 +668,12 @@ impl<'a> Hook for (&'a SelectingScene, bool, &'a Entry) {
         }
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
         let (scene, inverted, entry) = *self;
         match id {
             "entry.hash" => { entry.hash.is_some() && body(parent, ""); }
             "entry.inverted" => { inverted && body(parent, ""); }
-            _ => { return scene.run_block_hook(id, parent, &body); }
+            _ => { return scene.run_block_hook(id, parent, &mut body); }
         }
         true
     }

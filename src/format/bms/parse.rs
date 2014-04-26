@@ -392,7 +392,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             )
 
             // skip non-command lines
-            let line = line.trim_left_chars(&is_whitespace_or_similar);
+            let line = line.trim_left_chars(is_whitespace_or_similar);
             if line.is_empty() { continue; }
             let (ch, line) = line.slice_shift_char();
             if ch == Some('\uff03') {

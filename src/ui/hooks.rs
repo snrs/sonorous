@@ -132,9 +132,9 @@ impl Hook for bms::Bms {
             .or_else(|| self.timeline.scalar_hook(id))
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
-        self.meta.run_block_hook(id, parent, &body) ||
-            self.timeline.run_block_hook(id, parent, &body)
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
+        self.meta.run_block_hook(id, parent, &mut body) ||
+            self.timeline.run_block_hook(id, parent, &mut body)
     }
 }
 
