@@ -47,10 +47,10 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
     macro_rules! diag(
         ($e:expr) => (
-            if !callback(None, $e) { return Err(~"aborted"); }
+            if !callback(None, $e) { return Err(format!("aborted")); }
         );
         ($e:expr at $lineno:expr) => (
-            if !callback($lineno, $e) { return Err(~"aborted"); }
+            if !callback($lineno, $e) { return Err(format!("aborted")); }
         )
     )
 
@@ -436,7 +436,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                         let t = measure + i as f64 / count;
                         let t2 = measure + (i + 2) as f64 / count;
                         if !handle_key(line.chan, t, t2, v, line.lineno) {
-                            return Err(~"aborted");
+                            return Err(format!("aborted"));
                         }
                     }
                 }

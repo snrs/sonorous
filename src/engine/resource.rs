@@ -35,7 +35,7 @@ fn resolve_relative_path_result(search: &mut SearchContext, basedir: &Path, path
                                 exts: &[&str]) -> Result<Path,~str> {
     match search.resolve_relative_path(basedir, path, exts) {
         Some(path) => Ok(path),
-        None => Err(~"file not found"),
+        None => Err(format!("file not found")),
     }
 }
 

@@ -145,8 +145,8 @@ pub mod builder {
         /// and the algorithm removes or replaces objects which have the same or conflicting type
         /// in the same position. Conflicting types are specified by `merge_types` function.
         fn sanitize<S:Clone,I:Clone>(objs: &mut [ObjDataWithVpos<S,I>],
-                                     to_type: |&ObjData<S,I>| -> Option<uint>,
-                                     merge_types: |uint| -> uint) {
+                                     to_type: |&ObjData<S,I>| -> Option<int>,
+                                     merge_types: |int| -> int) {
             let len = objs.len();
             let mut i = 0;
             while i < len {
@@ -185,12 +185,12 @@ pub mod builder {
         for lane in range(0, NLANES) {
             let lane0 = Lane(lane);
 
-            static LNDONE: uint = 0;
-            static LNSTART: uint = 1;
-            static VISIBLE: uint = 2;
-            static INVISIBLE: uint = 3;
-            static BOMB: uint = 4;
-            let to_type = |obj: &ObjData<S,I>| -> Option<uint> {
+            static LNDONE: int = 0;
+            static LNSTART: int = 1;
+            static VISIBLE: int = 2;
+            static INVISIBLE: int = 3;
+            static BOMB: int = 4;
+            let to_type = |obj: &ObjData<S,I>| -> Option<int> {
                 match *obj {
                     Visible(lane,_) if lane == lane0 => Some(VISIBLE),
                     Invisible(lane,_) if lane == lane0 => Some(INVISIBLE),
@@ -203,7 +203,7 @@ pub mod builder {
 
             let mut inside = false;
             sanitize(objs, |obj| to_type(obj), |mut types| {
-                static LNMASK: uint = (1 << LNSTART) | (1 << LNDONE);
+                static LNMASK: int = (1 << LNSTART) | (1 << LNDONE);
 
                 // remove overlapping LN endpoints altogether
                 if (types & LNMASK) == LNMASK { types &= !LNMASK; }
@@ -442,7 +442,7 @@ pub mod modf {
     /// Swaps given lanes in the reverse order.
     pub fn mirror<S:Clone,I:Clone>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
         let mut map = Vec::from_fn(NLANES, |lane| Lane(lane));
-        for (&Lane(from), &to) in lanes.iter().zip(lanes.rev_iter()) {
+        for (&Lane(from), &to) in lanes.iter().zip(lanes.iter().rev()) {
             map.as_mut_slice()[from] = to;
         }
 
@@ -479,7 +479,7 @@ pub mod modf {
                 let lane = (*obj).object_lane().unwrap();
                 match movable.iter().position(|&i| i == lane) {
                     Some(i) => { movable.swap_remove(i); }
-                    None => fail!(~"non-sanitized timeline")
+                    None => fail!("non-sanitized timeline")
                 }
             }
             if lasttime < obj.loc.time { // reshuffle required

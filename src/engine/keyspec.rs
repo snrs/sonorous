@@ -220,14 +220,15 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
             let isbme = present[8] || present[9] || present[36+8] || present[36+9];
             let haspedal = present[7] || present[36+7];
             let nkeys = match bms.meta.mode {
-                CouplePlay | DoublePlay => if isbme {~"14"} else {~"10"},
-                _                       => if isbme {~"7" } else {~"5" }
+                CouplePlay | DoublePlay => if isbme {"14"} else {"10"},
+                _                       => if isbme {"7" } else {"5" }
             };
-            if haspedal {nkeys + "/fp"} else {nkeys}
+            if haspedal {nkeys + "/fp"} else {nkeys.to_owned()}
         },
         Some("pms") => {
             let isbme = present[6] || present[7] || present[8] || present[9];
-            if isbme {~"9-bme"} else {~"9"}
+            let nkeys = if isbme {"9-bme"} else {"9"};
+            nkeys.to_owned()
         },
         Some(_) => preset.unwrap()
     };
@@ -249,15 +250,22 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
         if leftkeys.is_none() && rightkeys.is_none() {
             let ext = bms.bmspath.as_ref().and_then(|p| p.extension())
                                           .and_then(str::from_utf8).map(|e| e.to_ascii_lower());
-            let preset = if preset.is_none() && ext == Some(~"pms") {Some(~"pms")} else {preset};
+            let preset =
+                if preset.is_none() && ext.as_ref().map(|s| s.as_slice()) == Some("pms") {
+                    Some("pms".to_owned())
+                } else {
+                    preset
+                };
             match preset_to_key_spec(bms, preset.clone()) {
                 Some(leftright) => leftright,
                 None => {
-                    return Err(format!("Invalid preset name: {}", preset.clone().unwrap_or(~"")));
+                    return Err(format!("Invalid preset name: {}",
+                                       preset.as_ref().map_or("", |s| s.as_slice())));
                 }
             }
         } else {
-            (leftkeys.clone().unwrap_or(~""), rightkeys.clone().unwrap_or(~""))
+            (leftkeys.as_ref().map_or("", |s| s.as_slice()).to_owned(),
+             rightkeys.as_ref().map_or("", |s| s.as_slice()).to_owned())
         };
 
     let mut keyspec = ~KeySpec { split: 0, order: Vec::new(),
@@ -284,7 +292,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
             Some(nkeys) => { keyspec.split += nkeys; }
         }
     } else {
-        return Err(~"No key model is specified using -k or -K");
+        return Err(format!("No key model is specified using -k or -K"));
     }
     if !rightkeys.is_empty() {
         match parse_and_add(keyspec, rightkeys) {

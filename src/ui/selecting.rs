@@ -168,7 +168,7 @@ fn is_bms_file(path: &Path) -> bool {
 /// Spawns an worker task. We are required to use `libnative` due to the SDL event loop.
 /// Also we need to use our own wrapper to avoid "sending on a closed channel" error from
 /// the default `future_result` wrapper.
-fn spawn_worker_task(name: ~str, body: proc():Send, on_error: proc():Send) {
+fn spawn_worker_task(name: &'static str, body: proc():Send, on_error: proc():Send) {
     task::TaskBuilder::new().named(name + " wrapper").spawn(proc() {
         let ret = task::TaskBuilder::new().named(name).try(body);
         if ret.is_err() { on_error(); }
@@ -178,11 +178,8 @@ fn spawn_worker_task(name: ~str, body: proc():Send, on_error: proc():Send) {
 /// Prints a diagnostic message to the screen.
 /// This can be directly used as a parser message callback.
 pub fn print_diag(line: Option<uint>, msg: bms::diag::BmsMessage) -> bool {
-    let atline = match line {
-        Some(line) => format!(" at line {}", line),
-        None => ~"",
-    };
-    warn!("[{}{}] {}", msg.severity, atline, msg);
+    let atline = line.map(|line| format!(" at line {}", line));
+    warn!("[{}{}] {}", msg.severity, atline.as_ref().map_or("", |s| s.as_slice()), msg);
     true
 }
 
@@ -215,7 +212,7 @@ impl SelectingScene {
         let sender = self.sender.clone();
         let sender_ = self.sender.clone();
         let keepgoing = self.keepgoing.clone();
-        spawn_worker_task(~"scanner", proc() {
+        spawn_worker_task("scanner", proc() {
             fn recur(search: &mut SearchContext, root: Path,
                      sender: &Sender<Message>, keepgoing: &Arc<RWLock<bool>>) -> bool {
                 if !*keepgoing.read() { return false; }
@@ -264,7 +261,7 @@ impl SelectingScene {
         let opts = self.opts.deref().clone();
         let sender = self.sender.clone();
         let sender_ = self.sender.clone();
-        spawn_worker_task(~"preloader", proc() {
+        spawn_worker_task("preloader", proc() {
             let opts = Rc::new(opts);
 
             let load_banner = |bannerpath: ~str, basepath: Option<Path>| {
@@ -323,7 +320,7 @@ impl SelectingScene {
             }
         }, proc() {
             // the task failed to send the error message, so the wrapper sends it instead
-            sender_.send(BmsFailed(bmspath_, ~"unexpected error"));
+            sender_.send(BmsFailed(bmspath_, format!("unexpected error")));
         });
     }
 

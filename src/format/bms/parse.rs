@@ -178,7 +178,7 @@ impl<'r> fmt::Show for BmsCommand<'r> {
             BmsLNObj(key) => write!(f.buf, "\\#LNOBJ {}", key),
             BmsWAV(key, ref s) => write!(f.buf, "\\#WAV{} {}", key, *s),
             BmsWAVCmd(cmd, key, v) => write!(f.buf, "\\#WAVCMD {:02} {}{}", cmd, key, v),
-            BmsExWAV(_key, None, None, None, ref _s) => fail!(~"unsupported"),
+            BmsExWAV(_key, None, None, None, ref _s) => fail!("unsupported"),
             BmsExWAV(key, pan, vol, freq, ref s) => {
                 let mut flags = StrBuf::new();
                 let mut opts = StrBuf::new();
@@ -216,10 +216,10 @@ impl<'r> fmt::Show for BmsCommand<'r> {
             BmsCanvasSize(w, h) => write!(f.buf, "\\#SNRS:CANVASSIZE {} {}", w, h),
             BmsStop(key, Measures(dur)) =>
                 write!(f.buf, "\\#STOP{} {}", key, (dur * 192.0) as int),
-            BmsStop(..) => fail!(~"unsupported"),
+            BmsStop(..) => fail!("unsupported"),
             BmsStp(pos, Seconds(dur)) =>
                 write!(f.buf, "\\#STP {:07.3} {}", pos, (dur * 1000.0) as int),
-            BmsStp(..) => fail!(~"unsupported"),
+            BmsStp(..) => fail!("unsupported"),
             BmsText(key, ref s) => write!(f.buf, "\\#TEXT{} {}", key, *s),
             BmsOption(ref opt) => write!(f.buf, "\\#OPTION {}", *opt),
             BmsChangeOption(key, ref opt) => write!(f.buf, "\\#CHANGEOPTION{} {}", key, *opt),

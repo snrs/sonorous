@@ -138,17 +138,17 @@ fn build_lane_styles(keyspec: &KeySpec) ->
         styles.push((lane, style));
         leftmost += style.width + 1;
         if leftmost > SCREENW - 20 {
-            return Err(~"The screen can't hold that many lanes");
+            return Err(format!("The screen can't hold that many lanes"));
         }
     }
-    for &lane in keyspec.right_lanes().rev_iter() {
+    for &lane in keyspec.right_lanes().iter().rev() {
         let kind = keyspec.kinds.as_slice()[*lane];
         assert!(kind.is_some());
         let kind = kind.unwrap();
         let style = LaneStyle::from_kind(kind, rightmost, true);
         styles.push((lane, style));
         if rightmost < leftmost + 40 {
-            return Err(~"The screen can't hold that many lanes");
+            return Err(format!("The screen can't hold that many lanes"));
         }
         rightmost -= style.width + 1;
     }

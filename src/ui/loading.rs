@@ -117,7 +117,7 @@ impl LoadingContext {
                         Texture2D::from_owned_surface(surface, false, false)
                     })
                 },
-                _ => Err(~"unexpected")
+                _ => fail!("unexpected")
             }
         });
         match tex_or_err {
@@ -303,7 +303,8 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
                 nnotes = self.context.infos.nnotes, nkeys = self.context.keyspec.nkeys(),
                 haslongnote = if self.context.infos.haslongnote {"-LN"} else {""},
                 difficulty = self.context.bms.meta.difficulty.and_then(|d| d.name())
-                                                             .map_or(~"", |name| ~" " + name)));
+                                                             .map_or("".to_owned(),
+                                                                     |name| " " + name)));
         }
         Continue
     }

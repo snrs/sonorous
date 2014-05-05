@@ -53,7 +53,7 @@ impl GLState {
 
         let hwnd = match syswm::get_wm_info() {
             Some(wminfo) => wminfo.window,
-            None => { return Err(~"SDL_GetWMInfo failed"); }
+            None => { return Err(format!("SDL_GetWMInfo failed")); }
         };
         let hdc = unsafe { GetDC(hwnd) };
         let display = return_on_err!(egl::get_display(hdc));
@@ -70,7 +70,7 @@ impl GLState {
         ];
         let configs = return_on_err!(egl::get_configs(display, configattrs, Some(1)));
         if configs.is_empty() {
-            return Err(~"no suitable EGL configs available");
+            return Err(format!("no suitable EGL configs available"));
         }
         let config = configs.as_slice()[0];
 

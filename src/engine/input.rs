@@ -116,9 +116,9 @@ struct KeySet {
 /// A list of environment variables that set the mapping for multiple keys, and corresponding
 /// default values and the order of keys.
 static KEYSETS: &'static [KeySet] = &[
-    KeySet { envvar: &"SNRS_1P_KEYS",
-             envvar2: &"ANGOLMOIS_1P_KEYS",
-             default: &"left shift%axis 3|z%button 3|s%button 6|x%button 2|d%button 7|\
+    KeySet { envvar: "SNRS_1P_KEYS",
+             envvar2: "ANGOLMOIS_1P_KEYS",
+             default: "left shift%axis 3|z%button 3|s%button 6|x%button 2|d%button 7|\
                        c%button 1|f%button 4|v%axis 2|left alt",
              mapping: &[(Some(Scratch),   &[LaneInput(Lane(6))]),
                         (Some(WhiteKey),  &[LaneInput(Lane(1))]),
@@ -129,9 +129,9 @@ static KEYSETS: &'static [KeySet] = &[
                         (Some(BlackKey),  &[LaneInput(Lane(8))]),
                         (Some(WhiteKey),  &[LaneInput(Lane(9))]),
                         (Some(FootPedal), &[LaneInput(Lane(7))])] },
-    KeySet { envvar: &"SNRS_2P_KEYS",
-             envvar2: &"ANGOLMOIS_2P_KEYS",
-             default: &"right alt|m|k|,|l|.|;|/|right shift",
+    KeySet { envvar: "SNRS_2P_KEYS",
+             envvar2: "ANGOLMOIS_2P_KEYS",
+             default: "right alt|m|k|,|l|.|;|/|right shift",
              mapping: &[(Some(FootPedal), &[LaneInput(Lane(36+7))]),
                         (Some(WhiteKey),  &[LaneInput(Lane(36+1))]),
                         (Some(BlackKey),  &[LaneInput(Lane(36+2))]),
@@ -141,9 +141,9 @@ static KEYSETS: &'static [KeySet] = &[
                         (Some(BlackKey),  &[LaneInput(Lane(36+8))]),
                         (Some(WhiteKey),  &[LaneInput(Lane(36+9))]),
                         (Some(Scratch),   &[LaneInput(Lane(36+6))])] },
-    KeySet { envvar: &"SNRS_PMS_KEYS",
-             envvar2: &"ANGOLMOIS_PMS_KEYS",
-             default: &"z|s|x|d|c|f|v|g|b",
+    KeySet { envvar: "SNRS_PMS_KEYS",
+             envvar2: "ANGOLMOIS_PMS_KEYS",
+             default: "z|s|x|d|c|f|v|g|b",
              mapping: &[(Some(Button1), &[LaneInput(Lane(1))]),
                         (Some(Button2), &[LaneInput(Lane(2))]),
                         (Some(Button3), &[LaneInput(Lane(3))]),
@@ -153,9 +153,9 @@ static KEYSETS: &'static [KeySet] = &[
                         (Some(Button3), &[LaneInput(Lane(9)), LaneInput(Lane(36+3))]),
                         (Some(Button2), &[LaneInput(Lane(6)), LaneInput(Lane(36+4))]),
                         (Some(Button1), &[LaneInput(Lane(7)), LaneInput(Lane(36+5))])] },
-    KeySet { envvar: &"SNRS_SPEED_KEYS",
-             envvar2: &"ANGOLMOIS_SPEED_KEYS",
-             default: &"f3|f4",
+    KeySet { envvar: "SNRS_SPEED_KEYS",
+             envvar2: "ANGOLMOIS_SPEED_KEYS",
+             default: "f3|f4",
              mapping: &[(None, &[SpeedDownInput]),
                         (None, &[SpeedUpInput])] },
 ];

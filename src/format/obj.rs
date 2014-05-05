@@ -468,7 +468,7 @@ impl<S:Clone,I:Clone,T:WithObjData<S,I>+Clone> ObjConvOps<S,I> for T {
         let data = match self.to_obj_data() {
             Visible(lane,ref snd) | Invisible(lane,ref snd) |
             LNStart(lane,ref snd) | LNDone(lane,ref snd) => Visible(lane,snd.clone()),
-            _ => fail!(~"to_visible for non-object")
+            _ => fail!("to_visible for non-object")
         };
         self.with_obj_data(data)
     }
@@ -477,7 +477,7 @@ impl<S:Clone,I:Clone,T:WithObjData<S,I>+Clone> ObjConvOps<S,I> for T {
         let data = match self.to_obj_data() {
             Visible(lane,ref snd) | Invisible(lane,ref snd) |
             LNStart(lane,ref snd) | LNDone(lane,ref snd) => Invisible(lane,snd.clone()),
-            _ => fail!(~"to_invisible for non-object")
+            _ => fail!("to_invisible for non-object")
         };
         self.with_obj_data(data)
     }
@@ -486,7 +486,7 @@ impl<S:Clone,I:Clone,T:WithObjData<S,I>+Clone> ObjConvOps<S,I> for T {
         let data = match self.to_obj_data() {
             Visible(lane,ref snd) | Invisible(lane,ref snd) |
             LNStart(lane,ref snd) | LNDone(lane,ref snd) => LNStart(lane,snd.clone()),
-            _ => fail!(~"to_lnstart for non-object")
+            _ => fail!("to_lnstart for non-object")
         };
         self.with_obj_data(data)
     }
@@ -495,7 +495,7 @@ impl<S:Clone,I:Clone,T:WithObjData<S,I>+Clone> ObjConvOps<S,I> for T {
         let data = match self.to_obj_data() {
             Visible(lane,ref snd) | Invisible(lane,ref snd) |
             LNStart(lane,ref snd) | LNDone(lane,ref snd) => LNDone(lane,snd.clone()),
-            _ => fail!(~"to_lndone for non-object")
+            _ => fail!("to_lndone for non-object")
         };
         self.with_obj_data(data)
     }

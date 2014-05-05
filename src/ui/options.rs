@@ -142,16 +142,16 @@ pub enum ParsingResult {
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
 pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult {
-    let longargs: HashMap<~str,char> = vec!(
-        (~"--help", 'h'), (~"--version", 'V'), (~"--speed", 'a'),
-        (~"--autoplay", 'v'), (~"--exclusive", 'x'), (~"--sound-only", 'X'),
-        (~"--windowed", 'w'), (~"--no-fullscreen", 'w'),
-        (~"--fullscreen", ' '), (~"--info", ' '), (~"--no-info", 'q'),
-        (~"--mirror", 'm'), (~"--shuffle", 's'), (~"--shuffle-ex", 'S'),
-        (~"--random", 'r'), (~"--random-ex", 'R'), (~"--preset", 'k'),
-        (~"--key-spec", 'K'), (~"--bga", ' '), (~"--no-bga", 'B'),
-        (~"--movie", ' '), (~"--no-movie", 'M'), (~"--joystick", 'j'),
-        (~"--encoding", 'E'), (~"--skin-root", 'Y'), (~"--debug", 'Z')
+    let longargs: HashMap<&str,char> = vec!(
+        ("--help", 'h'), ("--version", 'V'), ("--speed", 'a'),
+        ("--autoplay", 'v'), ("--exclusive", 'x'), ("--sound-only", 'X'),
+        ("--windowed", 'w'), ("--no-fullscreen", 'w'),
+        ("--fullscreen", ' '), ("--info", ' '), ("--no-info", 'q'),
+        ("--mirror", 'm'), ("--shuffle", 's'), ("--shuffle-ex", 'S'),
+        ("--random", 'r'), ("--random-ex", 'R'), ("--preset", 'k'),
+        ("--key-spec", 'K'), ("--bga", ' '), ("--no-bga", 'B'),
+        ("--movie", ' '), ("--no-movie", 'M'), ("--joystick", 'j'),
+        ("--encoding", 'E'), ("--skin-root", 'Y'), ("--debug", 'Z')
     ).move_iter().collect();
 
     let nargs = args.len();
@@ -180,7 +180,7 @@ pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult 
                 let filename: &str = args[i];
                 bmspath = Some(Path::new(filename));
             }
-        } else if args[i] == ~"--" {
+        } else if args[i].as_slice() == "--" {
             i += 1;
             if bmspath.is_none() && i < nargs {
                 let filename: &str = args[i];
@@ -190,7 +190,7 @@ pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult 
         } else {
             let shortargs =
                 if args[i].starts_with("--") {
-                    match longargs.find(&args[i]) {
+                    match longargs.find(&args[i].as_slice()) {
                         Some(&c) => str::from_char(c),
                         None => { return Error(format!("Invalid option: {}", args[i])); }
                     }

@@ -238,7 +238,7 @@ fn next_speed_mark(current: f64) -> Option<f64> {
 /// Finds the previous nearest play speed mark if any.
 fn previous_speed_mark(current: f64) -> Option<f64> {
     let mut next = None;
-    for &speed in SPEED_MARKS.rev_iter() {
+    for &speed in SPEED_MARKS.iter().rev() {
         if speed > current + 0.001 {
             next = Some(speed);
         } else {

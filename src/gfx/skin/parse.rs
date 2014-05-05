@@ -42,7 +42,7 @@ impl<T:FromJson> FromJson for Vec<T> {
     fn from_json(json: Json) -> Result<Vec<T>,~str> {
         match json {
             List(l) => result::collect(l.move_iter().map(from_json::<T>)),
-            _ => Err(~"expected a list"),
+            _ => Err(format!("expected a list")),
         }
     }
 }
@@ -109,7 +109,7 @@ impl FromJson for Scalar<'static> {
 
             Object(mut map) => {
                 // {"$image": "path/to/image.png"}
-                let image = map.pop(&~"$image");
+                let image = map.pop(&"$image".to_owned());
                 if image.is_some() {
                     let path = match image.unwrap() {
                         String(path) => Path::new(path),
@@ -119,7 +119,7 @@ impl FromJson for Scalar<'static> {
                     return Ok(ImageScalar(path));
                 }
 
-                Err(~"expected a scalar, got an unrecognized object")
+                Err(format!("expected a scalar, got an unrecognized object"))
             },
 
             _ => fail_with_json!(json, "a scalar")
@@ -185,7 +185,7 @@ impl FromJson for Color {
                     [Number(r), Number(g), Number(b), Number(a)] =>
                         Ok(RGBA(from_0_1(r), from_0_1(g), from_0_1(b), from_0_1(a))),
 
-                    _ => Err(~"expected a color triple/quadruple in the list")
+                    _ => Err(format!("expected a color triple/quadruple in the list"))
                 },
 
                 // [r, g, b]
@@ -195,7 +195,7 @@ impl FromJson for Color {
                 [Number(r), Number(g), Number(b), Number(a)] =>
                     Ok(RGBA(from_0_255(r), from_0_255(g), from_0_255(b), from_0_255(a))),
 
-                _ => Err(~"expected a color triple/quadruple")
+                _ => Err(format!("expected a color triple/quadruple"))
             },
 
             _ => fail_with_json!(json, "a color")
@@ -292,7 +292,7 @@ impl FromJson for Pos {
                     let y = try!(from_json(it.next().unwrap()));
                     Ok(Pos { x: x, y: y })
                 },
-                _ => Err(~"expected a position pair"),
+                _ => Err(format!("expected a position pair")),
             },
 
             // {"x": x, "y": y}
@@ -330,7 +330,7 @@ impl FromJson for Rect {
                     Ok(Rect { p: Pos { x: px, y: py }, q: Pos { x: qx, y: qy } })
                 },
 
-                _ => Err(~"expected a rectangle position pair/quadruple"),
+                _ => Err(format!("expected a rectangle position pair/quadruple")),
             },
 
             // {"p": [px, py], "q": [qx, qy]}
@@ -363,23 +363,23 @@ impl<T:FromJson> FromJson for Block<T> {
             _ => fail_with_json!(json, "a block")
         };
 
-        let gen = match map.pop(&~"$$") {
+        let gen = match map.pop(&"$$".to_owned()) {
             Some(hook) => HookGen(try!(from_json(hook))),
-            None => match map.pop(&~"$$text") {
+            None => match map.pop(&"$$text".to_owned()) {
                 Some(hook) => TextGen(try!(from_json(hook))),
-                None => match map.pop(&~"$$len") {
+                None => match map.pop(&"$$len".to_owned()) {
                     Some(hook) => TextLenGen(try!(from_json(hook))),
-                    None => { return Err(~"expected a block (text source or node), \
-                                           got an unrecognized object"); }
+                    None => { return Err(format!("expected a block (text source or node), \
+                                                  got an unrecognized object")); }
                 }
             }
         };
 
-        let then = map.pop(&~"$then");
-        let default = map.pop(&~"$default");
-        let else_ = map.pop(&~"$else");
+        let then = map.pop(&"$then".to_owned());
+        let default = map.pop(&"$default".to_owned());
+        let else_ = map.pop(&"$else".to_owned());
         if then.is_some() && !map.is_empty() {
-            return Err(~"`$then` cannot be used with other alternatives in the block");
+            return Err(format!("`$then` cannot be used with other alternatives in the block"));
         }
         if map.iter().any(|(k,_)| k.starts_with("$")) {
             return Err(format!("some alternatives in the block start with `$`: {}",
@@ -406,7 +406,7 @@ impl<T:FromJson> FromJson for Block<T> {
                 Ok(MultiBlock { gen: gen, map: try!(map), default: default, else_: else_ })
             },
 
-            _ => Err(~"no alternatives nor `$then` in the block"),
+            _ => Err(format!("no alternatives nor `$then` in the block")),
         }
     }
 }
@@ -495,10 +495,10 @@ impl FromJson for TextSource {
             Object(mut map) => {
                 // {"$": "number"}
                 // {"$": "number", "format": "##00.00"}
-                let dynamic = map.pop(&~"$");
+                let dynamic = map.pop(&"$".to_owned());
                 if dynamic.is_some() {
                     let id = try!(from_json(dynamic.unwrap()));
-                    let format = match map.pop(&~"format") {
+                    let format = match map.pop(&"format".to_owned()) {
                         None => NoFormat,
                         Some(fmt) => try!(from_json(fmt)),
                     };
@@ -526,7 +526,7 @@ impl FromJson for Node {
 
             Object(mut map) => {
                 // {"$debug": "message"}
-                let debug = map.pop(&~"$debug");
+                let debug = map.pop(&"$debug".to_owned());
                 if debug.is_some() {
                     let msg = match debug.unwrap() {
                         String(msg) => msg,
@@ -537,7 +537,7 @@ impl FromJson for Node {
                 }
 
                 // {"$line": null, "from": [x,y], "to": [x,y], "color": "#rgb"}
-                let line = map.pop(&~"$line");
+                let line = map.pop(&"$line".to_owned());
                 if line.is_some() {
                     match line.unwrap() {
                         Null => {}
@@ -552,18 +552,18 @@ impl FromJson for Node {
 
                 // {"$rect": null, "at": [[px,py], [qx,qy]], "color": "#rgb", "alpha": 0.5}
                 // {"$rect": "tex", "at": [[px,py], [qx,qy]], "clip": [[tpx,tpy], [tqx,tqy]]}
-                let rect = map.pop(&~"$rect");
+                let rect = map.pop(&"$rect".to_owned());
                 if rect.is_some() {
                     let tex = match rect.unwrap() {
                         Null => None,
                         tex => Some(try!(from_json(tex))),
                     };
                     let at = try!(from_json(pop!(map, "at", "the rectangle")));
-                    let color = match map.pop(&~"color") {
+                    let color = match map.pop(&"color".to_owned()) {
                         Some(color) => Some(try!(from_json::<Color>(color))),
                         None => None,
                     };
-                    let opacity = match map.pop(&~"opacity") {
+                    let opacity = match map.pop(&"opacity".to_owned()) {
                         Some(Number(a)) => Some(a),
                         Some(opacity) =>
                             fail_with_json!(opacity, "a number in the rectangle opacity"),
@@ -578,10 +578,10 @@ impl FromJson for Node {
                         (None, Some(color), None) =>
                             Ok(ColoredRect { at: at, color: color }),
                         (None, Some(_), Some(_)) =>
-                            Err(~"the colored rectangle cannot have both \
-                                  the RGBA `color` and `opacity`"),
+                            Err(format!("the colored rectangle cannot have both \
+                                         the RGBA `color` and `opacity`")),
                         (None, None, _) =>
-                            Err(~"expected `color` in the colored rectangle"),
+                            Err(format!("expected `color` in the colored rectangle")),
                         (Some(tex), color, opacity) => {
                             let rgba = match (color, opacity) {
                                 (Some(RGB(r,g,b)), None) => (r,g,b,255),
@@ -589,11 +589,11 @@ impl FromJson for Node {
                                 (None, Some(a)) => (255,255,255,from_0_1(a)),
                                 (None, None) => (255,255,255,255),
                                 (_, _) => {
-                                    return Err(~"the textured rectangle cannot have \
-                                                 both the RGBA `color` and `opacity`");
+                                    return Err(format!("the textured rectangle cannot have \
+                                                        both the RGBA `color` and `opacity`"));
                                 }
                             };
-                            let clip = match map.pop(&~"clip") {
+                            let clip = match map.pop(&"clip".to_owned()) {
                                 Some(clip) => Some(try!(from_json(clip))),
                                 None => None,
                             };
@@ -603,17 +603,19 @@ impl FromJson for Node {
                 }
 
                 // {"$text": "some text", "at": [x,y], "size": h, "anchor": "left", "color": "#rgb"}
-                let text = map.pop(&~"$text");
+                let text = map.pop(&"$text".to_owned());
                 if text.is_some() {
                     let text = try!(from_json(text.unwrap()));
                     let at = try!(from_json(pop!(map, "at", "the text")));
-                    let size = match map.pop(&~"size") {
+                    let size = match map.pop(&"size".to_owned()) {
                         Some(Number(size)) if size > 0.0 => size as f32,
-                        Some(Number(_)) => { return Err(~"nonpositive `size` in the text"); }
+                        Some(Number(_)) => {
+                            return Err(format!("nonpositive `size` in the text"));
+                        }
                         Some(size) => fail_with_json!(size, "a text size"),
                         None => NROWS as f32,
                     };
-                    let anchor = match map.pop(&~"anchor") {
+                    let anchor = match map.pop(&"anchor".to_owned()) {
                         Some(String(s)) => match s.as_slice() {
                             "left"   => (0.0, 0.0),
                             "center" => (0.5, 0.0),
@@ -624,7 +626,7 @@ impl FromJson for Node {
                         },
                         Some(List(l)) => match l.as_slice() {
                             [Number(x), Number(y)] => (x as f32, y as f32),
-                            _ => { return Err(~"expected an anchor pair in the list"); }
+                            _ => { return Err(format!("expected an anchor pair in the list")); }
                         },
                         Some(anchor) => fail_with_json!(anchor, "an anchor"),
                         None => (0.0, 0.0),
@@ -636,7 +638,7 @@ impl FromJson for Node {
                 }
 
                 // {"$clip": [[px,py],[qx,qy]]}
-                let clip = map.pop(&~"$clip");
+                let clip = map.pop(&"$clip".to_owned());
                 if clip.is_some() {
                     let at = try!(from_json(clip.unwrap()));
                     ensure_empty!(map, "the reclipping command");
@@ -649,7 +651,7 @@ impl FromJson for Node {
                 // {"$clipright":  w} = {"$clip": [[0,0],["100%-w","100%"]]}
                 macro_rules! clip_to(
                     ($key:expr, $num_to_rect:expr) => ({
-                        let clipto = map.pop(&~$key);
+                        let clipto = map.pop(&$key.to_owned());
                         if clipto.is_some() {
                             let v = try!(from_json(clipto.unwrap()));
                             ensure_empty!(map, "the reclipping command");
@@ -691,7 +693,7 @@ impl FromJson for Skin {
             // {"scalars": {...}, "nodes": [...]}
             Object(mut map) => {
                 let mut scalars = HashMap::new();
-                match map.pop(&~"scalars") {
+                match map.pop(&"scalars".to_owned()) {
                     Some(Object(scalarmap)) => {
                         for (k, v) in scalarmap.move_iter() {
                             scalars.insert(k, try!(from_json(v)));
