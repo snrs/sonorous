@@ -393,12 +393,13 @@ mod tests {
 
     #[test]
     fn test_to_hex() {
-        assert_eq!([].to_hex(), ~"");
-        assert_eq!([0x00].to_hex(), ~"00");
-        assert_eq!([0x0f].to_hex(), ~"0f");
-        assert_eq!([0xf0].to_hex(), ~"f0");
-        assert_eq!([0xff].to_hex(), ~"ff");
-        assert_eq!([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef].to_hex(), ~"0123456789abcdef");
+        assert_eq!([].to_hex().as_slice(), "");
+        assert_eq!([0x00].to_hex().as_slice(), "00");
+        assert_eq!([0x0f].to_hex().as_slice(), "0f");
+        assert_eq!([0xf0].to_hex().as_slice(), "f0");
+        assert_eq!([0xff].to_hex().as_slice(), "ff");
+        assert_eq!([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef].to_hex().as_slice(),
+                   "0123456789abcdef");
     }
 
     #[test]
@@ -409,20 +410,21 @@ mod tests {
             md5.final().to_hex()
         }
 
-        assert_eq!(md5(""), ~"d41d8cd98f00b204e9800998ecf8427e");
-        assert_eq!(md5("a"), ~"0cc175b9c0f1b6a831c399e269772661");
-        assert_eq!(md5("abc"), ~"900150983cd24fb0d6963f7d28e17f72");
-        assert_eq!(md5("message digest"), ~"f96b697d7cb7938d525a2f31aaf161d0");
-        assert_eq!(md5("abcdefghijklmnopqrstuvwxyz"), ~"c3fcd3d76192e4007dfb496cca67e13b");
-        assert_eq!(md5("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"),
-                   ~"d174ab98d277d9f5a5611c2c9f419d9f");
+        assert_eq!(md5("").as_slice(), "d41d8cd98f00b204e9800998ecf8427e");
+        assert_eq!(md5("a").as_slice(), "0cc175b9c0f1b6a831c399e269772661");
+        assert_eq!(md5("abc").as_slice(), "900150983cd24fb0d6963f7d28e17f72");
+        assert_eq!(md5("message digest").as_slice(), "f96b697d7cb7938d525a2f31aaf161d0");
+        assert_eq!(md5("abcdefghijklmnopqrstuvwxyz").as_slice(),
+                   "c3fcd3d76192e4007dfb496cca67e13b");
+        assert_eq!(md5("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789").as_slice(),
+                   "d174ab98d277d9f5a5611c2c9f419d9f");
         assert_eq!(md5("1234567890123456789012345678901234567890\
-                        1234567890123456789012345678901234567890"),
-                   ~"57edf4a22be3c955ac49da2e2107b67a");
+                        1234567890123456789012345678901234567890").as_slice(),
+                   "57edf4a22be3c955ac49da2e2107b67a");
     }
 
     #[bench]
-    fn bench_md5_1k_update(harness: &mut test::BenchHarness) {
+    fn bench_md5_1k_update(bencher: &mut test::Bencher) {
         let mut buf: Vec<u8> = Vec::new();
         for i in range(0u, 0x400) {
             buf.push(i as u8);
@@ -430,22 +432,22 @@ mod tests {
         assert!(buf.len() == 0x400);
 
         let mut md5 = MD5::new();
-        harness.iter(|| {
-            md5.update(buf);
+        bencher.iter(|| {
+            md5.update(buf.as_slice());
         });
     }
 
     #[bench]
-    fn bench_md5_1k_update_then_final(harness: &mut test::BenchHarness) {
+    fn bench_md5_1k_update_then_final(bencher: &mut test::Bencher) {
         let mut buf: Vec<u8> = Vec::new();
         for i in range(0u, 0x400) {
             buf.push(i as u8);
         }
         assert!(buf.len() == 0x400);
 
-        harness.iter(|| {
+        bencher.iter(|| {
             let mut md5 = MD5::new();
-            md5.update(buf);
+            md5.update(buf.as_slice());
             md5.final();
         });
     }

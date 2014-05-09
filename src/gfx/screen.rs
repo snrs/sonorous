@@ -130,7 +130,7 @@ pub struct Screen {
     /// Screen height.
     pub height: uint,
     /// SDL surface returned by `sdl::video::set_video_mode`.
-    pub sdl_surface: ~video::Surface,
+    pub sdl_surface: video::Surface,
     /// OpenGL state if required.
     glstate: GLState,
     /// Shared vertex buffer object for drawing.

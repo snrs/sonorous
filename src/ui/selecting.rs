@@ -39,14 +39,14 @@ pub struct PreprocessedBms {
     /// The derived timeline information.
     pub infos: TimelineInfo,
     /// The key specification.
-    pub keyspec: ~KeySpec,
+    pub keyspec: KeySpec,
 }
 
 /// Loads and preprocesses the BMS file from given options. Frontend routines should use this.
 pub fn preprocess_bms<'r,R:Rng>(
         bmspath: &Path, f: &mut Reader, opts: &Options, r: &mut R,
         loaderopts: &bms::load::LoaderOptions, callback: bms::load::Callback<'r>)
-                                -> Result<~PreprocessedBms,~str> {
+                                -> Result<PreprocessedBms,~str> {
     let bms = try!(bms::load::load_bms(f, r, loaderopts, callback));
     let mut bms = bms.with_bmspath(bmspath);
     let keyspec = try!(key_spec(&bms, opts.preset.clone(),
@@ -54,9 +54,9 @@ pub fn preprocess_bms<'r,R:Rng>(
     keyspec.filter_timeline(&mut bms.timeline);
     let infos = bms.timeline.analyze();
     for &modf in opts.modf.iter() {
-        apply_modf(&mut bms, modf, r, keyspec);
+        apply_modf(&mut bms, modf, r, &keyspec);
     }
-    Ok(~PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec })
+    Ok(PreprocessedBms { bms: bms, infos: infos, keyspec: keyspec })
 }
 
 /// Internal message from the worker task to the main task.
@@ -71,7 +71,7 @@ enum Message {
     BmsHashRead(Path,[u8, ..16]),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
-    BmsLoaded(Path,~PreprocessedBms,Vec<(Option<uint>,bms::diag::BmsMessage)>),
+    BmsLoaded(Path,PreprocessedBms,Vec<(Option<uint>,bms::diag::BmsMessage)>),
     /// The worker has loaded the banner image (the second `~str`) for the BMS file (the first
     /// `Path`). This may be sent after `BmsLoaded` message. Due to the same reason as above
     /// the main task should ignore the message with non-current paths.
@@ -82,7 +82,7 @@ enum Message {
 pub struct PreloadedData {
     /// A part of the game data necessary for initializing `Player`. Anything else is used for
     /// the selection screen only.
-    pub preproc: ~PreprocessedBms,
+    pub preproc: PreprocessedBms,
     /// A banner texture, if any.
     pub banner: Option<Rc<Texture2D>>,
     /// A tentatively calculated duration of the BMS file in seconds. This is tentative because
@@ -94,7 +94,7 @@ pub struct PreloadedData {
 
 impl PreloadedData {
     /// Creates and calculates some necessary informations from given processed BMS and messages.
-    pub fn new(preproc: ~PreprocessedBms,
+    pub fn new(preproc: PreprocessedBms,
                messages: Vec<(Option<uint>,bms::diag::BmsMessage)>) -> PreloadedData {
         let originoffset = preproc.infos.originoffset;
         let duration = preproc.bms.timeline.duration(originoffset, |_| 0.0);
@@ -191,14 +191,14 @@ static PRELOAD_DELAY: uint = 300;
 
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
-    pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> ~SelectingScene {
+    pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> Box<SelectingScene> {
         let skin = match opts.load_skin("selecting.json") {
             Ok(skin) => skin,
             Err(err) => die!("{}", err),
         };
         let root = os::make_absolute(root);
         let (sender, receiver) = comm::channel();
-        ~SelectingScene {
+        box SelectingScene {
             screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)),
             root: root, files: Vec::new(), filesdone: false,
             scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
@@ -356,13 +356,13 @@ impl SelectingScene {
 
     /// Creates a new `LoadingScene` from the currently selected entry. It will load the BMS file
     /// or use the preloaded data if possible.
-    pub fn create_loading_scene(&mut self) -> Option<~Scene:> {
+    pub fn create_loading_scene(&mut self) -> Option<Box<Scene>:> {
         use std::mem::replace;
 
         let preloaded = replace(&mut self.preloaded, PreloadAfter(0));
         let PreprocessedBms { bms, infos, keyspec } =
             match preloaded {
-                Preloaded(data) => *data.preproc, // use the preloaded data if possible
+                Preloaded(data) => data.preproc, // use the preloaded data if possible
                 _ => {
                     let path = match self.current() {
                         Some(path) => path,
@@ -380,17 +380,17 @@ impl SelectingScene {
                     let ret = preprocess_bms(path, &mut f as &mut Reader, opts, &mut r,
                                              &opts.loader_options(), print_diag);
                     match ret {
-                        Ok(preproc) => *preproc,
+                        Ok(preproc) => preproc,
                         Err(err) => { warn!("{}", err); return None; }
                     }
                 }
             };
-        let keymap = match read_keymap(keyspec, os::getenv) {
-            Ok(map) => ~map,
+        let keymap = match read_keymap(&keyspec, os::getenv) {
+            Ok(map) => map,
             Err(err) => die!("{}", err)
         };
         Some(LoadingScene::new(self.screen.clone(), bms, infos,
-                               keyspec, keymap, self.opts.clone()) as ~Scene:)
+                               keyspec, keymap, self.opts.clone()) as Box<Scene>:)
     }
 }
 
@@ -550,7 +550,7 @@ impl Scene for SelectingScene {
         *self.keepgoing.write() = false;
     }
 
-    fn consume(~self) -> ~Scene: { fail!("unreachable"); }
+    fn consume(~self) -> Box<Scene>: { fail!("unreachable"); }
 }
 
 ////////////////////////////////////////////////////////////////////////

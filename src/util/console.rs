@@ -8,7 +8,6 @@
 
 //! Encoding-aware console I/O.
 
-use std::local_data;
 use std::io::{stdout, stderr};
 use encoding::{Encoding, EncodingRef, Encoder, EncoderTrap, ByteWriter};
 
@@ -34,11 +33,11 @@ fn get_console_encoding() -> EncodingRef {
 /// Returns an encoding usable for console I/O.
 /// The result is cached to the task-local storage.
 pub fn console_encoding() -> EncodingRef {
-    match local_data::get(console_encoding_key, |e| e.map(|&e| e)) {
-        Some(encoding) => encoding,
+    match console_encoding_key.get() {
+        Some(encoding) => *encoding,
         None => {
             let encoding = get_console_encoding();
-            local_data::set(console_encoding_key, encoding);
+            console_encoding_key.replace(Some(encoding));
             encoding
         }
     }

@@ -48,13 +48,6 @@ pub trait IntoMaybeOwnedVec<'r,T> {
     fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'r,T>;
 }
 
-impl<T> IntoMaybeOwnedVec<'static,T> for ~[T] {
-    #[inline]
-    fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'static,T> {
-        OwnedVec(FromIterator::from_iter(self.move_iter()))
-    }
-}
-
 impl<T> IntoMaybeOwnedVec<'static,T> for Vec<T> {
     #[inline]
     fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'static,T> { OwnedVec(self) }

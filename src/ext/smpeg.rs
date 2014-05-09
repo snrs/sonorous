@@ -88,8 +88,8 @@ pub struct MPEG {
     pub raw: *ll::SMPEG
 }
 
-fn wrap_mpeg(raw: *ll::SMPEG) -> ~MPEG {
-    ~MPEG { raw: raw }
+fn wrap_mpeg(raw: *ll::SMPEG) -> MPEG {
+    MPEG { raw: raw }
 }
 
 impl Drop for MPEG {
@@ -99,7 +99,7 @@ impl Drop for MPEG {
 }
 
 impl MPEG {
-    pub fn from_path(path: &Path) -> Result<~MPEG, ~str> {
+    pub fn from_path(path: &Path) -> Result<MPEG, ~str> {
         let raw = unsafe {
             path.to_c_str().with_ref(|buf| {
                 ll::SMPEG_new(buf, null(), 0)

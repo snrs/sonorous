@@ -53,7 +53,7 @@ pub fn init_audio() {
 }
 
 /// Initializes a joystick with given index.
-pub fn init_joystick(joyidx: uint) -> ~joy::Joystick {
+pub fn init_joystick(joyidx: uint) -> joy::Joystick {
     if !init([InitJoystick]) {
         die!("SDL Initialization Failure: {}", get_error());
     }

@@ -46,9 +46,9 @@ pub struct LoadingContext {
     /// The derived timeline information.
     pub infos: TimelineInfo,
     /// The key specification.
-    pub keyspec: ~KeySpec,
+    pub keyspec: KeySpec,
     /// The input mapping.
-    pub keymap: ~KeyMap,
+    pub keymap: KeyMap,
 
     /// The most recently loaded file name from the resource loader.
     pub lastpath: Option<~str>,
@@ -71,7 +71,7 @@ pub struct LoadingContext {
 
 impl LoadingContext {
     /// Creates a loading context.
-    pub fn new(bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec, keymap: ~KeyMap,
+    pub fn new(bms: Bms, infos: TimelineInfo, keyspec: KeySpec, keymap: KeyMap,
                opts: Rc<Options>) -> LoadingContext {
         let basedir = bms.meta.basepath.clone().unwrap_or(Path::new("."));
         let sndres = Vec::from_fn(bms.meta.sndpath.len(), |_| NoSound);
@@ -198,13 +198,13 @@ pub struct LoadingScene {
 impl LoadingScene {
     /// Creates a scene context required for rendering the graphical loading screen.
     pub fn new(screen: Rc<RefCell<Screen>>, bms: Bms, infos: TimelineInfo,
-               keyspec: ~KeySpec, keymap: ~KeyMap, opts: Rc<Options>) -> ~LoadingScene {
+               keyspec: KeySpec, keymap: KeyMap, opts: Rc<Options>) -> Box<LoadingScene> {
         let skin = match opts.load_skin("loading.json") {
             Ok(skin) => skin,
             Err(err) => die!("{}", err),
         };
-        ~LoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
-                        screen: screen, skin: RefCell::new(Renderer::new(skin)), waituntil: 0 }
+        box LoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
+                           screen: screen, skin: RefCell::new(Renderer::new(skin)), waituntil: 0 }
     }
 }
 
@@ -242,11 +242,11 @@ impl Scene for LoadingScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(~self) -> ~Scene: {
+    fn consume(~self) -> Box<Scene>: {
         let LoadingScene { context, screen, .. } = *self;
         let (player, imgres) = context.to_player();
         match PlayingScene::new(player, screen, imgres) {
-            Ok(scene) => scene as ~Scene:,
+            Ok(scene) => scene as Box<Scene>:,
             Err(err) => die!("{}", err),
         }
     }
@@ -263,9 +263,9 @@ pub struct TextualLoadingScene {
 impl TextualLoadingScene {
     /// Creates a scene context required for rendering the textual loading screen.
     pub fn new(screen: Option<Rc<RefCell<Screen>>>, bms: Bms, infos: TimelineInfo,
-               keyspec: ~KeySpec, keymap: ~KeyMap, opts: Rc<Options>) -> ~TextualLoadingScene {
-        ~TextualLoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
-                               screen: screen }
+               keyspec: KeySpec, keymap: KeyMap, opts: Rc<Options>) -> Box<TextualLoadingScene> {
+        box TextualLoadingScene { context: LoadingContext::new(bms, infos, keyspec, keymap, opts),
+                                  screen: screen }
     }
 }
 
@@ -335,12 +335,12 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
         }
     }
 
-    fn consume(~self) -> ~Scene: {
+    fn consume(~self) -> Box<Scene>: {
         let TextualLoadingScene { context, screen } = *self;
         let (player, imgres) = context.to_player();
         match screen {
-            Some(screen) => ViewingScene::new(screen, imgres, player) as ~Scene:,
-            None => TextualViewingScene::new(player) as ~Scene:,
+            Some(screen) => ViewingScene::new(screen, imgres, player) as Box<Scene>:,
+            None => TextualViewingScene::new(player) as Box<Scene>:,
         }
     }
 }

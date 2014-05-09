@@ -157,7 +157,7 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
 
 /// Parses the BMS file, initializes the display, shows the loading screen and runs the game play
 /// loop.
-pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
+pub fn play(bmspath: &Path, opts: ui::options::Options) {
     use std::rc::Rc;
     use std::cell::RefCell;
 
@@ -166,7 +166,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
     use ui::selecting::{preprocess_bms, PreprocessedBms, print_diag, SelectingScene};
     use ui::loading::{LoadingScene, TextualLoadingScene};
 
-    fn wrap_opts(opts: ~ui::options::Options) -> Rc<ui::options::Options> { Rc::new(*opts) }
+    fn wrap_opts(opts: ui::options::Options) -> Rc<ui::options::Options> { Rc::new(opts) }
 
     let scene;
     if bmspath.is_dir() {
@@ -177,7 +177,7 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         init_audio();
         for &joyidx in opts.joystick.iter() { init_joystick(joyidx); }
         let screen = Rc::new(RefCell::new(init_video(false, opts.fullscreen)));
-        scene = SelectingScene::new(screen, bmspath, wrap_opts(opts)) as ~Scene:
+        scene = SelectingScene::new(screen, bmspath, wrap_opts(opts)) as Box<Scene>:
     } else {
         if opts.debug_dumpbmscommand || opts.debug_dumpbmscommandfull {
             dump_bmscommand(bmspath, opts.debug_dumpbmscommandfull,
@@ -188,12 +188,12 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         // parses the file and sanitizes it
         let mut r = rand::task_rng();
         let preproc = match std::io::File::open(bmspath) {
-            Ok(mut f) => preprocess_bms(bmspath, &mut f, opts,
+            Ok(mut f) => preprocess_bms(bmspath, &mut f, &opts,
                                         &mut r, &opts.loader_options(), print_diag),
             Err(err) => Err(err.to_str()),
         };
         let PreprocessedBms { bms, infos, keyspec } = match preproc {
-            Ok(preproc) => *preproc,
+            Ok(preproc) => preproc,
             Err(err) => die!("Couldn't load BMS file: {}", err)
         };
 
@@ -212,22 +212,22 @@ pub fn play(bmspath: &Path, opts: ~ui::options::Options) {
         if opts.has_screen() {
             screen = Some(Rc::new(RefCell::new(init_video(opts.is_exclusive(), opts.fullscreen))));
             // this requires a video subsystem.
-            keymap = match engine::input::read_keymap(keyspec, std::os::getenv) {
-                Ok(map) => ~map,
+            keymap = match engine::input::read_keymap(&keyspec, std::os::getenv) {
+                Ok(map) => map,
                 Err(err) => die!("{}", err)
             };
         } else {
             screen = None;
             // in this case we explicitly ignore keymaps
-            keymap = ~collections::HashMap::new();
+            keymap = collections::HashMap::new();
         }
 
         scene = if opts.is_exclusive() {
             TextualLoadingScene::new(screen, bms, infos,
-                                     keyspec, keymap, wrap_opts(opts)) as ~Scene:
+                                     keyspec, keymap, wrap_opts(opts)) as Box<Scene>:
         } else {
             LoadingScene::new(screen.unwrap(), bms, infos,
-                              keyspec, keymap, wrap_opts(opts)) as ~Scene:
+                              keyspec, keymap, wrap_opts(opts)) as Box<Scene>:
         };
     }
 

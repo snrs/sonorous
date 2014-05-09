@@ -138,9 +138,9 @@ pub struct Player {
     /// The length of BMS file in seconds as calculated by `bms_duration`.
     pub duration: f64,
     /// The key specification.
-    pub keyspec: ~KeySpec,
+    pub keyspec: KeySpec,
     /// The input mapping.
-    pub keymap: ~KeyMap,
+    pub keymap: KeyMap,
 
     /// Set to true if the corresponding object in `bms.objs` had graded and should not be
     /// graded twice. Its length equals to that of `bms.objs`.
@@ -148,7 +148,7 @@ pub struct Player {
     /// Sound resources.
     pub sndres: Vec<SoundResource>,
     /// A sound chunk used for beeps. It always plays on the channel #0.
-    pub beep: ~sdl_mixer::Chunk,
+    pub beep: sdl_mixer::Chunk,
     /// Last channels in which the corresponding sound in `sndres` was played.
     pub sndlastch: Vec<Option<uint>>,
     /// Indices to last sounds which the channel has played. For every `x`, if `sndlastch[x] ==
@@ -249,7 +249,7 @@ fn previous_speed_mark(current: f64) -> Option<f64> {
 }
 
 /// Creates a beep sound played on the play speed change.
-fn create_beep() -> ~sdl_mixer::Chunk {
+fn create_beep() -> sdl_mixer::Chunk {
     let samples: Vec<i32> = Vec::from_fn(12000, // approx. 0.14 seconds
         // sawtooth wave at 3150 Hz, quadratic decay after 0.02 seconds.
         |i| { let i = i as i32; (i%28-14) * cmp::min(2000, (12000-i)*(12000-i)/50000) });
@@ -263,8 +263,8 @@ fn create_beep() -> ~sdl_mixer::Chunk {
 impl Player {
     /// Creates a new player object. The player object owns other related structures, including
     /// the options, BMS file, key specification, input mapping and sound resources.
-    pub fn new(opts: Rc<Options>, bms: Bms, infos: TimelineInfo, keyspec: ~KeySpec,
-               keymap: ~KeyMap, sndres: Vec<SoundResource>) -> Player {
+    pub fn new(opts: Rc<Options>, bms: Bms, infos: TimelineInfo, keyspec: KeySpec,
+               keymap: KeyMap, sndres: Vec<SoundResource>) -> Player {
         // we no longer need the full `Bms` structure.
         let Bms { meta, timeline, .. } = bms;
         let timeline = Rc::new(timeline);

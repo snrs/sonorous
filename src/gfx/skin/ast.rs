@@ -147,7 +147,7 @@ pub enum ScalarFormat {
 pub enum TextSource {
     ScalarText(Id, ScalarFormat),
     StaticText(~str),
-    TextBlock(Block<~TextSource>),
+    TextBlock(Block<Box<TextSource>>),
     TextConcat(Vec<TextSource>),
 }
 

@@ -67,12 +67,12 @@ pub enum SoundResource {
     /// No sound resource is associated, or error occurred while loading.
     NoSound,
     /// Sound resource is associated.
-    Sound(~Chunk)
+    Sound(Chunk)
 }
 
 impl SoundResource {
     /// Returns the associated chunk if any.
-    pub fn chunk<'r>(&'r self) -> Option<&'r ~Chunk> {
+    pub fn chunk<'r>(&'r self) -> Option<&'r Chunk> {
         match *self {
             NoSound => None,
             Sound(ref chunk) => Some(chunk)
@@ -100,7 +100,7 @@ impl SoundResource {
 //       cross-task owned pointer containing a managed pointer. (#8983)
 pub enum LoadedSoundResource {
     NoLoadedSound,
-    LoadedSound(~Chunk)
+    LoadedSound(Chunk)
 }
 
 impl LoadedSoundResource {
@@ -130,7 +130,7 @@ pub enum ImageResource {
     /// A movie is associated. A playback starts when `start_movie` method is called, and stops
     /// when `stop_animating` is called. An associated surface is updated from the separate thread
     /// during the playback.
-    Movie(PreparedSurface, ~MPEG)
+    Movie(PreparedSurface, MPEG)
 }
 
 impl ImageResource {
@@ -165,7 +165,7 @@ impl ImageResource {
 pub enum LoadedImageResource {
     NoLoadedImage,
     LoadedImage(PreparedSurface),
-    LoadedMovie(PreparedSurface, ~MPEG)
+    LoadedMovie(PreparedSurface, MPEG)
 }
 
 impl LoadedImageResource {
@@ -175,7 +175,7 @@ impl LoadedImageResource {
 
         /// Converts a surface to the native display format, while preserving a transparency or
         /// setting a color key if required.
-        fn to_display_format(surface: ~Surface) -> Result<PreparedSurface,~str> {
+        fn to_display_format(surface: Surface) -> Result<PreparedSurface,~str> {
             let surface = if unsafe {(*(*surface.raw).format).Amask} != 0 {
                 let surface = try!(surface.display_format_alpha());
                 surface.set_alpha([video::SrcAlpha, video::RLEAccel], 255);

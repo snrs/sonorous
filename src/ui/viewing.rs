@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use gl = opengles::gl2;
 use ext::smpeg::SMPEG_PLAYING;
 use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
-use format::obj::{ImageSlice, BGARef, BlankBGA, ImageBGA, SlicedImageBGA};
+use format::obj::{BGARef, BlankBGA, ImageBGA, SlicedImageBGA};
 use format::bms::ImageRef;
 use gfx::color::RGBA;
 use gfx::surface::SurfaceAreaUtil;
@@ -71,13 +71,14 @@ fn upload_bga_ref_to_texture(bgaref: &BGARef<ImageRef>, imgres: &[ImageResource]
         ImageBGA(iref) if force || imgres[**iref as uint].should_always_upload() => {
             imgres[**iref as uint].upload_to_texture(texture);
         }
-        SlicedImageBGA(iref, ~ImageSlice {sx,sy,dx,dy,w,h})
+        SlicedImageBGA(iref, ref slice)
                 if force || imgres[**iref as uint].should_always_upload() => {
             scratch.as_surface().fill(RGBA(0, 0, 0, 0));
             for surface in imgres[**iref as uint].surface().move_iter() {
                 // this requires SDL_SRCALPHA flags in `surface` (and not `scratch`).
                 // see `LoadedImageResource::new` for relevant codes.
-                scratch.as_surface().blit_area(surface.as_surface(), (sx, sy), (dx, dy), (w, h));
+                scratch.as_surface().blit_area(surface.as_surface(), (slice.sx, slice.sy),
+                                               (slice.dx, slice.dy), (slice.w, slice.h));
             }
             texture.upload_surface(scratch, false, false);
         }
@@ -172,8 +173,8 @@ pub struct TextualViewingScene {
 
 impl TextualViewingScene {
     /// Creates a new text-only viewing scene.
-    pub fn new(player: Player) -> ~TextualViewingScene {
-        ~TextualViewingScene { player: player, ticker: Ticker() }
+    pub fn new(player: Player) -> Box<TextualViewingScene> {
+        box TextualViewingScene { player: player, ticker: Ticker() }
     }
 }
 
@@ -203,14 +204,14 @@ impl Scene for TextualViewingScene {
         update_line("");
     }
 
-    fn consume(~self) -> ~Scene: { fail!("unreachable"); }
+    fn consume(~self) -> Box<Scene>: { fail!("unreachable"); }
 }
 
 /// BGA-only viewing scene context. Used for the exclusive mode with BGA enabled.
 pub struct ViewingScene {
     /// The underlying text-only viewing scene context (as the BGA-only viewing scene lacks
     /// the on-screen display).
-    pub parent: ~TextualViewingScene,
+    pub parent: Box<TextualViewingScene>,
     /// Display screen.
     pub screen: Rc<RefCell<Screen>>,
     /// Image resources.
@@ -223,10 +224,10 @@ impl ViewingScene {
     /// Creates a new BGA-only scene context from the pre-created screen (usually by `init_video`)
     /// and pre-loaded image resources.
     pub fn new(screen: Rc<RefCell<Screen>>, imgres: Vec<ImageResource>,
-               player: Player) -> ~ViewingScene {
+               player: Player) -> Box<ViewingScene> {
         let bgacanvas = BGACanvas::new(imgres.as_slice());
-        ~ViewingScene { parent: TextualViewingScene::new(player),
-                        screen: screen, imgres: imgres, bgacanvas: bgacanvas }
+        box ViewingScene { parent: TextualViewingScene::new(player),
+                           screen: screen, imgres: imgres, bgacanvas: bgacanvas }
     }
 }
 
@@ -258,6 +259,6 @@ impl Scene for ViewingScene {
 
     fn deactivate(&mut self) { self.parent.deactivate() }
 
-    fn consume(~self) -> ~Scene: { fail!("unreachable"); }
+    fn consume(~self) -> Box<Scene>: { fail!("unreachable"); }
 }
 

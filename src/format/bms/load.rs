@@ -286,7 +286,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // and corresponding `ImageSlice`, if possible.
     let imgref_to_bgaref = |iref: ImageRef| -> BGARef<ImageRef> {
         match imgslices.as_slice()[**iref as uint] {
-            Some((iref, ref slice)) => SlicedImageBGA(iref.clone(), ~slice.clone()),
+            Some((iref, ref slice)) => SlicedImageBGA(iref.clone(), box slice.clone()),
             None => ImageBGA(iref),
         }
     };

@@ -184,7 +184,7 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>,
 
     // render notes and lane backgrounds
     for &(_lane,style) in styles.iter() {
-        style.render_to_sprite(sprite);
+        style.render_to_sprite(&sprite);
     }
 
     // render panels
@@ -275,8 +275,8 @@ impl PlayingScene {
     /// screen and pre-loaded image resources. Other resources including pre-loaded sound resources
     /// are included in the `player`.
     pub fn new(player: Player, screen: Rc<RefCell<Screen>>,
-               imgres: Vec<ImageResource>) -> Result<~PlayingScene,~str> {
-        let (leftmost, rightmost, styles) = match build_lane_styles(player.keyspec) {
+               imgres: Vec<ImageResource>) -> Result<Box<PlayingScene>,~str> {
+        let (leftmost, rightmost, styles) = match build_lane_styles(&player.keyspec) {
             Ok(styles) => styles,
             Err(err) => { return Err(err); }
         };
@@ -286,7 +286,7 @@ impl PlayingScene {
         let sprite = create_sprite(leftmost, rightmost, styles.as_slice());
         let bgacanvas = BGACanvas::new(imgres.as_slice());
 
-        Ok(~PlayingScene {
+        Ok(box PlayingScene {
             player: player, sprite: sprite, screen: screen, imgres: imgres,
             leftmost: leftmost, rightmost: rightmost, lanestyles: styles, bgax: bgax, bgay: bgay,
             poorlimit: None, gradelimit: None, bgacanvas: bgacanvas,
@@ -543,9 +543,9 @@ impl Scene for PlayingScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(~self) -> ~Scene: {
+    fn consume(~self) -> Box<Scene>: {
         let PlayingScene { screen, player, .. } = *self;
-        PlayResultScene::new(screen, player) as ~Scene:
+        PlayResultScene::new(screen, player) as Box<Scene>:
     }
 }
 

@@ -268,7 +268,7 @@ fn is_surface_prepared_for_texture(surface: &video::Surface) -> bool {
 
 /// Converts the surface to the suitable format for OpenGL. In particular, color key is converted
 /// to alpha channel. The original surface is kept as is.
-fn prepare_surface_for_texture(surface: &video::Surface) -> Result<~video::Surface,~str> {
+fn prepare_surface_for_texture(surface: &video::Surface) -> Result<video::Surface,~str> {
     let hasalpha = unsafe { ((*surface.raw).flags & video::SrcColorKey as u32) != 0 ||
                             (*(*surface.raw).format).Amask != 0 };
     let newfmt = pixel_format_from_tuple(if hasalpha {RGBA_PIXEL_FORMAT_TUPLE}
@@ -291,11 +291,11 @@ fn with_prepared_surface<R>(
 }
 
 /// An SDL surface prepared for uploading to OpenGL.
-pub struct PreparedSurface(pub ~video::Surface);
+pub struct PreparedSurface(pub video::Surface);
 
 impl Deref<video::Surface> for PreparedSurface {
     fn deref<'a>(&'a self) -> &'a video::Surface {
-        let PreparedSurface(~ref surface) = *self;
+        let PreparedSurface(ref surface) = *self;
         surface
     }
 }
@@ -325,12 +325,12 @@ impl PreparedSurface {
     /// Converts an existing SDL surface to the format suitable for uploading to OpenGL.
     /// If the surface already had the suitable format no copying occurs. If the conversion fails
     /// the original surface is kept as is.
-    pub fn from_owned_surface(surface: ~video::Surface)
-                                    -> Result<PreparedSurface,(~video::Surface,~str)> {
-        if is_surface_prepared_for_texture(surface) {
+    pub fn from_owned_surface(surface: video::Surface)
+                                    -> Result<PreparedSurface,(video::Surface,~str)> {
+        if is_surface_prepared_for_texture(&surface) {
             Ok(PreparedSurface(surface)) // no conversion required
         } else {
-            match prepare_surface_for_texture(surface) {
+            match prepare_surface_for_texture(&surface) {
                 Ok(surface) => Ok(PreparedSurface(surface)),
                 Err(err) => Err((surface, err))
             }
@@ -339,7 +339,7 @@ impl PreparedSurface {
 
     /// Returns a reference to the underlying surface.
     pub fn as_surface<'r>(&'r self) -> &'r video::Surface {
-        let PreparedSurface(~ref surface) = *self;
+        let PreparedSurface(ref surface) = *self;
         surface
     }
 
@@ -400,7 +400,7 @@ impl Texture2D {
     /// Creates a new texture from an SDL surface, which is destroyed after the upload. `xwrap` and
     /// `ywrap` specifies whether the texture should wrap in horizontal or vertical directions or
     /// not.
-    pub fn from_owned_surface(surface: ~video::Surface,
+    pub fn from_owned_surface(surface: video::Surface,
                               xwrap: bool, ywrap: bool) -> Result<Texture2D,~str> {
         let (width, height) = surface.get_size();
         let texture = try!(Texture2D::new(width as uint, height as uint));

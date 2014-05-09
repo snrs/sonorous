@@ -28,8 +28,8 @@ pub struct PlayResultScene {
 
 impl PlayResultScene {
     /// Creates a new play result scene from the game play state after `PlayingScene`.
-    pub fn new(screen: Rc<RefCell<Screen>>, player: Player) -> ~PlayResultScene {
-        ~PlayResultScene { screen: screen, player: player }
+    pub fn new(screen: Rc<RefCell<Screen>>, player: Player) -> Box<PlayResultScene> {
+        box PlayResultScene { screen: screen, player: player }
     }
 }
 
@@ -98,6 +98,6 @@ impl Scene for PlayResultScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(~self) -> ~Scene: { fail!("unreachable"); }
+    fn consume(~self) -> Box<Scene>: { fail!("unreachable"); }
 }
 

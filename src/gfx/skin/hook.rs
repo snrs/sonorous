@@ -92,7 +92,7 @@ impl<'a,T:Hook> Hook for &'a T {
     }
 }
 
-impl<T:Hook> Hook for ~T {
+impl<T:Hook> Hook for Box<T> {
     fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         (**self).scalar_hook(id)
     }

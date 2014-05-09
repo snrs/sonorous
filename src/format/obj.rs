@@ -106,7 +106,7 @@ pub enum BGARef<ImageRef> {
     /// Static image.
     ImageBGA(ImageRef),
     /// A portion of static image.
-    SlicedImageBGA(ImageRef, ~ImageSlice),
+    SlicedImageBGA(ImageRef, Box<ImageSlice>),
 }
 
 impl<I> BGARef<I> {
@@ -198,25 +198,26 @@ impl<S:fmt::Show,I:fmt::Show> fmt::Show for ObjData<S,I> {
 
         match *self {
             Deleted => write!(f.buf, "Deleted"),
-            Visible(lane,ref sref) =>
+            Visible(lane, ref sref) =>
                 write!(f.buf, "Visible({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
-            Invisible(lane,ref sref) =>
+            Invisible(lane, ref sref) =>
                 write!(f.buf, "Invisible({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
-            LNStart(lane,ref sref) =>
+            LNStart(lane, ref sref) =>
                 write!(f.buf, "LNStart({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
-            LNDone(lane,ref sref) =>
+            LNDone(lane, ref sref) =>
                 write!(f.buf, "LNDone({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
-            Bomb(lane,ref sref,damage) =>
+            Bomb(lane, ref sref, damage) =>
                 write!(f.buf, "Bomb({},{},{})", fmt_lane(lane), fmt_or_default(sref, "--"), damage),
             BGM(ref sref) =>
                 write!(f.buf, "BGM({})", sref),
-            SetBGA(layer,BlankBGA) =>
+            SetBGA(layer, BlankBGA) =>
                 write!(f.buf, "SetBGA({},--)", layer),
-            SetBGA(layer,ImageBGA(ref iref)) =>
+            SetBGA(layer, ImageBGA(ref iref)) =>
                 write!(f.buf, "SetBGA({},{})", layer, iref),
-            SetBGA(layer,SlicedImageBGA(ref iref,~ImageSlice{sx,sy,dx,dy,w,h})) =>
+            SetBGA(layer, SlicedImageBGA(ref iref, ref slice)) =>
                 write!(f.buf, "SetBGA({},{}:{}+{}+{}x{}:{}+{}+{}x{})",
-                              layer, iref, sx, sy, w, h, dx, dy, w, h),
+                              layer, iref, slice.sx, slice.sy, slice.w, slice.h,
+                              slice.dx, slice.dy, slice.w, slice.h),
             SetBPM(BPM(bpm)) =>
                 write!(f.buf, "SetBPM({})", bpm),
             Stop(Seconds(secs)) =>

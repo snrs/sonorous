@@ -243,7 +243,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
 
 /// Parses a key specification from the options.
 pub fn key_spec(bms: &Bms, preset: Option<~str>,
-                leftkeys: Option<~str>, rightkeys: Option<~str>) -> Result<~KeySpec,~str> {
+                leftkeys: Option<~str>, rightkeys: Option<~str>) -> Result<KeySpec,~str> {
     use std::ascii::StrAsciiExt;
 
     let (leftkeys, rightkeys) =
@@ -268,8 +268,8 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
              rightkeys.as_ref().map_or("", |s| s.as_slice()).to_owned())
         };
 
-    let mut keyspec = ~KeySpec { split: 0, order: Vec::new(),
-                                 kinds: Vec::from_fn(NLANES, |_| None) };
+    let mut keyspec = KeySpec { split: 0, order: Vec::new(),
+                                kinds: Vec::from_fn(NLANES, |_| None) };
     let parse_and_add = |keyspec: &mut KeySpec, keys: &str| -> Option<uint> {
         match parse_key_spec(keys) {
             None => None,
@@ -287,7 +287,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
     };
 
     if !leftkeys.is_empty() {
-        match parse_and_add(keyspec, leftkeys) {
+        match parse_and_add(&mut keyspec, leftkeys) {
             None => { return Err(format!("Invalid key spec for left hand side: {}", leftkeys)); }
             Some(nkeys) => { keyspec.split += nkeys; }
         }
@@ -295,7 +295,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
         return Err(format!("No key model is specified using -k or -K"));
     }
     if !rightkeys.is_empty() {
-        match parse_and_add(keyspec, rightkeys) {
+        match parse_and_add(&mut keyspec, rightkeys) {
             None => { return Err(format!("Invalid key spec for right hand side: {}", rightkeys)); }
             Some(nkeys) => { // no split panes except for Couple Play
                 if bms.meta.mode != CouplePlay { keyspec.split += nkeys; }

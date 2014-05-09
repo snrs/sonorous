@@ -348,8 +348,8 @@ pub mod builder {
 
     impl<S:Eq+Clone,I:Eq+Clone> TimelineBuilder<S,I> {
         /// Creates a new timeline builder.
-        pub fn new() -> ~TimelineBuilder<S,I> {
-            ~TimelineBuilder { initbpm: None, objs: Vec::new(), endvpos: 0.0 }
+        pub fn new() -> TimelineBuilder<S,I> {
+            TimelineBuilder { initbpm: None, objs: Vec::new(), endvpos: 0.0 }
         }
 
         /// Sets an initial BPM.
@@ -394,8 +394,8 @@ pub mod builder {
         }
 
         /// Builds an actual timeline.
-        pub fn build(~self) -> Timeline<S,I> {
-            let ~TimelineBuilder { initbpm: initbpm, objs: objs, endvpos: endvpos } = self;
+        pub fn build(self) -> Timeline<S,I> {
+            let TimelineBuilder { initbpm: initbpm, objs: objs, endvpos: endvpos } = self;
             let initbpm = initbpm.expect("initial BPM should have been set");
             let mut objs = objs;
             sort_objs(objs.as_mut_slice());

@@ -18,15 +18,16 @@ pub struct Envelope<T> {
 impl<T> Envelope<T> {
     /// Creates a sendable wrapper out of the owned value.
     pub fn new(res: T) -> Envelope<T> {
+        let res: Box<T> = box res;
         unsafe {
-            Envelope { wrapped: cast::transmute::<~T,uint>(~res) }
+            Envelope { wrapped: cast::transmute(res) }
         }
     }
 
     /// Converts a sendable wrapper to the owned value.
     pub fn unwrap(self) -> T {
         unsafe {
-            let ret: ~T = cast::transmute::<uint,~T>(self.wrapped);
+            let ret: Box<T> = cast::transmute(self.wrapped);
             cast::forget(self);
             *ret
         }
@@ -37,7 +38,7 @@ impl<T> Envelope<T> {
 impl<T> Drop for Envelope<T> {
     fn drop(&mut self) {
         unsafe {
-            let _: ~T = cast::transmute::<uint,~T>(self.wrapped);
+            let _: Box<T> = cast::transmute(self.wrapped);
         }
     }
 }
