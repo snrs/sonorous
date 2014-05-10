@@ -116,7 +116,7 @@ pub fn version() -> ~str { "Sonorous 0.1.0-pre".to_owned() }
 /// Returns an executable name used in the command line if any.
 pub fn exename() -> ~str {
     let args = std::os::args();
-    if args.is_empty() {"sonorous".to_owned()} else {args[0].clone()}
+    if args.is_empty() {"sonorous".to_owned()} else {args.as_slice()[0].clone()}
 }
 
 /// Dumps the recognized BMS commands. This is used by `-Z dump-bmscommand[-full]` debug options.

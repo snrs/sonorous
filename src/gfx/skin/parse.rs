@@ -208,7 +208,7 @@ impl FromJson for Gradient {
         match json {
             // ["#rgb", [r,g,b]] etc.
             List(ref mut l) => if l.len() == 2 {
-                let mut it = mem::replace(l, box []).move_iter();
+                let mut it = mem::replace(l, Vec::new()).move_iter();
                 let zero = try!(from_json(it.next().unwrap()));
                 let one = try!(from_json(it.next().unwrap()));
                 return Ok(Gradient { zero: zero, one: one });
@@ -287,7 +287,7 @@ impl FromJson for Pos {
             // [x, y]
             List(ref mut l) => match l.len() {
                 2 => {
-                    let mut it = mem::replace(l, box []).move_iter();
+                    let mut it = mem::replace(l, Vec::new()).move_iter();
                     let x = try!(from_json(it.next().unwrap()));
                     let y = try!(from_json(it.next().unwrap()));
                     Ok(Pos { x: x, y: y })
@@ -314,7 +314,7 @@ impl FromJson for Rect {
             List(ref mut l) => match l.len() {
                 // [[px, py], [qx, qy]] (preferred)
                 2 => {
-                    let mut it = mem::replace(l, box []).move_iter();
+                    let mut it = mem::replace(l, Vec::new()).move_iter();
                     let p = try!(from_json(it.next().unwrap()));
                     let q = try!(from_json(it.next().unwrap()));
                     Ok(Rect { p: p, q: q })
@@ -322,7 +322,7 @@ impl FromJson for Rect {
 
                 // [px, py, qx, qy]
                 4 => {
-                    let mut it = mem::replace(l, box []).move_iter();
+                    let mut it = mem::replace(l, Vec::new()).move_iter();
                     let px = try!(from_json(it.next().unwrap()));
                     let py = try!(from_json(it.next().unwrap()));
                     let qx = try!(from_json(it.next().unwrap()));
