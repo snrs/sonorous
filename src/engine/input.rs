@@ -172,9 +172,9 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
         let name = name.to_ascii_lower();
         unsafe {
             let firstkey = 0u16;
-            let lastkey = ::std::cast::transmute(event::LastKey);
+            let lastkey = ::std::mem::transmute(event::LastKey);
             for keyidx in range(firstkey, lastkey) {
-                let key = ::std::cast::transmute(keyidx);
+                let key = ::std::mem::transmute(keyidx);
                 let keyname = event::get_key_name(key).to_ascii_lower();
                 if keyname == name { return Some(key); }
             }

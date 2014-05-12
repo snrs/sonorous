@@ -75,7 +75,7 @@ pub fn update_line(s: &str) {
 /// refused to do so or the platform is unsupported.
 #[cfg(target_os = "win32")]
 pub fn get_path_from_dialog() -> Option<Path> {
-    use std::{str, mem, cast};
+    use std::{str, mem};
     use std::ptr::{null, mut_null};
     use util::std::str::StrUtil;
     use ext::win32;
@@ -108,7 +108,7 @@ pub fn get_path_from_dialog() -> Option<Path> {
                 lpTemplateName: null(), pvReserved: null(),
                 dwReserved: 0, FlagsEx: 0,
             };
-            let ret = unsafe {win32::ll::GetOpenFileNameW(cast::transmute(&ofn))};
+            let ret = unsafe {win32::ll::GetOpenFileNameW(mem::transmute(&ofn))};
             if ret != 0 {
                 let path: &[u16] = match buf.position_elem(&0) {
                     Some(idx) => buf.slice(0, idx),

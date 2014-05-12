@@ -182,7 +182,7 @@ impl MPEG {
     pub fn get_error(&self) -> ~str {
         unsafe {
             let cstr = ll::SMPEG_error(self.raw);
-            ::std::str::raw::from_c_str(::std::cast::transmute(&cstr))
+            ::std::str::raw::from_c_str(::std::mem::transmute(&cstr))
         }
     }
 }

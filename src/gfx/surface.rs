@@ -235,7 +235,7 @@ impl SurfacePixelsUtil for Surface {
         self.with_lock(|pixels| {
             let fmt = unsafe {(*self.raw).format};
             let pitch = unsafe {((*self.raw).pitch / 4) as uint};
-            let pixels = unsafe {::std::cast::transmute(pixels)};
+            let pixels = unsafe {::std::mem::transmute(pixels)};
             let mut proxy = SurfacePixels { fmt: fmt, width: self.get_width() as uint,
                                             height: self.get_height() as uint,
                                             pitch: pitch, pixels: pixels };

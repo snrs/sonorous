@@ -8,7 +8,7 @@
 
 //! Envelope for sending a non-sendable but effectively owned type across tasks.
 
-use std::cast;
+use std::mem;
 
 /// A wrapper to send a non-sendable owned type across tasks. Use with care.
 pub struct Envelope<T> {
@@ -20,15 +20,15 @@ impl<T> Envelope<T> {
     pub fn new(res: T) -> Envelope<T> {
         let res: Box<T> = box res;
         unsafe {
-            Envelope { wrapped: cast::transmute(res) }
+            Envelope { wrapped: mem::transmute(res) }
         }
     }
 
     /// Converts a sendable wrapper to the owned value.
     pub fn unwrap(self) -> T {
         unsafe {
-            let ret: Box<T> = cast::transmute(self.wrapped);
-            cast::forget(self);
+            let ret: Box<T> = mem::transmute(self.wrapped);
+            mem::forget(self);
             *ret
         }
     }
@@ -38,7 +38,7 @@ impl<T> Envelope<T> {
 impl<T> Drop for Envelope<T> {
     fn drop(&mut self) {
         unsafe {
-            let _: Box<T> = cast::transmute(self.wrapped);
+            let _: Box<T> = mem::transmute(self.wrapped);
         }
     }
 }

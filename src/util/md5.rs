@@ -113,8 +113,8 @@ impl MD5State {
         #[cfg(target_arch="vax", not(md5_force_aligned))]
         #[inline(always)]
         unsafe fn set(ptr: *u8, _block: &mut [u32plus], n: int) -> u32plus {
-            use std::cast;
-            *cast::transmute::<*u8,*u32>(ptr.offset(n * 4)) as u32plus
+            use std::mem;
+            *mem::transmute::<*u8,*u32>(ptr.offset(n * 4)) as u32plus
         }
 
         #[cfg(target_arch="x86", not(md5_force_aligned))]

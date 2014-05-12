@@ -8,7 +8,7 @@
 
 //! OpenGL helpers.
 
-use std::{io, cast};
+use std::{io, mem};
 
 use sdl::video;
 use gl = opengles::gl2;
@@ -286,7 +286,7 @@ fn with_prepared_surface<R>(
     let (width, height) = surface.get_size();
     surface.with_lock(|pixels| {
         f(width as GLsizei, height as GLsizei, glpixfmt, gl::UNSIGNED_BYTE,
-          unsafe {cast::transmute(pixels)})
+          unsafe {mem::transmute(pixels)})
     })
 }
 

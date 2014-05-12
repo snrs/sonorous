@@ -38,7 +38,8 @@ pub enum BmsCommand<'r> {
     BmsBPM(BPM),                                // #BPM (without a following alphanumeric key)
     BmsExBPM(Key, BPM),                         // #EXBPM or #BPMxx
     BmsPlayer(int),                             // #PLAYER
-    BmsLanes(Vec<(Key, MaybeOwned<'r>)>),       // #SNRS:LANES (experimental)
+    // Rust: unfortunately `Vec<(Key, MaybeOwned<'r>)>` segfaults. (#14088)
+    BmsLanes(Vec<(Key, ~str)>),                 // #SNRS:LANES (experimental)
     BmsPlayLevel(int),                          // #PLAYLEVEL
     BmsDifficulty(int),                         // #DIFFICULTY
     BmsRank(int),                               // #RANK
@@ -95,7 +96,7 @@ impl<'r> BmsCommand<'r> {
             BmsExBPM(key, bpm) => BmsExBPM(key, bpm),
             BmsPlayer(v) => BmsPlayer(v),
             BmsLanes(lanes) =>
-                BmsLanes(lanes.move_iter().map(|(lane,spec)| (lane,into_send_str(spec))).collect()),
+                BmsLanes(lanes.move_iter().map(|(lane,spec)| (lane,spec.clone())).collect()),
             BmsPlayLevel(v) => BmsPlayLevel(v),
             BmsDifficulty(v) => BmsDifficulty(v),
             BmsRank(v) => BmsRank(v),
@@ -581,7 +582,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                         if words.as_slice()[i].len() != 2 { okay = false; break; }
                         match Key::from_str(words.as_slice()[i]) {
                             Some(key) => {
-                                lanes.push((key, words.as_slice()[i+1].into_maybe_owned()));
+                                lanes.push((key, words.as_slice()[i+1].to_owned()));
                             }
                             None => {
                                 okay = false;
