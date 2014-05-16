@@ -31,19 +31,19 @@ impl fmt::Show for BmsFlowCommand {
     /// Returns a reconstructed line for given BMS flow command.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            BmsRandom(val) => write!(f.buf, "\\#RANDOM {}", val),
-            BmsSetRandom(val) => write!(f.buf, "\\#SETRANDOM {}", val),
-            BmsEndRandom => write!(f.buf, "\\#ENDRANDOM"),
-            BmsIf(val) => write!(f.buf, "\\#IF {}", val),
-            BmsElseIf(val) => write!(f.buf, "\\#ELSEIF {}", val),
-            BmsElse => write!(f.buf, "\\#ELSE"),
-            BmsEndIf => write!(f.buf, "\\#ENDIF"),
-            BmsSwitch(val) => write!(f.buf, "\\#SWITCH {}", val),
-            BmsSetSwitch(val) => write!(f.buf, "\\#SETSWITCH {}", val),
-            BmsEndSw => write!(f.buf, "\\#ENDSW"),
-            BmsCase(val) => write!(f.buf, "\\#CASE {}", val),
-            BmsSkip => write!(f.buf, "\\#SKIP"),
-            BmsDef => write!(f.buf, "\\#DEF"),
+            BmsRandom(val) => write!(f, "\\#RANDOM {}", val),
+            BmsSetRandom(val) => write!(f, "\\#SETRANDOM {}", val),
+            BmsEndRandom => write!(f, "\\#ENDRANDOM"),
+            BmsIf(val) => write!(f, "\\#IF {}", val),
+            BmsElseIf(val) => write!(f, "\\#ELSEIF {}", val),
+            BmsElse => write!(f, "\\#ELSE"),
+            BmsEndIf => write!(f, "\\#ENDIF"),
+            BmsSwitch(val) => write!(f, "\\#SWITCH {}", val),
+            BmsSetSwitch(val) => write!(f, "\\#SETSWITCH {}", val),
+            BmsEndSw => write!(f, "\\#ENDSW"),
+            BmsCase(val) => write!(f, "\\#CASE {}", val),
+            BmsSkip => write!(f, "\\#SKIP"),
+            BmsDef => write!(f, "\\#DEF"),
         }
     }
 }

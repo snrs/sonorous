@@ -4,7 +4,7 @@
 
 //! Timeline interface.
 
-use std::fmt;
+use std::{fmt, io};
 use format::obj::*;
 
 /// A portion of game data which is not associated to resources and other metadata. Timelines are
@@ -94,7 +94,7 @@ impl<S:Clone,I:Clone> Timeline<S,I> {
 
 impl<S:fmt::Show,I:fmt::Show> Timeline<S,I> {
     /// Dumps the timeline to the writer for the debugging purpose.
-    pub fn dump(&self, writer: &mut Writer) -> fmt::Result {
+    pub fn dump(&self, writer: &mut Writer) -> io::IoResult<()> {
         try!(writeln!(writer, "********  ********  ********  ********  SetBPM({})", *self.initbpm));
         for obj in self.objs.iter() {
             try!(writeln!(writer, "{:8.3}  {:8.3}  {:8.3}  {:8.3}  {}",

@@ -182,7 +182,7 @@ impl<S:fmt::Show,I:fmt::Show> fmt::Show for ObjData<S,I> {
         impl fmt::Show for fmt_lane {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 let fmt_lane(lane) = *self;
-                write!(f.buf, "{}:{:02}", *lane / 36 + 1, *lane % 36)
+                write!(f, "{}:{:02}", *lane / 36 + 1, *lane % 36)
             }
         }
 
@@ -197,38 +197,41 @@ impl<S:fmt::Show,I:fmt::Show> fmt::Show for ObjData<S,I> {
         }
 
         match *self {
-            Deleted => write!(f.buf, "Deleted"),
+            Deleted => write!(f, "Deleted"),
             Visible(lane, ref sref) =>
-                write!(f.buf, "Visible({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
+                write!(f, "Visible({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
             Invisible(lane, ref sref) =>
-                write!(f.buf, "Invisible({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
+                write!(f, "Invisible({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
             LNStart(lane, ref sref) =>
-                write!(f.buf, "LNStart({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
+                write!(f, "LNStart({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
             LNDone(lane, ref sref) =>
-                write!(f.buf, "LNDone({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
+                write!(f, "LNDone({},{})", fmt_lane(lane), fmt_or_default(sref, "--")),
             Bomb(lane, ref sref, damage) =>
-                write!(f.buf, "Bomb({},{},{})", fmt_lane(lane), fmt_or_default(sref, "--"), damage),
+                write!(f, "Bomb({},{},{})", fmt_lane(lane), fmt_or_default(sref, "--"), damage),
             BGM(ref sref) =>
-                write!(f.buf, "BGM({})", sref),
+                write!(f, "BGM({})", sref),
             SetBGA(layer, BlankBGA) =>
-                write!(f.buf, "SetBGA({},--)", layer),
+                write!(f, "SetBGA({},--)", layer),
             SetBGA(layer, ImageBGA(ref iref)) =>
-                write!(f.buf, "SetBGA({},{})", layer, iref),
+                write!(f, "SetBGA({},{})", layer, iref),
             SetBGA(layer, SlicedImageBGA(ref iref, ref slice)) =>
-                write!(f.buf, "SetBGA({},{}:{}+{}+{}x{}:{}+{}+{}x{})",
-                              layer, iref, slice.sx, slice.sy, slice.w, slice.h,
-                              slice.dx, slice.dy, slice.w, slice.h),
+                write!(f, "SetBGA({},{}:{}+{}+{}x{}:{}+{}+{}x{})",
+                          layer, iref, slice.sx, slice.sy, slice.w, slice.h,
+                          slice.dx, slice.dy, slice.w, slice.h),
             SetBPM(BPM(bpm)) =>
-                write!(f.buf, "SetBPM({})", bpm),
+                write!(f, "SetBPM({})", bpm),
             Stop(Seconds(secs)) =>
-                write!(f.buf, "Stop({}s)", secs),
+                write!(f, "Stop({}s)", secs),
             Stop(Measures(measures)) =>
-                write!(f.buf, "Stop({})", measures),
-            StopEnd => write!(f.buf, "StopEnd"),
+                write!(f, "Stop({})", measures),
+            StopEnd =>
+                write!(f, "StopEnd"),
             SetMeasureFactor(factor) =>
-                write!(f.buf, "SetMeasureFactor({})", factor),
-            MeasureBar => write!(f.buf, "MeasureBar"),
-            End => write!(f.buf, "End"),
+                write!(f, "SetMeasureFactor({})", factor),
+            MeasureBar =>
+                write!(f, "MeasureBar"),
+            End =>
+                write!(f, "End"),
         }
     }
 }
