@@ -93,6 +93,14 @@ impl IntoScalar<'static> for ~str {
     #[inline] fn into_scalar(self) -> Scalar<'static> { OwnedStrScalar(self) }
 }
 
+impl<'a> AsScalar<'a> for StrBuf {
+    #[inline] fn as_scalar(&'a self) -> Scalar<'a> { BorrowedStrScalar(self.as_slice()) }
+}
+
+impl IntoScalar<'static> for StrBuf {
+    #[inline] fn into_scalar(self) -> Scalar<'static> { OwnedStrScalar(self.into_owned()) }
+}
+
 impl<'a> AsScalar<'a> for Rc<Texture2D> {
     #[inline] fn as_scalar(&'a self) -> Scalar<'a> { TextureScalar(self) }
 }
