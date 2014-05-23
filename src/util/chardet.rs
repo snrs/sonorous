@@ -304,7 +304,7 @@ impl<CC:CharClass> Classifier<CC> {
  * for example, there are instances of Cyrillic characters in both encodings.
  */
 #[cfg(subprogram)]
-pub fn chardet_train(args: &[~str]) -> int {
+pub fn chardet_train(args: &[StrBuf]) -> int {
     use std::io::{stdin, stderr, BufferedReader};
     use encoding::{Encoding, EncodeStrict, DecodeReplace};
     use encoding::all::{WINDOWS_949, WINDOWS_31J};
@@ -316,7 +316,7 @@ pub fn chardet_train(args: &[~str]) -> int {
         return 1;
     }
 
-    let rescale = match from_str::<f64>(args[0]) {
+    let rescale = match from_str::<f64>(args[0].as_slice()) {
         Some(v) if v > 0.0 => v,
         _ => {
             let _ = write!(&mut stderr(), "Invalid rescale argument: {}\n", args[1]);
@@ -334,27 +334,27 @@ pub fn chardet_train(args: &[~str]) -> int {
     let mut njawords = 0;
 
     let mut stream = BufferedReader::new(stdin());
-    let words: Vec<~str> =
-        stream.lines().map(|s| s.unwrap()).filter(|s| !s.trim().is_empty()).collect();
+    let words: Vec<StrBuf> =
+        stream.lines().map(|s| s.unwrap()).filter(|s| !s.as_slice().trim().is_empty()).collect();
     let nwords = words.len();
     for (i, w) in words.move_iter().enumerate() {
         if (i + 1) % 10000 == 0 {
             let _ = write!(&mut stderr(), "Processing {} out of {} words...\n", i + 1, nwords);
         }
-        match WINDOWS_949.encode(w, EncodeStrict) {
+        match WINDOWS_949.encode(w.as_slice(), EncodeStrict) {
             Ok(w_) => {
                 let w_ = WINDOWS_31J.decode(w_.as_slice(), DecodeReplace).unwrap();
                 nkowords += 1;
-                kotrainerko.train(w, true);
+                kotrainerko.train(w.as_slice(), true);
                 jatrainerko.train(w_.as_slice(), false);
             }
             Err(..) => {}
         }
-        match WINDOWS_31J.encode(w, EncodeStrict) {
+        match WINDOWS_31J.encode(w.as_slice(), EncodeStrict) {
             Ok(w_) => {
                 let w_ = WINDOWS_949.decode(w_.as_slice(), DecodeReplace).unwrap();
                 njawords += 1;
-                jatrainerja.train(w, true);
+                jatrainerja.train(w.as_slice(), true);
                 kotrainerja.train(w_.as_slice(), false);
             }
             Err(..) => {}

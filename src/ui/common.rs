@@ -18,7 +18,7 @@ pub fn exit(exitcode: int) -> ! {
 
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(target_os = "win32")]
-pub fn die(s: ~str) -> ! {
+pub fn die(s: StrBuf) -> ! {
     use util::std::str::StrUtil;
     ::exename().as_utf16_c_str(|caption| {
         s.as_utf16_c_str(|text| {
@@ -30,14 +30,14 @@ pub fn die(s: ~str) -> ! {
 
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(not(target_os = "win32"))]
-pub fn die(s: ~str) -> ! {
-    printerrln(format!("{}: {}", ::exename(), s));
+pub fn die(s: StrBuf) -> ! {
+    printerrln(format!("{}: {}", ::exename(), s).as_slice());
     exit(1)
 }
 
 /// Prints an warning message. Internally used in the `warn!` macro below.
-pub fn warn(s: ~str) {
-    printerrln(format!("*** Warning: {}", s));
+pub fn warn(s: StrBuf) {
+    printerrln(format!("*** Warning: {}", s).as_slice());
 }
 
 /// Exits with a formatted error message.
@@ -68,7 +68,7 @@ pub fn check_exit(atexit: ||) {
 /// Writes a line to the console without advancing to the next line. `s` should be short enough
 /// to be replaced (currently up to 72 bytes).
 pub fn update_line(s: &str) {
-    printerr(format!("\r{:72}\r{}", "", s));
+    printerr(format!("\r{:72}\r{}", "", s).as_slice());
 }
 
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
@@ -115,7 +115,7 @@ pub fn get_path_from_dialog() -> Option<Path> {
                     None => buf.as_slice()
                 };
                 // path may result in an invaild UTF-16 path (but valid UCS-2 one)
-                str::from_utf16(path).map(Path::new)
+                str::from_utf16(path).map(|s| Path::new(s.as_slice()))
             } else {
                 None
             }

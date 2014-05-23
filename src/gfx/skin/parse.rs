@@ -29,17 +29,17 @@ use gfx::skin::ast::{Skin};
 /// Values that can be constructed from JSON.
 pub trait FromJson {
     /// Constructs a value by consuming JSON, returns None if impossible.
-    fn from_json(json: Json) -> Result<Self,~str>;
+    fn from_json(json: Json) -> Result<Self,StrBuf>;
 }
 
 impl<T:FromJson> FromJson for Box<T> {
-    fn from_json(json: Json) -> Result<Box<T>,~str> {
+    fn from_json(json: Json) -> Result<Box<T>,StrBuf> {
         from_json(json).map(|e| box e)
     }
 }
 
 impl<T:FromJson> FromJson for Vec<T> {
-    fn from_json(json: Json) -> Result<Vec<T>,~str> {
+    fn from_json(json: Json) -> Result<Vec<T>,StrBuf> {
         match json {
             List(l) => result::collect(l.move_iter().map(from_json::<T>)),
             _ => Err(format!("expected a list")),
@@ -48,7 +48,7 @@ impl<T:FromJson> FromJson for Vec<T> {
 }
 
 /// A wrapper around `FromJson::from_json(json)`.
-pub fn from_json<T:FromJson>(json: Json) -> Result<T,~str> {
+pub fn from_json<T:FromJson>(json: Json) -> Result<T,StrBuf> {
     FromJson::from_json(json)
 }
 
@@ -63,7 +63,7 @@ fn from_0_255(x: f64) -> u8 {
 }
 
 /// Returns a string representation of remaining keys in the tree map.
-fn treemap_keys(map: &TreeMap<StrBuf,Json>) -> ~str {
+fn treemap_keys(map: &TreeMap<StrBuf,Json>) -> StrBuf {
     map.iter().map(|(k,_)| k.as_slice()).collect::<Vec<&str>>().connect(", ")
 }
 
@@ -102,7 +102,7 @@ macro_rules! pop(
 )
 
 impl FromJson for Scalar<'static> {
-    fn from_json(json: Json) -> Result<Scalar<'static>,~str> {
+    fn from_json(json: Json) -> Result<Scalar<'static>,StrBuf> {
         match json {
             Number(v) => Ok(v.into_scalar()),
             String(s) => Ok(s.into_scalar()),
@@ -128,7 +128,7 @@ impl FromJson for Scalar<'static> {
 }
 
 impl FromJson for Color {
-    fn from_json(json: Json) -> Result<Color,~str> {
+    fn from_json(json: Json) -> Result<Color,StrBuf> {
         match json {
             // "#rgb", "#rgba" (preferred)
             // "#rrggbb", "#rrggbbaa" (preferred)
@@ -204,7 +204,7 @@ impl FromJson for Color {
 }
 
 impl FromJson for Gradient {
-    fn from_json(mut json: Json) -> Result<Gradient,~str> {
+    fn from_json(mut json: Json) -> Result<Gradient,StrBuf> {
         match json {
             // ["#rgb", [r,g,b]] etc.
             List(ref mut l) => if l.len() == 2 {
@@ -232,7 +232,7 @@ impl FromJson for Gradient {
 }
 
 impl FromJson for Expr {
-    fn from_json(json: Json) -> Result<Expr,~str> {
+    fn from_json(json: Json) -> Result<Expr,StrBuf> {
         use util::std::str::StrUtil;
 
         let expr = match json {
@@ -282,7 +282,7 @@ impl FromJson for Expr {
 }
 
 impl FromJson for Pos {
-    fn from_json(mut json: Json) -> Result<Pos,~str> {
+    fn from_json(mut json: Json) -> Result<Pos,StrBuf> {
         match json {
             // [x, y]
             List(ref mut l) => match l.len() {
@@ -309,7 +309,7 @@ impl FromJson for Pos {
 }
 
 impl FromJson for Rect {
-    fn from_json(mut json: Json) -> Result<Rect,~str> {
+    fn from_json(mut json: Json) -> Result<Rect,StrBuf> {
         match json {
             List(ref mut l) => match l.len() {
                 // [[px, py], [qx, qy]] (preferred)
@@ -348,7 +348,7 @@ impl FromJson for Rect {
 }
 
 impl FromJson for Id {
-    fn from_json(json: Json) -> Result<Id,~str> {
+    fn from_json(json: Json) -> Result<Id,StrBuf> {
         match json {
             String(s) => Ok(Id(s.into_owned())),
             _ => fail_with_json!(json, "an identifier")
@@ -357,7 +357,7 @@ impl FromJson for Id {
 }
 
 impl<T:FromJson> FromJson for Block<T> {
-    fn from_json(json: Json) -> Result<Block<T>,~str> {
+    fn from_json(json: Json) -> Result<Block<T>,StrBuf> {
         let mut map = match json {
             Object(map) => map,
             _ => fail_with_json!(json, "a block")
@@ -415,7 +415,7 @@ impl<T:FromJson> FromJson for Block<T> {
 }
 
 impl FromJson for ScalarFormat {
-    fn from_json(json: Json) -> Result<ScalarFormat,~str> {
+    fn from_json(json: Json) -> Result<ScalarFormat,StrBuf> {
         let fmt = match json {
             Null => { return Ok(NoFormat); }
             String(s) => s,
@@ -487,7 +487,7 @@ impl FromJson for ScalarFormat {
 }
 
 impl FromJson for TextSource {
-    fn from_json(json: Json) -> Result<TextSource,~str> {
+    fn from_json(json: Json) -> Result<TextSource,StrBuf> {
         match json {
             // "static text"
             String(s) => Ok(StaticText(s.into_owned())),
@@ -519,7 +519,7 @@ impl FromJson for TextSource {
 }
 
 impl FromJson for Node {
-    fn from_json(json: Json) -> Result<Node,~str> {
+    fn from_json(json: Json) -> Result<Node,StrBuf> {
         match json {
             // "some comment" (temporary)
             String(_) => Ok(Nothing),
@@ -691,7 +691,7 @@ impl FromJson for Node {
 }
 
 impl FromJson for Skin {
-    fn from_json(json: Json) -> Result<Skin,~str> {
+    fn from_json(json: Json) -> Result<Skin,StrBuf> {
         match json {
             // {"scalars": {...}, "nodes": [...]}
             Object(mut map) => {
@@ -716,7 +716,7 @@ impl FromJson for Skin {
 }
 
 /// Parses and returns the skin data.
-pub fn load_skin(f: &mut Reader) -> Result<Skin,~str> {
+pub fn load_skin(f: &mut Reader) -> Result<Skin,StrBuf> {
     let json = match from_reader(f) {
         Ok(json) => json,
         Err(err) => { return Err(err.to_str()); }

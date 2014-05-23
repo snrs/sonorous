@@ -34,7 +34,7 @@ pub struct GLState {
 #[cfg(target_os="win32")]
 impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
-    pub fn new() -> Result<GLState,~str> {
+    pub fn new() -> Result<GLState,StrBuf> {
         use ext::win32::ll::*;
 
         macro_rules! return_on_err(
@@ -116,7 +116,7 @@ pub struct GLState;
 #[cfg(not(target_os="win32"))]
 impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
-    pub fn new() -> Result<GLState,~str> { Ok(GLState) }
+    pub fn new() -> Result<GLState,StrBuf> { Ok(GLState) }
     /// Returns true if SDL's OpenGL support is in use.
     pub fn uses_sdl_ogl_support() -> bool { true }
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.
@@ -151,7 +151,7 @@ pub struct Screen {
 
 impl Screen {
     /// Creates a new screen with given parameters.
-    pub fn new(width: uint, height: uint, fullscreen: bool) -> Result<Screen,~str> {
+    pub fn new(width: uint, height: uint, fullscreen: bool) -> Result<Screen,StrBuf> {
         let mut surfaceflags;
         let mut videoflags;
         if fullscreen {

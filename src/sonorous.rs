@@ -111,10 +111,10 @@ pub mod engine {
 }
 
 /// Returns a version string.
-pub fn version() -> ~str { "Sonorous 0.1.0-pre".to_owned() }
+pub fn version() -> StrBuf { "Sonorous 0.1.0-pre".to_owned() }
 
 /// Returns an executable name used in the command line if any.
-pub fn exename() -> ~str {
+pub fn exename() -> StrBuf {
     let args = std::os::args();
     if args.is_empty() {"sonorous".to_owned()} else {args.as_slice()[0].clone()}
 }
@@ -137,7 +137,7 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
     fn print_command<'r>(parsed: Parsed<'r>, callback: |Option<uint>, BmsMessage| -> bool) {
         match parsed {
             Command(_lineno, BmsUnknown(..)) => {}
-            Command(_lineno, cmd) => { util::console::printoutln(cmd.to_str()); }
+            Command(_lineno, cmd) => { util::console::printoutln(cmd.to_str().as_slice()); }
             Message(lineno, msg) => { callback(lineno, msg); }
             Encoding(..) => {}
         }
@@ -297,7 +297,7 @@ Available debugging options:
 
 /// The entry point for subprograms. Only enabled with `--cfg subprogram`.
 #[cfg(subprogram)]
-pub fn subprogram(args: &[~str]) -> ! {
+pub fn subprogram(args: &[StrBuf]) -> ! {
     let ret: int = match args.head().as_ref().map(|s| s.as_slice()) {
         None => {
             let _ = write!(&mut std::io::stderr(), "\
@@ -318,7 +318,7 @@ The list of available subprograms:
 
 /// The entry point for subprograms. Only enabled with `--cfg subprogram`.
 #[cfg(not(subprogram))]
-pub fn subprogram(_args: &[~str]) -> ! {
+pub fn subprogram(_args: &[StrBuf]) -> ! {
     let _ = write!(&mut std::io::stderr(), "Subprograms are not supported in this build.\n");
     ui::common::exit(1);
 }

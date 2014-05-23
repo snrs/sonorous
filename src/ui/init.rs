@@ -37,7 +37,7 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
         mouse::set_cursor_visible(false);
     }
 
-    wm::set_caption(::version(), "");
+    wm::set_caption(::version().as_slice(), "");
     screen
 }
 

@@ -204,8 +204,8 @@ static PRESETS: &'static [(&'static str, &'static str, &'static str)] = &[
  * - `bms`, `bme`, `bml` or no preset: Selects one of eight presets `{5,7,10,14}[/fp]`.
  * - `pms`: Selects one of two presets `9` and `9-bme`.
  */
-pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str)> {
-    use std::ascii::StrAsciiExt;
+pub fn preset_to_key_spec(bms: &Bms, preset: Option<StrBuf>) -> Option<(StrBuf, StrBuf)> {
+    use std::ascii::OwnedStrAsciiExt;
 
     let mut present = [false, ..NLANES];
     for obj in bms.timeline.objs.iter() {
@@ -214,7 +214,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
         }
     }
 
-    let preset = preset.map(|s| s.to_ascii_lower());
+    let preset = preset.map(|s| s.into_ascii_lower());
     let preset = match preset.as_ref().map(|s| s.as_slice()) {
         None | Some("bms") | Some("bme") | Some("bml") => {
             let isbme = present[8] || present[9] || present[36+8] || present[36+9];
@@ -223,7 +223,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
                 CouplePlay | DoublePlay => if isbme {"14"} else {"10"},
                 _                       => if isbme {"7" } else {"5" }
             };
-            if haspedal {nkeys + "/fp"} else {nkeys.to_owned()}
+            if haspedal {nkeys.to_owned().append("/fp")} else {nkeys.to_owned()}
         },
         Some("pms") => {
             let isbme = present[6] || present[7] || present[8] || present[9];
@@ -234,7 +234,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
     };
 
     for &(name, leftkeys, rightkeys) in PRESETS.iter() {
-        if name == preset {
+        if name == preset.as_slice() {
             return Some((leftkeys.to_owned(), rightkeys.to_owned()));
         }
     }
@@ -242,8 +242,8 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<~str>) -> Option<(~str, ~str
 }
 
 /// Parses a key specification from the options.
-pub fn key_spec(bms: &Bms, preset: Option<~str>,
-                leftkeys: Option<~str>, rightkeys: Option<~str>) -> Result<KeySpec,~str> {
+pub fn key_spec(bms: &Bms, preset: Option<StrBuf>,
+                leftkeys: Option<StrBuf>, rightkeys: Option<StrBuf>) -> Result<KeySpec,StrBuf> {
     use std::ascii::StrAsciiExt;
 
     let (leftkeys, rightkeys) =
@@ -287,7 +287,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
     };
 
     if !leftkeys.is_empty() {
-        match parse_and_add(&mut keyspec, leftkeys) {
+        match parse_and_add(&mut keyspec, leftkeys.as_slice()) {
             None => { return Err(format!("Invalid key spec for left hand side: {}", leftkeys)); }
             Some(nkeys) => { keyspec.split += nkeys; }
         }
@@ -295,7 +295,7 @@ pub fn key_spec(bms: &Bms, preset: Option<~str>,
         return Err(format!("No key model is specified using -k or -K"));
     }
     if !rightkeys.is_empty() {
-        match parse_and_add(&mut keyspec, rightkeys) {
+        match parse_and_add(&mut keyspec, rightkeys.as_slice()) {
             None => { return Err(format!("Invalid key spec for right hand side: {}", rightkeys)); }
             Some(nkeys) => { // no split panes except for Couple Play
                 if bms.meta.mode != CouplePlay { keyspec.split += nkeys; }

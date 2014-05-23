@@ -51,7 +51,7 @@ pub struct LoadingContext {
     pub keymap: KeyMap,
 
     /// The most recently loaded file name from the resource loader.
-    pub lastpath: Option<~str>,
+    pub lastpath: Option<StrBuf>,
     /// Context for searching files.
     pub search: SearchContext,
     /// A list of jobs to be executed.
@@ -104,7 +104,7 @@ impl LoadingContext {
             Some(ref path) => path,
             None => { return; }
         };
-        let fullpath = self.search.resolve_relative_path_for_image(*path, &self.basedir);
+        let fullpath = self.search.resolve_relative_path_for_image(path.as_slice(), &self.basedir);
 
         let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
         let tex_or_err = res.and_then(|res| {
@@ -130,7 +130,7 @@ impl LoadingContext {
     pub fn load_sound(&mut self, i: uint) {
         let path = self.bms.meta.sndpath.as_slice()[i].get_ref().clone();
         self.lastpath = Some(path.clone());
-        let fullpath = self.search.resolve_relative_path_for_sound(path, &self.basedir);
+        let fullpath = self.search.resolve_relative_path_for_sound(path.as_slice(), &self.basedir);
 
         match fullpath.and_then(|path| LoadedSoundResource::new(&path)) {
             Ok(res) => {
@@ -146,7 +146,7 @@ impl LoadingContext {
     pub fn load_image(&mut self, i: uint) {
         let path = self.bms.meta.imgpath.as_slice()[i].get_ref().clone();
         self.lastpath = Some(path.clone());
-        let fullpath = self.search.resolve_relative_path_for_image(path, &self.basedir);
+        let fullpath = self.search.resolve_relative_path_for_image(path.as_slice(), &self.basedir);
 
         let has_movie = self.opts.has_movie();
         match fullpath.and_then(|path| LoadedImageResource::new(&path, has_movie)) {
@@ -275,36 +275,40 @@ impl Scene for TextualLoadingScene {
             printerr(format!("\
 ----------------------------------------------------------------------------------------------
 Title:    {title}",
-                title = self.context.bms.meta.title.as_ref().map_or("", |s| s.as_slice())));
+                    title = self.context.bms.meta.title.as_ref().map_or("", |s| s.as_slice())
+                ).as_slice());
             for subtitle in self.context.bms.meta.subtitles.iter() {
                 printerr(format!("
-          {subtitle}", subtitle = *subtitle));
+          {subtitle}", subtitle = *subtitle).as_slice());
             }
             printerr(format!("
 Genre:    {genre}
 Artist:   {artist}",
-                genre = self.context.bms.meta.genre.as_ref().map_or("", |s| s.as_slice()),
-                artist = self.context.bms.meta.artist.as_ref().map_or("", |s| s.as_slice())));
+                    genre = self.context.bms.meta.genre.as_ref().map_or("", |s| s.as_slice()),
+                    artist = self.context.bms.meta.artist.as_ref().map_or("", |s| s.as_slice())
+                ).as_slice());
             for subartist in self.context.bms.meta.subartists.iter() {
                 printerr(format!("
-          {subartist}", subartist = *subartist));
+          {subartist}", subartist = *subartist).as_slice());
             }
             for comment in self.context.bms.meta.comments.iter() {
                 printerr(format!("
-\"{comment}\"", comment = *comment));
+\"{comment}\"", comment = *comment).as_slice());
             }
             printerrln(format!("
 Level {level} | BPM {bpm:.2}{hasbpmchange} | \
 {nnotes, plural, =1{# note} other{# notes}} [{nkeys}KEY{haslongnote}{difficulty}]
 ----------------------------------------------------------------------------------------------",
-                level = self.context.bms.meta.playlevel,
-                bpm = *self.context.bms.timeline.initbpm,
-                hasbpmchange = if self.context.infos.hasbpmchange {"?"} else {""},
-                nnotes = self.context.infos.nnotes, nkeys = self.context.keyspec.nkeys(),
-                haslongnote = if self.context.infos.haslongnote {"-LN"} else {""},
-                difficulty = self.context.bms.meta.difficulty.and_then(|d| d.name())
-                                                             .map_or("".to_owned(),
-                                                                     |name| " " + name)));
+                    level = self.context.bms.meta.playlevel,
+                    bpm = *self.context.bms.timeline.initbpm,
+                    hasbpmchange = if self.context.infos.hasbpmchange {"?"} else {""},
+                    nnotes = self.context.infos.nnotes, nkeys = self.context.keyspec.nkeys(),
+                    haslongnote = if self.context.infos.haslongnote {"-LN"} else {""},
+                    difficulty =
+                        self.context.bms.meta.difficulty
+                            .and_then(|d| d.name()).as_ref()
+                            .map_or("".to_owned(),
+                                    |name| " ".to_owned().append(*name))).as_slice());
         }
         Continue
     }
@@ -320,9 +324,10 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
             match self.context.lastpath {
                 Some(ref path) => {
                     use util::std::str::StrUtil;
-                    let path = if path.len() < 63 {path.as_slice()} else {path.slice_upto(0, 63)};
+                    let path = if path.len() < 63 {path.as_slice()}
+                               else {path.as_slice().slice_upto(0, 63)};
                     update_line(format!("Loading: {} ({:.0}%)", path,
-                                        100.0 * self.context.processed_jobs_ratio()));
+                                        100.0 * self.context.processed_jobs_ratio()).as_slice());
                 }
                 None => { update_line("Loading done."); }
             };

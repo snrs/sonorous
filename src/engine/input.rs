@@ -164,8 +164,8 @@ static KEYSETS: &'static [KeySet] = &[
 pub type KeyMap = HashMap<Input,VirtualInput>;
 
 /// Reads an input mapping from the environment variables.
-pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<KeyMap,~str> {
-    use std::ascii::StrAsciiExt;
+pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<StrBuf>) -> Result<KeyMap,StrBuf> {
+    use std::ascii::{StrAsciiExt, OwnedStrAsciiExt};
 
     /// Finds an SDL virtual key with the given name. Matching is done case-insensitively.
     fn sdl_key_from_name(name: &str) -> Option<event::Key> {
@@ -175,7 +175,7 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
             let lastkey = ::std::mem::transmute(event::LastKey);
             for keyidx in range(firstkey, lastkey) {
                 let key = ::std::mem::transmute(keyidx);
-                let keyname = event::get_key_name(key).to_ascii_lower();
+                let keyname = event::get_key_name(key).into_ascii_lower();
                 if keyname == name { return Some(key); }
             }
         }
@@ -210,10 +210,10 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
         let spec = spec.unwrap_or(keyset.default.to_owned());
 
         let mut i = 0;
-        for part in spec.split('|') {
+        for part in spec.as_slice().split('|') {
             let (kind, vinputs) = keyset.mapping[i];
             for s in part.split('%') {
-                match parse_input(s) {
+                match parse_input(s.as_slice()) {
                     Some(input) => {
                         for &vinput in vinputs.iter() {
                             add_mapping(&mut map, kind, input, vinput);
@@ -236,8 +236,8 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<~str>) -> Result<
         let kind = keyspec.kinds.as_slice()[*lane].unwrap();
         let envvar = format!("SNRS_{}{}_KEY", key.to_str(), kind.to_char());
         let envvar2 = format!("ANGOLMOIS_{}{}_KEY", key.to_str(), kind.to_char());
-        for s in getenv(envvar).or(getenv(envvar2)).iter() {
-            match parse_input(*s) {
+        for s in getenv(envvar.as_slice()).or(getenv(envvar2.as_slice())).iter() {
+            match parse_input(s.as_slice()) {
                 Some(input) => { add_mapping(&mut map, Some(kind), input, LaneInput(lane)); }
                 None => { return Err(format!("Unknown key name in the environment variable {}: {}",
                                              envvar, *s)); }

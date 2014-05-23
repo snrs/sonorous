@@ -72,15 +72,15 @@ pub struct Options {
     /// An index to the joystick device if any.
     pub joystick: Option<uint>,
     /// A key specification preset name if any.
-    pub preset: Option<~str>,
+    pub preset: Option<StrBuf>,
     /// A left-hand-side key specification if any.
-    pub leftkeys: Option<~str>,
+    pub leftkeys: Option<StrBuf>,
     /// A right-hand-side key specification if any. Can be an empty string.
-    pub rightkeys: Option<~str>,
+    pub rightkeys: Option<StrBuf>,
     /// An initial play speed.
     pub playspeed: f64,
     /// A character encoding *name* forced to the loader.
-    pub encoding: Option<~str>,
+    pub encoding: Option<StrBuf>,
     /// A root path to the skin.
     pub skinroot: Path,
 
@@ -113,12 +113,12 @@ impl Options {
     pub fn loader_options(&self) -> LoaderOptions {
         let mut loaderopts = LoaderOptions::new();
         loaderopts.parser.force_encoding =
-            self.encoding.as_ref().and_then(|s| encoding_from_whatwg_label(*s));
+            self.encoding.as_ref().and_then(|s| encoding_from_whatwg_label(s.as_slice()));
         loaderopts
     }
 
     /// Parses and returns the skin data.
-    pub fn load_skin(&self, name: &str) -> Result<Skin,~str> {
+    pub fn load_skin(&self, name: &str) -> Result<Skin,StrBuf> {
         match io::File::open(&self.skinroot.join(name)) {
             Ok(mut f) => load_skin(&mut f).map(|skin| skin.make_absolute(&self.skinroot)),
             Err(err) => Err(err.to_str()),
@@ -136,12 +136,12 @@ pub enum ParsingResult {
     /// The caller is given a path and options.
     PathAndOptions(Path,Options),
     /// The caller should stop the program with given error message.
-    Error(~str),
+    Error(StrBuf),
 }
 
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
-pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult {
+pub fn parse_opts(args: &[StrBuf], get_path: || -> Option<Path>) -> ParsingResult {
     let longargs: HashMap<&str,char> = vec!(
         ("--help", 'h'), ("--version", 'V'), ("--speed", 'a'),
         ("--autoplay", 'v'), ("--exclusive", 'x'), ("--sound-only", 'X'),
@@ -175,45 +175,43 @@ pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult 
 
     let mut i = 0;
     while i < nargs {
-        if !args[i].starts_with("-") {
+        let arg = args[i].as_slice();
+        if !arg.starts_with("-") {
             if bmspath.is_none() {
-                let filename: &str = args[i];
-                bmspath = Some(Path::new(filename));
+                bmspath = Some(Path::new(arg));
             }
-        } else if args[i].as_slice() == "--" {
+        } else if arg == "--" {
             i += 1;
             if bmspath.is_none() && i < nargs {
-                let filename: &str = args[i];
-                bmspath = Some(Path::new(filename));
+                bmspath = Some(Path::new(arg));
             }
             break;
         } else {
             let shortargs =
-                if args[i].starts_with("--") {
-                    match longargs.find(&args[i].as_slice()) {
+                if arg.starts_with("--") {
+                    match longargs.find(&arg) {
                         Some(&c) => str::from_char(c),
-                        None => { return Error(format!("Invalid option: {}", args[i])); }
+                        None => { return Error(format!("Invalid option: {}", arg)); }
                     }
                 } else {
-                    args[i].slice_from(1).to_owned()
+                    arg.slice_from(1).to_owned()
                 };
             let nshortargs = shortargs.len();
 
             let mut inside = true;
-            for (j, c) in shortargs.chars().enumerate() {
+            for (j, c) in shortargs.as_slice().chars().enumerate() {
                 // Reads the argument of the option. Option string should be consumed first.
                 macro_rules! fetch_arg(($opt:expr) => ({
                     let off = if inside {j+1} else {j};
                     let nextarg =
                         if inside && off < nshortargs {
                             // remaining portion of `args[i]` is an argument
-                            shortargs.slice_from(off)
+                            shortargs.as_slice().slice_from(off)
                         } else {
                             // `args[i+1]` is an argument as a whole
                             i += 1;
                             if i < nargs {
-                                let arg: &str = args[i];
-                                arg
+                                args[i].as_slice()
                             } else {
                                 return Error(format!("No argument to the option -{}", $opt));
                             }
@@ -266,7 +264,7 @@ pub fn parse_opts(args: &[~str], get_path: || -> Option<Path>) -> ParsingResult 
                     }
                     'Y' => {
                         let arg = fetch_arg!('Y');
-                        match Path::new_opt(arg) {
+                        match Path::new_opt(arg.as_slice()) {
                             Some(path) => { skinroot = path; }
                             None => { return Error(format!("Invalid skin path: {}", arg)); }
                         }

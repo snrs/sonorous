@@ -46,7 +46,7 @@ pub struct PreprocessedBms {
 pub fn preprocess_bms<'r,R:Rng>(
         bmspath: &Path, f: &mut Reader, opts: &Options, r: &mut R,
         loaderopts: &bms::load::LoaderOptions, callback: bms::load::Callback<'r>)
-                                -> Result<PreprocessedBms,~str> {
+                                -> Result<PreprocessedBms,StrBuf> {
     let bms = try!(bms::load::load_bms(f, r, loaderopts, callback));
     let mut bms = bms.with_bmspath(bmspath);
     let keyspec = try!(key_spec(&bms, opts.preset.clone(),
@@ -66,16 +66,16 @@ enum Message {
     /// The worker has finished scanning files.
     NoMoreFiles,
     /// The worker has failed to read and/or load the BMS file. Error message follows.
-    BmsFailed(Path,~str),
+    BmsFailed(Path,StrBuf),
     /// The worker has read the BMS file and calculated its MD5 hash.
     BmsHashRead(Path,[u8, ..16]),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
     BmsLoaded(Path,PreprocessedBms,Vec<(Option<uint>,bms::diag::BmsMessage)>),
-    /// The worker has loaded the banner image (the second `~str`) for the BMS file (the first
+    /// The worker has loaded the banner image (the second `StrBuf`) for the BMS file (the first
     /// `Path`). This may be sent after `BmsLoaded` message. Due to the same reason as above
     /// the main task should ignore the message with non-current paths.
-    BmsBannerLoaded(Path,~str,Envelope<PreparedSurface>),
+    BmsBannerLoaded(Path,StrBuf,Envelope<PreparedSurface>),
 }
 
 /// Preloaded game data.
@@ -113,7 +113,7 @@ pub enum PreloadingState {
     /// Preloading finished with a success.
     Preloaded(PreloadedData),
     /// Preloading finished with a failure. Error message is available.
-    PreloadFailed(~str),
+    PreloadFailed(StrBuf),
 }
 
 /// The scanned entry.
@@ -169,7 +169,7 @@ fn is_bms_file(path: &Path) -> bool {
 /// Also we need to use our own wrapper to avoid "sending on a closed channel" error from
 /// the default `future_result` wrapper.
 fn spawn_worker_task(name: &'static str, body: proc():Send, on_error: proc():Send) {
-    task::TaskBuilder::new().named(name + " wrapper").spawn(proc() {
+    task::TaskBuilder::new().named(name.to_owned().append(" wrapper")).spawn(proc() {
         let ret = task::TaskBuilder::new().named(name).try(body);
         if ret.is_err() { on_error(); }
     });
@@ -264,10 +264,11 @@ impl SelectingScene {
         spawn_worker_task("preloader", proc() {
             let opts = Rc::new(opts);
 
-            let load_banner = |bannerpath: ~str, basepath: Option<Path>| {
+            let load_banner = |bannerpath: StrBuf, basepath: Option<Path>| {
                 let mut search = SearchContext::new();
                 let basedir = basepath.clone().unwrap_or(Path::new("."));
-                let fullpath = search.resolve_relative_path_for_image(bannerpath, &basedir);
+                let fullpath =
+                    search.resolve_relative_path_for_image(bannerpath.as_slice(), &basedir);
                 let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
                 match res {
                     Ok(LoadedImage(surface)) => {
@@ -642,7 +643,7 @@ impl Hook for SelectingScene {
                 Preloading => { body(parent, "loading"); }
                 Preloaded(ref data) => { body(&parent.delegate(data), "loaded"); }
                 PreloadFailed(ref err) => {
-                    body(&parent.add_text("preload.error", *err), "failed");
+                    body(&parent.add_text("preload.error", err.as_slice()), "failed");
                 }
             },
             _ => { return self.opts.run_block_hook(id, parent, &mut body); }

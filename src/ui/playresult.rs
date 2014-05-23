@@ -73,21 +73,22 @@ impl Scene for PlayResultScene {
                 let count = self.player.gradecounts[4-i];
                 let x = GRADEGAP + i as f32 * GRADEWIDTH;
                 d.string(x, 160.0, 2.0, LeftAligned, name, color);
-                d.numeral(x, 195.0, 3.0, LeftAligned, format!("{:04}", count), WHITE, GRAY);
+                d.numeral(x, 195.0, 3.0, LeftAligned,
+                          format!("{:04}", count).as_slice(), WHITE, GRAY);
             }
 
             d.string(GRADEGAP, 270.0, 2.0, LeftAligned, "SCORE", WHITE);
             d.numeral(GRADEGAP, 305.0, 3.0, LeftAligned,
-                      format!("{:07}/", self.player.score), WHITE, GRAY);
+                      format!("{:07}/", self.player.score).as_slice(), WHITE, GRAY);
             d.numeral(GRADEGAP + 8.0 * 24.0, 305.0, 3.0, LeftAligned,
-                      format!("{:07}", self.player.infos.maxscore), WHITE, GRAY);
+                      format!("{:07}", self.player.infos.maxscore).as_slice(), WHITE, GRAY);
 
             static COMBOLEFT: f32 = GRADEGAP + 3.0 * GRADEWIDTH;
             d.string(COMBOLEFT, 270.0, 2.0, LeftAligned, "MAX COMBO", WHITE);
             d.numeral(COMBOLEFT, 305.0, 3.0, LeftAligned,
-                      format!("{:04}/", self.player.bestcombo), WHITE, GRAY);
+                      format!("{:04}/", self.player.bestcombo).as_slice(), WHITE, GRAY);
             d.numeral(COMBOLEFT + 5.0 * 24.0, 305.0, 3.0, LeftAligned,
-                      format!("{:04}", self.player.infos.nnotes), WHITE, GRAY);
+                      format!("{:04}", self.player.infos.nnotes).as_slice(), WHITE, GRAY);
 
             d.string(SCREENW as f32 / 2.0, SCREENH as f32 - 40.0, 1.0, Centered,
                      "Press Return key to continue.", WHITE);

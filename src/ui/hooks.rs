@@ -93,16 +93,18 @@ impl Hook for bms::BmsMeta {
         match id {
             "meta.title" => { self.title.is_some() && body(parent, ""); }
             "meta.subtitle" => {
-                self.subtitles.iter().advance(|s| body(&parent.add_text("meta.subtitle", *s), ""));
+                self.subtitles.iter().advance(|s|
+                    body(&parent.add_text("meta.subtitle", s.as_slice()), ""));
             }
             "meta.genre" => { self.genre.is_some() && body(parent, ""); }
             "meta.artist" => { self.artist.is_some() && body(parent, ""); }
             "meta.subartist" => {
-                self.subartists.iter()
-                               .advance(|s| body(&parent.add_text("meta.subartist", *s), ""));
+                self.subartists.iter().advance(|s|
+                    body(&parent.add_text("meta.subartist", s.as_slice()), ""));
             }
             "meta.comment" => {
-                self.comments.iter().advance(|s| body(&parent.add_text("meta.comment", *s), ""));
+                self.comments.iter().advance(|s|
+                    body(&parent.add_text("meta.comment", s.as_slice()), ""));
             }
             "meta.playmode" => match self.mode {
                 bms::SinglePlay => { body(parent, "single"); }

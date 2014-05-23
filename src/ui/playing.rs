@@ -126,7 +126,7 @@ impl LaneStyle {
 
 /// Builds a list of `LaneStyle`s from the key specification.
 fn build_lane_styles(keyspec: &KeySpec) ->
-                                Result<(uint, Option<uint>, Vec<(Lane,LaneStyle)>), ~str> {
+                                Result<(uint, Option<uint>, Vec<(Lane,LaneStyle)>), StrBuf> {
     let mut leftmost = 0;
     let mut rightmost = SCREENW;
     let mut styles = Vec::new();
@@ -275,7 +275,7 @@ impl PlayingScene {
     /// screen and pre-loaded image resources. Other resources including pre-loaded sound resources
     /// are included in the `player`.
     pub fn new(player: Player, screen: Rc<RefCell<Screen>>,
-               imgres: Vec<ImageResource>) -> Result<Box<PlayingScene>,~str> {
+               imgres: Vec<ImageResource>) -> Result<Box<PlayingScene>,StrBuf> {
         let (leftmost, rightmost, styles) = match build_lane_styles(&player.keyspec) {
             Ok(styles) => styles,
             Err(err) => { return Err(err); }
@@ -485,7 +485,7 @@ impl Scene for PlayingScene {
                 d.string(cx, cy - 40.0, 2.0, Centered, gradename, gradecolor);
                 if self.player.lastcombo > 1 {
                     d.string(cx, cy - 12.0, 1.0, Centered,
-                             format!("{} COMBO", self.player.lastcombo),
+                             format!("{} COMBO", self.player.lastcombo).as_slice(),
                              Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80)));
                 }
                 if self.player.opts.is_autoplay() {
@@ -507,16 +507,18 @@ impl Scene for PlayingScene {
 
             // render panel text
             let black = RGB(0,0,0);
-            d.string(10.0, 8.0, 1.0, LeftAligned, format!("SCORE {:07}", self.player.score), black);
+            d.string(10.0, 8.0, 1.0, LeftAligned,
+                     format!("SCORE {:07}", self.player.score).as_slice(), black);
             let nominalplayspeed = self.player.nominal_playspeed();
-            d.string(5.0, H-78.0, 2.0, LeftAligned, format!("{:4.1}x", nominalplayspeed), black);
+            d.string(5.0, H-78.0, 2.0, LeftAligned,
+                     format!("{:4.1}x", nominalplayspeed).as_slice(), black);
             d.string((self.leftmost-94) as f32, H-35.0, 1.0, LeftAligned,
-                     format!("{:02u}:{:02u} / {:02u}:{:02}", elapsed/60, elapsed%60,
-                                                             duration/60, duration%60), black);
+                     format!("{:02u}:{:02u} / {:02u}:{:02}",
+                             elapsed/60, elapsed%60, duration/60, duration%60).as_slice(), black);
             d.string(95.0, H-62.0, 1.0, LeftAligned,
-                     format!("@{:9.4}", self.player.cur.loc.vpos), black);
+                     format!("@{:9.4}", self.player.cur.loc.vpos).as_slice(), black);
             d.string(95.0, H-78.0, 1.0, LeftAligned,
-                     format!("BPM {:6.2}", *self.player.bpm), black);
+                     format!("BPM {:6.2}", *self.player.bpm).as_slice(), black);
             let timetick = cmp::min(self.leftmost, (self.player.now - self.player.origintime) *
                                                    self.leftmost / durationmsec);
             d.glyph(6.0 + timetick as f32, H-52.0, 1.0, 95, RGB(0x40,0x40,0x40));

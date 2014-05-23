@@ -32,7 +32,7 @@ impl LoaderOptions {
 struct BmsLine {
     measure: uint,
     chan: Key,
-    data: ~str,
+    data: StrBuf,
     lineno: Option<uint>,
 }
 
@@ -42,7 +42,7 @@ pub type Callback<'r> = |line: Option<uint>, msg: BmsMessage|: 'r -> bool;
 
 /// Reads the BMS file with given RNG from given reader. Diagnostic messages are sent via callback.
 pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
-                          callback: Callback<'r>) -> Result<Bms,~str> {
+                          callback: Callback<'r>) -> Result<Bms,StrBuf> {
     use format::timeline::builder::{TimelineBuilder, Mark};
 
     macro_rules! diag(
@@ -426,7 +426,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
         bmsline.sort_by(|a, b| (a.measure, a.chan).cmp(&(b.measure, b.chan)));
         for line in bmsline.iter() {
             let measure = line.measure as f64;
-            let data: Vec<char> = line.data.chars().collect();
+            let data: Vec<char> = line.data.as_slice().chars().collect();
             let max = data.len() / 2 * 2;
             let count = max as f64;
             for i in iter::range_step(0, max, 2) {

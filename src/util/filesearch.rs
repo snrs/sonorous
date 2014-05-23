@@ -88,11 +88,11 @@ impl SearchContext {
             let mut found = name.as_ref().map_or(false, |name| *name == lastpart);
             if !found && name.is_some() {
                 let name = name.unwrap();
-                match name.rfind('.') {
+                match name.as_slice().rfind('.') {
                     Some(idx) => {
-                        let nextnoext = name.slice_to(idx).to_owned();
+                        let nextnoext = name.as_slice().slice_to(idx);
                         for ext in exts.iter() {
-                            if nextnoext + ext.to_owned() == lastpart {
+                            if nextnoext.to_owned().append(*ext) == lastpart {
                                 found = true;
                                 break;
                             }

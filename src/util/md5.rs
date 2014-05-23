@@ -370,11 +370,11 @@ impl Drop for MD5 {
 pub trait ToHex {
     /// Converts itself to the hexadecimal representation, e.g. `48656c6c6f`.
     /// Mostly useful for hash digests.
-    fn to_hex(&self) -> ~str;
+    fn to_hex(&self) -> StrBuf;
 }
 
 impl<'r> ToHex for &'r [u8] {
-    fn to_hex(&self) -> ~str {
+    fn to_hex(&self) -> StrBuf {
         // XXX not quite fast.
         let mut ret = StrBuf::new();
         static HEXDIGITS: &'static [u8] = bytes!("0123456789abcdef");
@@ -404,7 +404,7 @@ mod tests {
 
     #[test]
     fn test_md5_suite() {
-        fn md5(s: &str) -> ~str {
+        fn md5(s: &str) -> StrBuf {
             let mut md5 = MD5::new();
             md5.update(s.as_bytes());
             md5.final().to_hex()

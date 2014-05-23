@@ -124,7 +124,7 @@ impl<'a> State<'a> {
                 Some(scalar) => {
                     let text = scalar.into_maybe_owned();
                     if !text.is_empty() {
-                        body(hook, text.as_slice().char_len().to_str());
+                        body(hook, text.as_slice().char_len().to_str().as_slice());
                     }
                     true
                 },
@@ -206,7 +206,7 @@ impl<'a> State<'a> {
                     format!("{:.*}", precision, v)
                 };
                 let ss = if s.len() > maxwidth {
-                    s.slice_from(s.len() - maxwidth)
+                    s.as_slice().slice_from(s.len() - maxwidth)
                 } else {
                     s.as_slice()
                 };

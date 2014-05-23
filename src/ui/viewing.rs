@@ -197,7 +197,8 @@ impl Scene for TextualViewingScene {
                             elapsed/600, elapsed/10%60, elapsed%10,
                             duration/600, duration/10%60, duration%10,
                             pos = self.player.cur.loc.vpos, bpm = *self.player.bpm,
-                            lastcombo = self.player.lastcombo, nnotes = self.player.infos.nnotes));
+                            lastcombo = self.player.lastcombo,
+                            nnotes = self.player.infos.nnotes).as_slice());
     }
 
     fn deactivate(&mut self) {

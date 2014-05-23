@@ -39,7 +39,7 @@ pub enum BmsCommand<'r> {
     BmsExBPM(Key, BPM),                         // #EXBPM or #BPMxx
     BmsPlayer(int),                             // #PLAYER
     // Rust: unfortunately `Vec<(Key, MaybeOwned<'r>)>` segfaults. (#14088)
-    BmsLanes(Vec<(Key, ~str)>),                 // #SNRS:LANES (experimental)
+    BmsLanes(Vec<(Key, StrBuf)>),               // #SNRS:LANES (experimental)
     BmsPlayLevel(int),                          // #PLAYLEVEL
     BmsDifficulty(int),                         // #DIFFICULTY
     BmsRank(int),                               // #RANK
@@ -185,15 +185,15 @@ impl<'r> fmt::Show for BmsCommand<'r> {
                 let mut opts = StrBuf::new();
                 if pan.is_some() {
                     flags.push_char('p');
-                    opts.push_str(format!(" {}", pan.unwrap()));
+                    opts.push_str(format!(" {}", pan.unwrap()).as_slice());
                 }
                 if vol.is_some() {
                     flags.push_char('v');
-                    opts.push_str(format!(" {}", vol.unwrap()));
+                    opts.push_str(format!(" {}", vol.unwrap()).as_slice());
                 }
                 if freq.is_some() {
                     flags.push_char('f');
-                    opts.push_str(format!(" {}", freq.unwrap()));
+                    opts.push_str(format!(" {}", freq.unwrap()).as_slice());
                 }
                 write!(f, "\\#EXWAV{} {}{} {}", key, flags, opts, *s)
             },
@@ -476,19 +476,21 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                     })
                 );
                 ($prefix:tt -> $constr:expr) => (
-                    if upperline.starts_with(tt_to_expr!($prefix)) { // avoids an unreachable code
+                    // avoids an unreachable code
+                    if upperline.as_slice().starts_with(tt_to_expr!($prefix)) {
                         emit!($constr);
                     }
                 );
                 ($prefix:tt -> $constr:expr; $diag:expr) => (
-                    if upperline.starts_with(tt_to_expr!($prefix)) { // avoids an unreachable code
+                    // avoids an unreachable code
+                    if upperline.as_slice().starts_with(tt_to_expr!($prefix)) {
                         diag!($diag);
                         emit!($constr);
                     }
                 );
                 ($prefix:tt |$v:ident| $then:expr) => ({ // #<command>...
                     let prefix: &'static str = tt_to_expr!($prefix);
-                    if upperline.starts_with(prefix) {
+                    if upperline.as_slice().starts_with(prefix) {
                         let $v = line.slice_from(prefix.len());
                         let _ = $v; // removes warning
                         $then;
@@ -497,7 +499,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 });
                 ($prefix:tt |$k:ident, $v:ident| $then:expr) => ({ // #<command>xx ...
                     let prefix: &'static str = tt_to_expr!($prefix);
-                    if upperline.starts_with(prefix) {
+                    if upperline.as_slice().starts_with(prefix) {
                         let line = line.slice_from(prefix.len());
                         let mut key = PartialKey::dummy();
                         let mut text = "";

@@ -33,7 +33,7 @@ pub struct ProgramForShades {
 
 impl ProgramForShades {
     /// Compiles and links the program.
-    pub fn new() -> Result<ProgramForShades,~str> {
+    pub fn new() -> Result<ProgramForShades,StrBuf> {
         let vertex_code = stringify!(
             attribute vec2 vertex_position_in;
             attribute vec4 color_in;
@@ -101,7 +101,7 @@ pub struct ProgramForTextures {
 
 impl ProgramForTextures {
     /// Compiles and links the program.
-    pub fn new() -> Result<ProgramForTextures,~str> {
+    pub fn new() -> Result<ProgramForTextures,StrBuf> {
         let vertex_code = stringify!(
             attribute vec2 vertex_position_in;
             attribute vec2 texture_coord_in;

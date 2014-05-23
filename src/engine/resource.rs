@@ -32,7 +32,7 @@ static IMAGE_EXTS: &'static [&'static str] = &[".BMP", ".PNG", ".JPG", ".JPEG", 
 
 /// A wrapper for `SearchContext::resolve_relative_path` which returns `Result`.
 fn resolve_relative_path_result(search: &mut SearchContext, basedir: &Path, path: &str,
-                                exts: &[&str]) -> Result<Path,~str> {
+                                exts: &[&str]) -> Result<Path,StrBuf> {
     match search.resolve_relative_path(basedir, path, exts) {
         Some(path) => Ok(path),
         None => Err(format!("file not found")),
@@ -40,20 +40,25 @@ fn resolve_relative_path_result(search: &mut SearchContext, basedir: &Path, path
 }
 
 pub trait SearchContextAdditions {
-    fn resolve_relative_path_for_sound(&mut self, path: &str, basedir: &Path) -> Result<Path,~str>;
-    fn resolve_relative_path_for_image(&mut self, path: &str, basedir: &Path) -> Result<Path,~str>;
+    fn resolve_relative_path_for_sound(&mut self, path: &str,
+                                       basedir: &Path) -> Result<Path,StrBuf>;
+    fn resolve_relative_path_for_image(&mut self, path: &str,
+                                       basedir: &Path) -> Result<Path,StrBuf>;
 }
 
 impl SearchContextAdditions for SearchContext {
     /// Resolves the relative path for the use by `LoadedSoundResource::new`.
-    fn resolve_relative_path_for_sound(&mut self, path: &str, basedir: &Path) -> Result<Path,~str> {
+    fn resolve_relative_path_for_sound(&mut self, path: &str,
+                                       basedir: &Path) -> Result<Path,StrBuf> {
         resolve_relative_path_result(self, basedir, path, SOUND_EXTS)
     }
 
     /// Resolves the relative path for the use by `LoadedImageResource::new`.
-    fn resolve_relative_path_for_image(&mut self, path: &str, basedir: &Path) -> Result<Path,~str> {
+    fn resolve_relative_path_for_image(&mut self, path: &str,
+                                       basedir: &Path) -> Result<Path,StrBuf> {
         use std::ascii::StrAsciiExt;
-        if path.to_ascii_lower().ends_with(".mpg") { // preserve extensions for the movie files
+        // preserve extensions for the movie files
+        if path.to_ascii_lower().as_slice().ends_with(".mpg") {
             resolve_relative_path_result(self, basedir, path, [])
         } else {
             resolve_relative_path_result(self, basedir, path, IMAGE_EXTS)
@@ -105,7 +110,7 @@ pub enum LoadedSoundResource {
 
 impl LoadedSoundResource {
     /// Loads a sound resource.
-    pub fn new(path: &Path) -> Result<LoadedSoundResource,~str> {
+    pub fn new(path: &Path) -> Result<LoadedSoundResource,StrBuf> {
         let res = try!(Chunk::from_wav(path));
         Ok(LoadedSound(res))
     }
@@ -170,12 +175,12 @@ pub enum LoadedImageResource {
 
 impl LoadedImageResource {
     /// Loads an image resource.
-    pub fn new(path: &Path, load_movie: bool) -> Result<LoadedImageResource,~str> {
+    pub fn new(path: &Path, load_movie: bool) -> Result<LoadedImageResource,StrBuf> {
         use std::ascii::StrAsciiExt;
 
         /// Converts a surface to the native display format, while preserving a transparency or
         /// setting a color key if required.
-        fn to_display_format(surface: Surface) -> Result<PreparedSurface,~str> {
+        fn to_display_format(surface: Surface) -> Result<PreparedSurface,StrBuf> {
             let surface = if unsafe {(*(*surface.raw).format).Amask} != 0 {
                 let surface = try!(surface.display_format_alpha());
                 surface.set_alpha([video::SrcAlpha, video::RLEAccel], 255);
