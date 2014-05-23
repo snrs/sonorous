@@ -1,11 +1,14 @@
 env:
   global:
     - secure: L3jilKnridj1drhcGqH9g8mp3HwdK6iWGX7BSwxnrdEMJxuxAW2eK06cZw49MHwoDTqXBxfqROsA0GSMTNmuqxC58Zohlz7mCxfeH6ujPhhwW+TQl6E8hEuUKi0R07c9ofGXgEqF0ljFB0pRo88MDDhEsNotRy9VCo1gi82r744=
-before_install:
-  - yes | sudo add-apt-repository ppa:hansjorg/rust
-  - sudo apt-get update
+#before_install:
+#  - yes | sudo add-apt-repository ppa:hansjorg/rust
+#  - sudo apt-get update
 install:
-  - sudo apt-get install rust-nightly
+  - curl -O http://static.rust-lang.org/dist/rust-nightly-x86_64-unknown-linux-gnu.tar.gz
+  - tar xfz rust-nightly-x86_64-unknown-linux-gnu.tar.gz
+  - (cd rust-nightly-x86_64-unknown-linux-gnu/ && sudo ./install.sh)
+#  - sudo apt-get install rust-nightly
   - sudo apt-get install libsdl1.2-dev libsdl-mixer1.2-dev libsdl-image1.2-dev libsmpeg-dev libsqlite3-dev
 script:
   - make RUSTFLAGS='--cfg subprogram' RUSTPKGFLAGS=
