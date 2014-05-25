@@ -9,6 +9,7 @@
 //! Skin renderer.
 
 use std::{num, str, mem};
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::io::{IoResult, MemWriter};
 use collections::HashMap;
@@ -63,20 +64,14 @@ impl Renderer {
     /// This overwrites to the current screen, no `clear` is called.
     pub fn render(&mut self, screen: &mut Screen, hook: &Hook) {
         let skin = self.skin.clone();
-        let mut state = State::new(self, screen);
+        let state = State::new(self, screen);
         state.nodes(hook, skin.nodes.as_slice());
         state.finish();
     }
 }
 
-/// The internal state for single render.
-struct State<'a> {
-    /// Parent renderer.
-    renderer: &'a mut Renderer,
-    /// Screen reference.
-    screen: &'a mut Screen,
-    /// The active draw call.
-    draw: ActiveDraw<'a>,
+/// The clipping region used to clip the render and calculate the relative coordinates.
+struct ClipRect {
     /// Left coordinate of the clipping region.
     dx: f32,
     /// Top coordinate of the clipping region.
@@ -87,13 +82,27 @@ struct State<'a> {
     h: f32,
 }
 
+/// The internal state for single render.
+struct State<'a> {
+    /// Parent renderer.
+    renderer: RefCell<&'a mut Renderer>,
+    /// Screen reference.
+    screen: RefCell<&'a mut Screen>,
+    /// The active draw call.
+    draw: RefCell<ActiveDraw<'a>>,
+    /// The current clipping region.
+    clip: Cell<ClipRect>,
+}
+
 impl<'a> State<'a> {
     fn new(renderer: &'a mut Renderer, screen: &'a mut Screen) -> State<'a> {
-        State { renderer: renderer, screen: screen, draw: ToBeDrawn,
-                dx: 0.0, dy: 0.0, w: screen.width as f32, h: screen.height as f32 }
+        let initclip = ClipRect { dx: 0.0, dy: 0.0,
+                                  w: screen.width as f32, h: screen.height as f32 };
+        State { renderer: RefCell::new(renderer), screen: RefCell::new(screen),
+                draw: RefCell::new(ToBeDrawn), clip: Cell::new(initclip) }
     }
 
-    fn expr(_hook: &Hook, pos: &Expr, reference: f32) -> f32 {
+    fn expr(&self, _hook: &Hook, pos: &Expr, reference: f32) -> f32 {
         match *pos {
             ENum(v) => v,
             ERatioNum(r, v) => r * reference + v,
@@ -101,15 +110,16 @@ impl<'a> State<'a> {
     }
 
     fn pos(&self, hook: &Hook, pos: &Pos) -> (f32, f32) {
-        (self.dx + State::expr(hook, &pos.x, self.w),
-         self.dy + State::expr(hook, &pos.y, self.h))
+        let clip = self.clip.get();
+        (clip.dx + self.expr(hook, &pos.x, clip.w),
+         clip.dy + self.expr(hook, &pos.y, clip.h))
     }
 
     fn rect(&self, hook: &Hook, rect: &Rect) -> ((f32, f32), (f32, f32)) {
         (self.pos(hook, &rect.p), self.pos(hook, &rect.q))
     }
 
-    fn gen(hook: &Hook, gen: &Gen, body: |&Hook, &str| -> bool) -> bool {
+    fn gen(&self, hook: &Hook, gen: &Gen, body: |&Hook, &str| -> bool) -> bool {
         match *gen {
             HookGen(ref id) => hook.block_hook(id.as_slice(), hook, body),
             TextGen(ref id) => match hook.scalar_hook(id.as_slice()) {
@@ -133,11 +143,11 @@ impl<'a> State<'a> {
         }
     }
 
-    fn block<T>(hook: &Hook, block: &Block<T>, body: |&Hook, &T| -> bool) {
+    fn block<T>(&self, hook: &Hook, block: &Block<T>, body: |&Hook, &T| -> bool) {
         match *block {
             CondBlock { ref gen, ref then, ref else_ } => {
                 let mut called = false;
-                State::gen(hook, gen, |hook_, _alt| {
+                self.gen(hook, gen, |hook_, _alt| {
                     called = true;
                     match *then {
                         Some(ref then) => body(hook_, then),
@@ -153,7 +163,7 @@ impl<'a> State<'a> {
             }
             MultiBlock { ref gen, ref map, ref default, ref else_ } => {
                 let mut called = false;
-                State::gen(hook, gen, |hook_, alt| {
+                self.gen(hook, gen, |hook_, alt| {
                     called = true;
                     match map.find_equiv(&alt) {
                         Some(then) => body(hook_, then),
@@ -177,7 +187,7 @@ impl<'a> State<'a> {
         }
     }
 
-    fn scalar_format<'a>(scalar: Scalar<'a>, fmt: &ScalarFormat,
+    fn scalar_format<'a>(&self, scalar: Scalar<'a>, fmt: &ScalarFormat,
                          out: &mut Writer) -> IoResult<()> {
         fn to_f64<'a>(scalar: Scalar<'a>) -> Option<f64> {
             let v = scalar.to_f64();
@@ -250,10 +260,11 @@ impl<'a> State<'a> {
         }
     }
 
-    fn text_source<'a>(hook: &'a Hook, text: &'a TextSource, out: &mut Writer) -> IoResult<()> {
+    fn text_source<'a>(&self, hook: &'a Hook, text: &'a TextSource,
+                       out: &mut Writer) -> IoResult<()> {
         match *text {
             ScalarText(ref id, ref format) => match hook.scalar_hook(id.as_slice()) {
-                Some(scalar) => State::scalar_format(scalar, format, out),
+                Some(scalar) => self.scalar_format(scalar, format, out),
                 _ => {
                     warn!("skin: `{id}` is not a scalar hook, will use an empty string",
                           id = id.as_slice());
@@ -263,8 +274,8 @@ impl<'a> State<'a> {
             StaticText(ref text) => write!(out, "{}", *text),
             TextBlock(ref block) => {
                 let mut ret = Ok(());
-                State::block(hook, block, |hook_, text_| {
-                    match State::text_source(hook_, *text_, out) {
+                self.block(hook, block, |hook_, text_| {
+                    match self.text_source(hook_, *text_, out) {
                         Ok(()) => true,
                         Err(err) => { ret = Err(err); false }
                     }
@@ -273,16 +284,16 @@ impl<'a> State<'a> {
             },
             TextConcat(ref nodes) => {
                 for node in nodes.iter() {
-                    try!(State::text_source(hook, node, out));
+                    try!(self.text_source(hook, node, out));
                 }
                 Ok(())
             },
         }
     }
 
-    fn text<'a>(hook: &'a Hook, text: &'a TextSource) -> str::MaybeOwned<'a> {
+    fn text<'a>(&self, hook: &'a Hook, text: &'a TextSource) -> str::MaybeOwned<'a> {
         let mut out = MemWriter::new();
-        match State::text_source(hook, text, &mut out) {
+        match self.text_source(hook, text, &mut out) {
             Ok(()) => {
                 str::from_utf8(out.unwrap().as_slice()).unwrap().to_owned().into_maybe_owned()
             },
@@ -293,16 +304,18 @@ impl<'a> State<'a> {
         }
     }
 
-    // unlike others, this has to be a non-static method as we need the image cache
-    fn texture<'a>(&'a mut self, hook: &'a Hook, id: &str) -> Option<&'a Rc<Texture2D>> {
+    fn texture<'a>(&'a self, hook: &'a Hook, id: &str) -> Option<Rc<Texture2D>> {
+        let mut rendererref = self.renderer.borrow_mut();
+        let renderer = rendererref.deref_mut();
+
         let mut scalar = hook.scalar_hook(id);
         if scalar.is_none() {
-            scalar = self.renderer.skin.scalars.find_equiv(&id).map(|v| v.clone());
+            scalar = renderer.skin.scalars.find_equiv(&id).map(|v| v.clone());
         }
         match scalar {
-            Some(TextureScalar(tex)) => Some(tex),
+            Some(TextureScalar(tex)) => Some(tex.clone()),
             Some(ImageScalar(path)) => {
-                let ret = self.renderer.imagecache.find_or_insert_with(path, |path| {
+                let ret = renderer.imagecache.find_or_insert_with(path, |path| {
                     match sdl_image::load(path) {
                         Ok(surface) => match Texture2D::from_owned_surface(surface, false, false) {
                             Ok(tex) => Some(Rc::new(tex)),
@@ -312,7 +325,7 @@ impl<'a> State<'a> {
                     }
                 });
                 match *ret {
-                    Some(ref tex) => Some(tex),
+                    Some(ref tex) => Some(tex.clone()),
                     None => None
                 }
             },
@@ -320,86 +333,85 @@ impl<'a> State<'a> {
         }
     }
 
-    fn commit(&mut self, draw: ActiveDraw) {
+    fn commit_to(&self, draw: ActiveDraw, screen: &mut Screen) {
         match draw {
             ToBeDrawn => {}
-            ShadedLines(d) => { d.draw_to(self.screen); }
-            Shaded(d) => { d.draw_to(self.screen); }
-            Textured(d, tex) => { d.draw_texture_to(self.screen, tex.deref()); }
+            ShadedLines(d) => { d.draw_to(screen); }
+            Shaded(d) => { d.draw_to(screen); }
+            Textured(d, tex) => { d.draw_texture_to(screen, tex.deref()); }
         }
     }
 
-    fn finish(&mut self) {
-        let draw = mem::replace(&mut self.draw, ToBeDrawn);
-        self.commit(draw);
-    }
-
-    fn shaded_lines<'a>(&'a mut self) -> &'a mut ShadedDrawing {
-        match self.draw {
-            ShadedLines(ref mut d) => { return d; }
-            _ => {
-                let newd = ShadedDrawing::new(gl::LINES);
-                let draw = mem::replace(&mut self.draw, ShadedLines(newd));
-                self.commit(draw);
-                match self.draw {
-                    ShadedLines(ref mut d) => d,
-                    _ => unreachable!()
+    fn draw_or_commit<T>(&self, try_to_draw: |&mut ActiveDraw| -> Option<T>,
+                         new_draw: |&mut Screen| -> ActiveDraw) -> T {
+        let mut drawref = self.draw.borrow_mut();
+        let draw = drawref.deref_mut(); // don't borrow multiple times
+        match try_to_draw(draw) {
+            Some(v) => v,
+            None => { // commit the current drawing and create a new one
+                let mut screenref = self.screen.borrow_mut();
+                let screen = screenref.deref_mut();
+                let newdraw = new_draw(*screen);
+                let olddraw = mem::replace(draw, newdraw);
+                self.commit_to(olddraw, *screen);
+                match try_to_draw(draw) {
+                    Some(v) => v,
+                    None => unreachable!() // this is an error
                 }
             }
         }
     }
 
-    fn shaded<'a>(&'a mut self) -> &'a mut ShadedFontDrawing {
-        match self.draw {
-            Shaded(ref mut d) => { return d; }
-            _ => {
-                let newd = ShadedFontDrawing::new(gl::TRIANGLES, self.screen.font.clone());
-                let draw = mem::replace(&mut self.draw, Shaded(newd));
-                self.commit(draw);
-                match self.draw {
-                    Shaded(ref mut d) => d,
-                    _ => unreachable!()
-                }
-            }
-        }
+    fn finish(&self) {
+        self.draw_or_commit(
+            |draw| match draw { &ToBeDrawn => Some(()), _ => None },
+            |_screen| ToBeDrawn);
     }
 
-    fn textured<'a>(&'a mut self, tex: &Rc<Texture2D>) -> &'a mut TexturedDrawing {
-        match self.draw {
-            // keep the current drawing only when the texture is exactly identical.
-            Textured(ref mut d, ref tex_)
-                    if tex.deref() as *Texture2D == tex_.deref() as *Texture2D => {
-                return d;
-            }
-            _ => {
+    fn shaded_lines<T>(&self, f: |&mut ShadedDrawing| -> T) -> T {
+        self.draw_or_commit(
+            |draw| match draw { &ShadedLines(ref mut d) => Some(f(d)), _ => None },
+            |_screen| ShadedLines(ShadedDrawing::new(gl::LINES)))
+    }
+
+    fn shaded<T>(&self, f: |&mut ShadedFontDrawing| -> T) -> T {
+        self.draw_or_commit(
+            |draw| match draw { &Shaded(ref mut d) => Some(f(d)), _ => None },
+            |screen| Shaded(ShadedFontDrawing::new(gl::TRIANGLES, screen.font.clone())))
+    }
+
+    fn textured<T>(&self, tex: &Rc<Texture2D>, f: |&mut TexturedDrawing| -> T) -> T {
+        self.draw_or_commit(
+            |draw| match draw {
+                // keep the current drawing only when the texture is exactly identical.
+                &Textured(ref mut d, ref tex_)
+                    if tex.deref() as *Texture2D == tex_.deref() as *Texture2D => Some(f(d)),
+                _ => None,
+            },
+            |_screen| {
                 let tex = tex.clone();
-                let newd = TexturedDrawing::new(gl::TRIANGLES, tex.deref());
-                let draw = mem::replace(&mut self.draw, Textured(newd, tex));
-                self.commit(draw);
-                match self.draw {
-                    Textured(ref mut d, _) => d,
-                    _ => unreachable!()
-                }
-            }
-        }
+                let d = TexturedDrawing::new(gl::TRIANGLES, tex.deref());
+                Textured(d, tex)
+            })
     }
 
-    fn nodes(&mut self, hook: &Hook, nodes: &[Node]) -> bool {
+    fn nodes(&self, hook: &Hook, nodes: &[Node]) -> bool {
         for node in nodes.iter() {
             match *node {
                 Nothing => {}
                 Debug(ref msg) => {
+                    let clip = self.clip.get();
                     debug!("skin debug: dx={} dy={} w={} y={} msg={}",
-                           self.dx, self.dy, self.w, self.h, *msg);
+                           clip.dx, clip.dy, clip.w, clip.h, *msg);
                 }
                 ColoredLine { ref from, ref to, ref color } => {
                     let (x1, y1) = self.pos(hook, from);
                     let (x2, y2) = self.pos(hook, to);
-                    self.shaded_lines().line(x1, y1, x2, y2, *color);
+                    self.shaded_lines(|d| d.line(x1, y1, x2, y2, *color));
                 }
                 ColoredRect { ref at, ref color } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
-                    self.shaded().rect(x1, y1, x2, y2, *color);
+                    self.shaded(|d| d.rect(x1, y1, x2, y2, *color));
                 }
                 TexturedRect { ref tex, ref at, ref rgba, ref clip } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
@@ -410,15 +422,15 @@ impl<'a> State<'a> {
                     match (texture, *clip) {
                         (Some(ref tex), Some(ref clip)) => {
                             let (tw, th) = (tex.width as f32, tex.height as f32);
-                            let tx1 = State::expr(hook, &clip.p.x, tw);
-                            let ty1 = State::expr(hook, &clip.p.y, th);
-                            let tx2 = State::expr(hook, &clip.q.x, tw);
-                            let ty2 = State::expr(hook, &clip.q.y, th);
-                            self.textured(tex).rect_area_rgba(x1, y1, x2, y2,
-                                                              tx1, ty1, tx2, ty2, *rgba);
+                            let tx1 = self.expr(hook, &clip.p.x, tw);
+                            let ty1 = self.expr(hook, &clip.p.y, th);
+                            let tx2 = self.expr(hook, &clip.q.x, tw);
+                            let ty2 = self.expr(hook, &clip.q.y, th);
+                            self.textured(tex, |d| d.rect_area_rgba(x1, y1, x2, y2,
+                                                                    tx1, ty1, tx2, ty2, *rgba));
                         }
                         (Some(ref tex), None) => {
-                            self.textured(tex).rect_rgba(x1, y1, x2, y2, *rgba);
+                            self.textured(tex, |d| d.rect_rgba(x1, y1, x2, y2, *rgba));
                         }
                         (_, _) => {
                             warn!("skin: `{id}` is not a texture hook, will ignore",
@@ -428,38 +440,30 @@ impl<'a> State<'a> {
                 }
                 Text { ref at, size, anchor: (ax,ay), ref color, ref text } => {
                     let (x, y) = self.pos(hook, at);
-                    let text = State::text(hook, text);
+                    let text = self.text(hook, text);
                     let zoom = size / NROWS as f32;
                     let w = zoom * (text.as_slice().char_len() * NCOLUMNS) as f32;
                     let h = size as f32;
-                    self.shaded().string(x - w * ax, y - h * ay, zoom,
-                                         LeftAligned, text.as_slice(), *color);
+                    self.shaded(|d| d.string(x - w * ax, y - h * ay, zoom,
+                                             LeftAligned, text.as_slice(), *color));
                 }
                 Group(ref nodes) => {
-                    let dx = self.dx;
-                    let dy = self.dy;
-                    let w = self.w;
-                    let h = self.h;
+                    let savedclip = self.clip.get();
                     self.nodes(hook, nodes.as_slice());
-                    self.dx = dx;
-                    self.dy = dy;
-                    self.w = w;
-                    self.h = h;
+                    self.clip.set(savedclip);
                 }
                 Clip { ref at } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
-                    self.dx = x1;
-                    self.dy = y1;
-                    self.w = x2 - x1;
-                    self.h = y2 - y1;
-                    if self.w <= 0.0 || self.h <= 0.0 {
+                    let newclip = ClipRect { dx: x1, dy: y1, w: x2 - x1, h: y2 - y1 };
+                    self.clip.set(newclip);
+                    if newclip.w <= 0.0 || newclip.h <= 0.0 {
                         // no need to render past this node.
                         // XXX this should propagate to parent nodes up to the innermost group
                         return false;
                     }
                 }
                 Block(ref block) => {
-                    State::block(hook, block, |hook_, nodes_| {
+                    self.block(hook, block, |hook_, nodes_| {
                         self.nodes(hook_, nodes_.as_slice())
                     });
                 }
