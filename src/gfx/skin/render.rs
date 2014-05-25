@@ -304,7 +304,8 @@ impl<'a> State<'a> {
         }
     }
 
-    fn texture<'a>(&'a self, hook: &'a Hook, id: &str) -> Option<Rc<Texture2D>> {
+    fn texture<'a,T>(&'a self, hook: &'a Hook, id: &str,
+                     callback: |Option<&Rc<Texture2D>>| -> T) -> T {
         let mut rendererref = self.renderer.borrow_mut();
         let renderer = rendererref.deref_mut();
 
@@ -313,7 +314,7 @@ impl<'a> State<'a> {
             scalar = renderer.skin.scalars.find_equiv(&id).map(|v| v.clone());
         }
         match scalar {
-            Some(TextureScalar(tex)) => Some(tex.clone()),
+            Some(TextureScalar(tex)) => callback(Some(tex)),
             Some(ImageScalar(path)) => {
                 let ret = renderer.imagecache.find_or_insert_with(path, |path| {
                     match sdl_image::load(path) {
@@ -324,12 +325,9 @@ impl<'a> State<'a> {
                         Err(..) => None,
                     }
                 });
-                match *ret {
-                    Some(ref tex) => Some(tex.clone()),
-                    None => None
-                }
+                callback(ret.as_ref())
             },
-            _ => None,
+            _ => callback(None),
         }
     }
 
@@ -415,12 +413,8 @@ impl<'a> State<'a> {
                 }
                 TexturedRect { ref tex, ref at, ref rgba, ref clip } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
-                    let texture = {
-                        let tex = self.texture(hook, tex.as_slice());
-                        tex.map(|tex| tex.clone()) // XXX should avoid the clone here
-                    };
-                    match (texture, *clip) {
-                        (Some(ref tex), Some(ref clip)) => {
+                    self.texture(hook, tex.as_slice(), |texture| match (texture, *clip) {
+                        (Some(tex), Some(ref clip)) => {
                             let (tw, th) = (tex.width as f32, tex.height as f32);
                             let tx1 = self.expr(hook, &clip.p.x, tw);
                             let ty1 = self.expr(hook, &clip.p.y, th);
@@ -429,14 +423,14 @@ impl<'a> State<'a> {
                             self.textured(tex, |d| d.rect_area_rgba(x1, y1, x2, y2,
                                                                     tx1, ty1, tx2, ty2, *rgba));
                         }
-                        (Some(ref tex), None) => {
+                        (Some(tex), None) => {
                             self.textured(tex, |d| d.rect_rgba(x1, y1, x2, y2, *rgba));
                         }
                         (_, _) => {
                             warn!("skin: `{id}` is not a texture hook, will ignore",
                                   id = tex.as_slice());
                         }
-                    }
+                    });
                 }
                 Text { ref at, size, anchor: (ax,ay), ref color, ref text } => {
                     let (x, y) = self.pos(hook, at);
