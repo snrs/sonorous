@@ -111,10 +111,10 @@ pub mod engine {
 }
 
 /// Returns a version string.
-pub fn version() -> StrBuf { "Sonorous 0.1.0-pre".to_owned() }
+pub fn version() -> String { "Sonorous 0.1.0-pre".to_owned() }
 
 /// Returns an executable name used in the command line if any.
-pub fn exename() -> StrBuf {
+pub fn exename() -> String {
     let args = std::os::args();
     if args.is_empty() {"sonorous".to_owned()} else {args.as_slice()[0].clone()}
 }
@@ -297,7 +297,7 @@ Available debugging options:
 
 /// The entry point for subprograms. Only enabled with `--cfg subprogram`.
 #[cfg(subprogram)]
-pub fn subprogram(args: &[StrBuf]) -> ! {
+pub fn subprogram(args: &[String]) -> ! {
     let ret: int = match args.head().as_ref().map(|s| s.as_slice()) {
         None => {
             let _ = write!(&mut std::io::stderr(), "\
@@ -318,7 +318,7 @@ The list of available subprograms:
 
 /// The entry point for subprograms. Only enabled with `--cfg subprogram`.
 #[cfg(not(subprogram))]
-pub fn subprogram(_args: &[StrBuf]) -> ! {
+pub fn subprogram(_args: &[String]) -> ! {
     let _ = write!(&mut std::io::stderr(), "Subprograms are not supported in this build.\n");
     ui::common::exit(1);
 }

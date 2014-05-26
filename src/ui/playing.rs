@@ -126,7 +126,7 @@ impl LaneStyle {
 
 /// Builds a list of `LaneStyle`s from the key specification.
 fn build_lane_styles(keyspec: &KeySpec) ->
-                                Result<(uint, Option<uint>, Vec<(Lane,LaneStyle)>), StrBuf> {
+                                Result<(uint, Option<uint>, Vec<(Lane,LaneStyle)>), String> {
     let mut leftmost = 0;
     let mut rightmost = SCREENW;
     let mut styles = Vec::new();
@@ -275,7 +275,7 @@ impl PlayingScene {
     /// screen and pre-loaded image resources. Other resources including pre-loaded sound resources
     /// are included in the `player`.
     pub fn new(player: Player, screen: Rc<RefCell<Screen>>,
-               imgres: Vec<ImageResource>) -> Result<Box<PlayingScene>,StrBuf> {
+               imgres: Vec<ImageResource>) -> Result<Box<PlayingScene>,String> {
         let (leftmost, rightmost, styles) = match build_lane_styles(&player.keyspec) {
             Ok(styles) => styles,
             Err(err) => { return Err(err); }

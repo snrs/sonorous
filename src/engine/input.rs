@@ -164,7 +164,7 @@ static KEYSETS: &'static [KeySet] = &[
 pub type KeyMap = HashMap<Input,VirtualInput>;
 
 /// Reads an input mapping from the environment variables.
-pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<StrBuf>) -> Result<KeyMap,StrBuf> {
+pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<String>) -> Result<KeyMap,String> {
     use std::ascii::{StrAsciiExt, OwnedStrAsciiExt};
 
     /// Finds an SDL virtual key with the given name. Matching is done case-insensitively.

@@ -72,15 +72,15 @@ pub struct Options {
     /// An index to the joystick device if any.
     pub joystick: Option<uint>,
     /// A key specification preset name if any.
-    pub preset: Option<StrBuf>,
+    pub preset: Option<String>,
     /// A left-hand-side key specification if any.
-    pub leftkeys: Option<StrBuf>,
+    pub leftkeys: Option<String>,
     /// A right-hand-side key specification if any. Can be an empty string.
-    pub rightkeys: Option<StrBuf>,
+    pub rightkeys: Option<String>,
     /// An initial play speed.
     pub playspeed: f64,
     /// A character encoding *name* forced to the loader.
-    pub encoding: Option<StrBuf>,
+    pub encoding: Option<String>,
     /// A root path to the skin.
     pub skinroot: Path,
 
@@ -118,7 +118,7 @@ impl Options {
     }
 
     /// Parses and returns the skin data.
-    pub fn load_skin(&self, name: &str) -> Result<Skin,StrBuf> {
+    pub fn load_skin(&self, name: &str) -> Result<Skin,String> {
         match io::File::open(&self.skinroot.join(name)) {
             Ok(mut f) => load_skin(&mut f).map(|skin| skin.make_absolute(&self.skinroot)),
             Err(err) => Err(err.to_str()),
@@ -136,12 +136,12 @@ pub enum ParsingResult {
     /// The caller is given a path and options.
     PathAndOptions(Path,Options),
     /// The caller should stop the program with given error message.
-    Error(StrBuf),
+    Error(String),
 }
 
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
-pub fn parse_opts(args: &[StrBuf], get_path: || -> Option<Path>) -> ParsingResult {
+pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResult {
     let longargs: HashMap<&str,char> = vec!(
         ("--help", 'h'), ("--version", 'V'), ("--speed", 'a'),
         ("--autoplay", 'v'), ("--exclusive", 'x'), ("--sound-only", 'X'),

@@ -304,7 +304,7 @@ impl<CC:CharClass> Classifier<CC> {
  * for example, there are instances of Cyrillic characters in both encodings.
  */
 #[cfg(subprogram)]
-pub fn chardet_train(args: &[StrBuf]) -> int {
+pub fn chardet_train(args: &[String]) -> int {
     use std::io::{stdin, stderr, BufferedReader};
     use encoding::{Encoding, EncodeStrict, DecodeReplace};
     use encoding::all::{WINDOWS_949, WINDOWS_31J};
@@ -334,7 +334,7 @@ pub fn chardet_train(args: &[StrBuf]) -> int {
     let mut njawords = 0;
 
     let mut stream = BufferedReader::new(stdin());
-    let words: Vec<StrBuf> =
+    let words: Vec<String> =
         stream.lines().map(|s| s.unwrap()).filter(|s| !s.as_slice().trim().is_empty()).collect();
     let nwords = words.len();
     for (i, w) in words.move_iter().enumerate() {

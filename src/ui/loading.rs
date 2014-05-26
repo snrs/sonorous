@@ -51,7 +51,7 @@ pub struct LoadingContext {
     pub keymap: KeyMap,
 
     /// The most recently loaded file name from the resource loader.
-    pub lastpath: Option<StrBuf>,
+    pub lastpath: Option<String>,
     /// Context for searching files.
     pub search: SearchContext,
     /// A list of jobs to be executed.

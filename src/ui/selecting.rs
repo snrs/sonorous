@@ -46,7 +46,7 @@ pub struct PreprocessedBms {
 pub fn preprocess_bms<'r,R:Rng>(
         bmspath: &Path, f: &mut Reader, opts: &Options, r: &mut R,
         loaderopts: &bms::load::LoaderOptions, callback: bms::load::Callback<'r>)
-                                -> Result<PreprocessedBms,StrBuf> {
+                                -> Result<PreprocessedBms,String> {
     let bms = try!(bms::load::load_bms(f, r, loaderopts, callback));
     let mut bms = bms.with_bmspath(bmspath);
     let keyspec = try!(key_spec(&bms, opts.preset.clone(),
@@ -66,16 +66,16 @@ enum Message {
     /// The worker has finished scanning files.
     NoMoreFiles,
     /// The worker has failed to read and/or load the BMS file. Error message follows.
-    BmsFailed(Path,StrBuf),
+    BmsFailed(Path,String),
     /// The worker has read the BMS file and calculated its MD5 hash.
     BmsHashRead(Path,[u8, ..16]),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
     BmsLoaded(Path,PreprocessedBms,Vec<(Option<uint>,bms::diag::BmsMessage)>),
-    /// The worker has loaded the banner image (the second `StrBuf`) for the BMS file (the first
+    /// The worker has loaded the banner image (the second `String`) for the BMS file (the first
     /// `Path`). This may be sent after `BmsLoaded` message. Due to the same reason as above
     /// the main task should ignore the message with non-current paths.
-    BmsBannerLoaded(Path,StrBuf,Envelope<PreparedSurface>),
+    BmsBannerLoaded(Path,String,Envelope<PreparedSurface>),
 }
 
 /// Preloaded game data.
@@ -113,7 +113,7 @@ pub enum PreloadingState {
     /// Preloading finished with a success.
     Preloaded(PreloadedData),
     /// Preloading finished with a failure. Error message is available.
-    PreloadFailed(StrBuf),
+    PreloadFailed(String),
 }
 
 /// The scanned entry.
@@ -264,7 +264,7 @@ impl SelectingScene {
         spawn_worker_task("preloader", proc() {
             let opts = Rc::new(opts);
 
-            let load_banner = |bannerpath: StrBuf, basepath: Option<Path>| {
+            let load_banner = |bannerpath: String, basepath: Option<Path>| {
                 let mut search = SearchContext::new();
                 let basedir = basepath.clone().unwrap_or(Path::new("."));
                 let fullpath =

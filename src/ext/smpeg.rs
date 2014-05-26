@@ -99,7 +99,7 @@ impl Drop for MPEG {
 }
 
 impl MPEG {
-    pub fn from_path(path: &Path) -> Result<MPEG, StrBuf> {
+    pub fn from_path(path: &Path) -> Result<MPEG, String> {
         let raw = unsafe {
             path.to_c_str().with_ref(|buf| {
                 ll::SMPEG_new(buf, null(), 0)
@@ -179,7 +179,7 @@ impl MPEG {
         unsafe { ll::SMPEG_skip(self.raw, seconds as c_float); }
     }
 
-    pub fn get_error(&self) -> StrBuf {
+    pub fn get_error(&self) -> String {
         unsafe {
             let cstr = ll::SMPEG_error(self.raw);
             ::std::str::raw::from_c_str(::std::mem::transmute(&cstr))

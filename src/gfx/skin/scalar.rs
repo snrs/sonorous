@@ -17,7 +17,7 @@ use gfx::gl::Texture2D;
 /// The scalar value.
 pub enum Scalar<'a> {
     /// An owned string. Analogous to `std::str::MaybeOwned`.
-    OwnedStrScalar(StrBuf),
+    OwnedStrScalar(String),
     /// A borrowed string slice. Analogous to `std::str::MaybeOwned`.
     BorrowedStrScalar(&'a str),
     /**
@@ -85,11 +85,11 @@ impl<'a> IntoScalar<'a> for &'a str {
     #[inline] fn into_scalar(self) -> Scalar<'a> { BorrowedStrScalar(self) }
 }
 
-impl<'a> AsScalar<'a> for StrBuf {
+impl<'a> AsScalar<'a> for String {
     #[inline] fn as_scalar(&'a self) -> Scalar<'a> { BorrowedStrScalar(self.as_slice()) }
 }
 
-impl IntoScalar<'static> for StrBuf {
+impl IntoScalar<'static> for String {
     #[inline] fn into_scalar(self) -> Scalar<'static> { OwnedStrScalar(self) }
 }
 

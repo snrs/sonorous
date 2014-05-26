@@ -80,7 +80,7 @@ pub struct Rect { pub p: Pos, pub q: Pos }
 
 /// An identifier to the hook. Different kind of hooks can share the same identifier.
 #[deriving(Eq,TotalEq,Hash,Show)]
-pub struct Id(pub StrBuf);
+pub struct Id(pub String);
 
 impl Id {
     /// Returns a slice of the identifier for a convenient matching.
@@ -123,7 +123,7 @@ pub enum Block<T> {
     // - the hook can call other alternatives multiple times
     // - if there is no recognized alternative `default` gets called instead
     // - `else_` is called once with an original mapping when no alternative is called
-    MultiBlock { pub gen: Gen, pub map: HashMap<StrBuf,T>,
+    MultiBlock { pub gen: Gen, pub map: HashMap<String,T>,
                  pub default: Option<T>, pub else_: Option<T> },
 }
 
@@ -146,7 +146,7 @@ pub enum ScalarFormat {
 /// The text source for the `$text` node.
 pub enum TextSource {
     ScalarText(Id, ScalarFormat),
-    StaticText(StrBuf),
+    StaticText(String),
     TextBlock(Block<Box<TextSource>>),
     TextConcat(Vec<TextSource>),
 }
@@ -154,7 +154,7 @@ pub enum TextSource {
 /// The main skin commands.
 pub enum Node {
     Nothing,
-    Debug(StrBuf),
+    Debug(String),
     ColoredLine { pub from: Pos, pub to: Pos, pub color: Color },
     // colored rect at given position
     ColoredRect { pub at: Rect, pub color: Color },
@@ -174,7 +174,7 @@ pub enum Node {
 /// The top-level parsed skin data.
 pub struct Skin {
     /// The predefined scalar values.
-    pub scalars: HashMap<StrBuf,Scalar<'static>>,
+    pub scalars: HashMap<String,Scalar<'static>>,
     /// The list of commands.
     pub nodes: Vec<Node>,
 }

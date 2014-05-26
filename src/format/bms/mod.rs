@@ -130,21 +130,21 @@ pub struct BmsMeta {
     pub encoding: (&'static str, f64),
 
     /// Title. Maps to BMS #TITLE command.
-    pub title: Option<StrBuf>,
+    pub title: Option<String>,
     /// Subtitle(s). Maps to BMS #SUBTITLE command.
-    pub subtitles: Vec<StrBuf>,
+    pub subtitles: Vec<String>,
     /// Genre. Maps to BMS #GENRE command.
-    pub genre: Option<StrBuf>,
+    pub genre: Option<String>,
     /// Artist. Maps to BMS #ARTIST command.
-    pub artist: Option<StrBuf>,
+    pub artist: Option<String>,
     /// Secondary artist(s). Maps to BMS #SUBARTIST command.
-    pub subartists: Vec<StrBuf>,
+    pub subartists: Vec<String>,
     /// Comment(s). Maps to BMS #COMMENT command.
-    pub comments: Vec<StrBuf>,
+    pub comments: Vec<String>,
     /// Path to an image for loading screen. Maps to BMS #STAGEFILE command.
-    pub stagefile: Option<StrBuf>,
+    pub stagefile: Option<String>,
     /// Path to an image for banner image for the selection screen. Maps to BMS #BANNER command.
-    pub banner: Option<StrBuf>,
+    pub banner: Option<String>,
     /// A base path used for loading all other resources. Maps to BMS #PATH_WAV command.
     pub basepath: Option<Path>,
 
@@ -159,9 +159,9 @@ pub struct BmsMeta {
     pub rank: int,
 
     /// Paths to sound file relative to `basepath` or BMS file.
-    pub sndpath: Vec<Option<StrBuf>>,
+    pub sndpath: Vec<Option<String>>,
     /// Paths to image/movie file relative to `basepath` or BMS file.
-    pub imgpath: Vec<Option<StrBuf>>,
+    pub imgpath: Vec<Option<String>>,
 }
 
 /// Timeline for the BMS file.

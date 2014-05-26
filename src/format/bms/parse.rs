@@ -39,7 +39,7 @@ pub enum BmsCommand<'r> {
     BmsExBPM(Key, BPM),                         // #EXBPM or #BPMxx
     BmsPlayer(int),                             // #PLAYER
     // Rust: unfortunately `Vec<(Key, MaybeOwned<'r>)>` segfaults. (#14088)
-    BmsLanes(Vec<(Key, StrBuf)>),               // #SNRS:LANES (experimental)
+    BmsLanes(Vec<(Key, String)>),               // #SNRS:LANES (experimental)
     BmsPlayLevel(int),                          // #PLAYLEVEL
     BmsDifficulty(int),                         // #DIFFICULTY
     BmsRank(int),                               // #RANK
@@ -181,8 +181,8 @@ impl<'r> fmt::Show for BmsCommand<'r> {
             BmsWAVCmd(cmd, key, v) => write!(f, "\\#WAVCMD {:02} {}{}", cmd, key, v),
             BmsExWAV(_key, None, None, None, ref _s) => fail!("unsupported"),
             BmsExWAV(key, pan, vol, freq, ref s) => {
-                let mut flags = StrBuf::new();
-                let mut opts = StrBuf::new();
+                let mut flags = String::new();
+                let mut opts = String::new();
                 if pan.is_some() {
                     flags.push_char('p');
                     opts.push_str(format!(" {}", pan.unwrap()).as_slice());
@@ -312,7 +312,7 @@ pub struct Parser<'r> {
     opts: &'r ParserOptions,
     /// The file contents decoded with a detected encoding.
     /// This is why we have a separate parsing iterator: we need to be able to refer its lifetime.
-    file: StrBuf,
+    file: String,
     /// The detected encoding and its confidence in `[0,1]`.
     encoding: (&'static str, f64),
 }

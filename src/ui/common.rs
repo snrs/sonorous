@@ -18,7 +18,7 @@ pub fn exit(exitcode: int) -> ! {
 
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(target_os = "win32")]
-pub fn die(s: StrBuf) -> ! {
+pub fn die(s: String) -> ! {
     use util::std::str::StrUtil;
     ::exename().as_slice().as_utf16_c_str(|caption| {
         s.as_slice().as_utf16_c_str(|text| {
@@ -30,13 +30,13 @@ pub fn die(s: StrBuf) -> ! {
 
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(not(target_os = "win32"))]
-pub fn die(s: StrBuf) -> ! {
+pub fn die(s: String) -> ! {
     printerrln(format!("{}: {}", ::exename(), s).as_slice());
     exit(1)
 }
 
 /// Prints an warning message. Internally used in the `warn!` macro below.
-pub fn warn(s: StrBuf) {
+pub fn warn(s: String) {
     printerrln(format!("*** Warning: {}", s).as_slice());
 }
 

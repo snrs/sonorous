@@ -133,7 +133,7 @@ impl UniformLoc {
 
 impl Shader {
     /// Creates a shader from given string.
-    pub fn from_str(shader_type: ShaderType, code: &str) -> Result<Shader,StrBuf> {
+    pub fn from_str(shader_type: ShaderType, code: &str) -> Result<Shader,String> {
         let shader = gl::create_shader(shader_type as GLenum);
         if shader == 0 {
             return Err(format!("GL error 0x{:x}", gl::get_error()));
@@ -152,7 +152,7 @@ impl Shader {
     }
 
     /// Creates a shader from given file path.
-    pub fn from_file(shader_type: ShaderType, path: &Path) -> Result<Shader,StrBuf> {
+    pub fn from_file(shader_type: ShaderType, path: &Path) -> Result<Shader,String> {
         match io::File::open(path).and_then(|mut f| f.read_to_str()) {
             Ok(s) => Shader::from_str(shader_type, s.as_slice()),
             Err(err) => Err(err.to_str()),
@@ -177,7 +177,7 @@ pub struct Program {
 
 impl Program {
     /// Creates a new program from given vertex and fragment shader.
-    pub fn new(vertex_shader: Shader, fragment_shader: Shader) -> Result<Program,StrBuf> {
+    pub fn new(vertex_shader: Shader, fragment_shader: Shader) -> Result<Program,String> {
         assert!(vertex_shader.shader_type == VertexShader);
         assert!(fragment_shader.shader_type == FragmentShader);
 
@@ -198,14 +198,14 @@ impl Program {
     }
 
     /// Returns a location for given attribute name.
-    pub fn attrib_location(&self, attr: &str) -> Result<AttribLoc,StrBuf> {
+    pub fn attrib_location(&self, attr: &str) -> Result<AttribLoc,String> {
         let loc = gl::get_attrib_location(self.index, attr);
         if loc == -1 { return Err(format!("no attrib location: {}", attr)); }
         Ok(AttribLoc(loc))
     }
 
     /// Returns a location for given uniform variable name.
-    pub fn uniform_location(&self, uniform: &str) -> Result<UniformLoc,StrBuf> {
+    pub fn uniform_location(&self, uniform: &str) -> Result<UniformLoc,String> {
         let loc = gl::get_uniform_location(self.index, uniform);
         if loc == -1 { return Err(format!("no uniform location: {}", uniform)); }
         Ok(UniformLoc(loc))
@@ -268,7 +268,7 @@ fn is_surface_prepared_for_texture(surface: &video::Surface) -> bool {
 
 /// Converts the surface to the suitable format for OpenGL. In particular, color key is converted
 /// to alpha channel. The original surface is kept as is.
-fn prepare_surface_for_texture(surface: &video::Surface) -> Result<video::Surface,StrBuf> {
+fn prepare_surface_for_texture(surface: &video::Surface) -> Result<video::Surface,String> {
     let hasalpha = unsafe { ((*surface.raw).flags & video::SrcColorKey as u32) != 0 ||
                             (*(*surface.raw).format).Amask != 0 };
     let newfmt = pixel_format_from_tuple(if hasalpha {RGBA_PIXEL_FORMAT_TUPLE}
@@ -302,7 +302,7 @@ impl Deref<video::Surface> for PreparedSurface {
 
 impl PreparedSurface {
     /// Creates a new SDL surface suitable for direct uploading to OpenGL.
-    pub fn new(width: uint, height: uint, transparent: bool) -> Result<PreparedSurface,StrBuf> {
+    pub fn new(width: uint, height: uint, transparent: bool) -> Result<PreparedSurface,String> {
         let newfmt = pixel_format_from_tuple(if transparent {RGBA_PIXEL_FORMAT_TUPLE}
                                              else {RGB_PIXEL_FORMAT_TUPLE});
         let surface =
@@ -315,7 +315,7 @@ impl PreparedSurface {
     }
 
     /// Converts an existing SDL surface to the format suitable for uploading to OpenGL.
-    pub fn from_surface(surface: &video::Surface) -> Result<PreparedSurface,StrBuf> {
+    pub fn from_surface(surface: &video::Surface) -> Result<PreparedSurface,String> {
         match prepare_surface_for_texture(surface) {
             Ok(surface) => Ok(PreparedSurface(surface)),
             Err(err) => Err(err)
@@ -326,7 +326,7 @@ impl PreparedSurface {
     /// If the surface already had the suitable format no copying occurs. If the conversion fails
     /// the original surface is kept as is.
     pub fn from_owned_surface(surface: video::Surface)
-                                    -> Result<PreparedSurface,(video::Surface,StrBuf)> {
+                                    -> Result<PreparedSurface,(video::Surface,String)> {
         if is_surface_prepared_for_texture(&surface) {
             Ok(PreparedSurface(surface)) // no conversion required
         } else {
@@ -382,7 +382,7 @@ impl Drop for Texture2D {
 impl Texture2D {
     /// Creates a new texture with given intrinsic dimension, which is only used for convenience
     /// in `*Drawing` interfaces.
-    pub fn new(width: uint, height: uint) -> Result<Texture2D,StrBuf> {
+    pub fn new(width: uint, height: uint) -> Result<Texture2D,String> {
         let texture = gl::gen_textures(1).as_slice()[0];
         Ok(Texture2D { index: texture, width: width, height: height })
     }
@@ -390,7 +390,7 @@ impl Texture2D {
     /// Creates a new texture from a prepared SDL surface. `xwrap` and `ywrap` specifies whether
     /// the texture should wrap in horizontal or vertical directions or not.
     pub fn from_prepared_surface(prepared: &PreparedSurface,
-                                 xwrap: bool, ywrap: bool) -> Result<Texture2D,StrBuf> {
+                                 xwrap: bool, ywrap: bool) -> Result<Texture2D,String> {
         let (width, height) = prepared.as_surface().get_size();
         let texture = try!(Texture2D::new(width as uint, height as uint));
         texture.upload_surface(prepared, xwrap, ywrap);
@@ -401,7 +401,7 @@ impl Texture2D {
     /// `ywrap` specifies whether the texture should wrap in horizontal or vertical directions or
     /// not.
     pub fn from_owned_surface(surface: video::Surface,
-                              xwrap: bool, ywrap: bool) -> Result<Texture2D,StrBuf> {
+                              xwrap: bool, ywrap: bool) -> Result<Texture2D,String> {
         let (width, height) = surface.get_size();
         let texture = try!(Texture2D::new(width as uint, height as uint));
         match PreparedSurface::from_owned_surface(surface) {
