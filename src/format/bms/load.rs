@@ -143,7 +143,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 if s_.starts_with("\"") && s_.ends_with("\"") { // strip quotes
                     s_ = s_.slice(1, s_.len()-1);
                 }
-                comments.push(s_.to_owned());
+                comments.push(s_.to_string());
             }
 
             parse::BmsStageFile(s) => {

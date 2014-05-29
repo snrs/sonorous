@@ -295,7 +295,7 @@ impl<'a> State<'a> {
         let mut out = MemWriter::new();
         match self.text_source(hook, text, &mut out) {
             Ok(()) => {
-                str::from_utf8(out.unwrap().as_slice()).unwrap().to_owned().into_maybe_owned()
+                str::from_utf8(out.unwrap().as_slice()).unwrap().to_string().into_maybe_owned()
             },
             Err(err) => {
                 warn!("skin: I/O error on text_source({}), will ignore", err);

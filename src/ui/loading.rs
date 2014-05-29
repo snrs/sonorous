@@ -307,8 +307,8 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
                     difficulty =
                         self.context.bms.meta.difficulty
                             .and_then(|d| d.name()).as_ref()
-                            .map_or("".to_owned(),
-                                    |name| " ".to_owned().append(*name))).as_slice());
+                            .map_or("".to_string(),
+                                    |name| " ".to_string().append(*name))).as_slice());
         }
         Continue
     }

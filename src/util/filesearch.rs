@@ -92,7 +92,7 @@ impl SearchContext {
                     Some(idx) => {
                         let nextnoext = name.as_slice().slice_to(idx);
                         for ext in exts.iter() {
-                            if nextnoext.to_owned().append(*ext) == lastpart {
+                            if nextnoext.to_string().append(*ext) == lastpart {
                                 found = true;
                                 break;
                             }

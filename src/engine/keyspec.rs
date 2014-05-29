@@ -223,19 +223,19 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<String>) -> Option<(String, 
                 CouplePlay | DoublePlay => if isbme {"14"} else {"10"},
                 _                       => if isbme {"7" } else {"5" }
             };
-            if haspedal {nkeys.to_owned().append("/fp")} else {nkeys.to_owned()}
+            if haspedal {nkeys.to_string().append("/fp")} else {nkeys.to_string()}
         },
         Some("pms") => {
             let isbme = present[6] || present[7] || present[8] || present[9];
             let nkeys = if isbme {"9-bme"} else {"9"};
-            nkeys.to_owned()
+            nkeys.to_string()
         },
         Some(_) => preset.unwrap()
     };
 
     for &(name, leftkeys, rightkeys) in PRESETS.iter() {
         if name == preset.as_slice() {
-            return Some((leftkeys.to_owned(), rightkeys.to_owned()));
+            return Some((leftkeys.to_string(), rightkeys.to_string()));
         }
     }
     None
@@ -252,7 +252,7 @@ pub fn key_spec(bms: &Bms, preset: Option<String>,
                                           .and_then(str::from_utf8).map(|e| e.to_ascii_lower());
             let preset =
                 if preset.is_none() && ext.as_ref().map(|s| s.as_slice()) == Some("pms") {
-                    Some("pms".to_owned())
+                    Some("pms".to_string())
                 } else {
                     preset
                 };
@@ -264,8 +264,8 @@ pub fn key_spec(bms: &Bms, preset: Option<String>,
                 }
             }
         } else {
-            (leftkeys.as_ref().map_or("", |s| s.as_slice()).to_owned(),
-             rightkeys.as_ref().map_or("", |s| s.as_slice()).to_owned())
+            (leftkeys.as_ref().map_or("", |s| s.as_slice()).to_string(),
+             rightkeys.as_ref().map_or("", |s| s.as_slice()).to_string())
         };
 
     let mut keyspec = KeySpec { split: 0, order: Vec::new(),

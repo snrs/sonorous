@@ -169,7 +169,7 @@ fn is_bms_file(path: &Path) -> bool {
 /// Also we need to use our own wrapper to avoid "sending on a closed channel" error from
 /// the default `future_result` wrapper.
 fn spawn_worker_task(name: &'static str, body: proc():Send, on_error: proc():Send) {
-    task::TaskBuilder::new().named(name.to_owned().append(" wrapper")).spawn(proc() {
+    task::TaskBuilder::new().named(name.to_string().append(" wrapper")).spawn(proc() {
         let ret = task::TaskBuilder::new().named(name).try(body);
         if ret.is_err() { on_error(); }
     });

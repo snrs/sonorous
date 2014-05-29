@@ -179,7 +179,7 @@ scalar_to_prim_impl!(
 impl<'a> Clone for Scalar<'a> {
     fn clone(&self) -> Scalar<'a> {
         match *self {
-            OwnedStrScalar(ref s) => OwnedStrScalar(s.to_owned()),
+            OwnedStrScalar(ref s) => OwnedStrScalar(s.to_string()),
             BorrowedStrScalar(s) => BorrowedStrScalar(s),
             TextureScalar(tex) => TextureScalar(tex),
             ImageScalar(ref path) => ImageScalar(path.clone()),

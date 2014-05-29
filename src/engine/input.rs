@@ -207,7 +207,7 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<String>) -> Resul
 
     for &keyset in KEYSETS.iter() {
         let spec = getenv(keyset.envvar).or(getenv(keyset.envvar2));
-        let spec = spec.unwrap_or(keyset.default.to_owned());
+        let spec = spec.unwrap_or(keyset.default.to_string());
 
         let mut i = 0;
         for part in spec.as_slice().split('|') {

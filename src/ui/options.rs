@@ -194,7 +194,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                         None => { return Error(format!("Invalid option: {}", arg)); }
                     }
                 } else {
-                    arg.slice_from(1).to_owned()
+                    arg.slice_from(1).to_string()
                 };
             let nshortargs = shortargs.len();
 
@@ -233,9 +233,9 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                     'S' => { modf = Some(ShuffleExModf); }
                     'r' => { modf = Some(RandomModf); }
                     'R' => { modf = Some(RandomExModf); }
-                    'k' => { preset = Some(fetch_arg!('k').to_owned()); }
-                    'K' => { leftkeys = Some(fetch_arg!('K').to_owned());
-                             rightkeys = Some(fetch_arg!('K').to_owned()); }
+                    'k' => { preset = Some(fetch_arg!('k').to_string()); }
+                    'K' => { leftkeys = Some(fetch_arg!('K').to_string());
+                             rightkeys = Some(fetch_arg!('K').to_string()); }
                     'a' => {
                         match from_str::<f64>(fetch_arg!('a')) {
                             Some(speed) if speed > 0.0 => {
@@ -258,7 +258,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                         let arg = fetch_arg!('E');
                         // since `Encoding`s are not `Send`able we keep only the encoding name
                         match encoding_from_whatwg_label(arg) {
-                            Some(..) => { encoding = Some(arg.to_owned()); }
+                            Some(..) => { encoding = Some(arg.to_string()); }
                             None => { return Error(format!("Invalid encoding name: {}", arg)); }
                         }
                     }

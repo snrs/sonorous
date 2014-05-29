@@ -111,12 +111,12 @@ pub mod engine {
 }
 
 /// Returns a version string.
-pub fn version() -> String { "Sonorous 0.1.0-pre".to_owned() }
+pub fn version() -> String { "Sonorous 0.1.0-pre".to_string() }
 
 /// Returns an executable name used in the command line if any.
 pub fn exename() -> String {
     let args = std::os::args();
-    if args.is_empty() {"sonorous".to_owned()} else {args.as_slice()[0].clone()}
+    if args.is_empty() {"sonorous".to_string()} else {args.as_slice()[0].clone()}
 }
 
 /// Dumps the recognized BMS commands. This is used by `-Z dump-bmscommand[-full]` debug options.

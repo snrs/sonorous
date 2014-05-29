@@ -580,7 +580,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                         if words.as_slice()[i].len() != 2 { okay = false; break; }
                         match Key::from_str(words.as_slice()[i]) {
                             Some(key) => {
-                                lanes.push((key, words.as_slice()[i+1].to_owned()));
+                                lanes.push((key, words.as_slice()[i+1].to_string()));
                             }
                             None => {
                                 okay = false;

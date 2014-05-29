@@ -94,7 +94,7 @@ macro_rules! fail_with_json(
 
 macro_rules! pop(
     ($map:expr, $key:expr, $me:expr) => (
-        match $map.pop(&$key.to_strbuf()) {
+        match $map.pop(&$key.to_string()) {
             Some(v) => v,
             None => { return Err(format!("expected `{}` in {}", $key, $me)); }
         }
@@ -109,7 +109,7 @@ impl FromJson for Scalar<'static> {
 
             Object(mut map) => {
                 // {"$image": "path/to/image.png"}
-                let image = map.pop(&"$image".to_strbuf());
+                let image = map.pop(&"$image".to_string());
                 if image.is_some() {
                     let path = match image.unwrap() {
                         String(path) => Path::new(path),
@@ -363,11 +363,11 @@ impl<T:FromJson> FromJson for Block<T> {
             _ => fail_with_json!(json, "a block")
         };
 
-        let gen = match map.pop(&"$$".to_strbuf()) {
+        let gen = match map.pop(&"$$".to_string()) {
             Some(hook) => HookGen(try!(from_json(hook))),
-            None => match map.pop(&"$$text".to_strbuf()) {
+            None => match map.pop(&"$$text".to_string()) {
                 Some(hook) => TextGen(try!(from_json(hook))),
-                None => match map.pop(&"$$len".to_strbuf()) {
+                None => match map.pop(&"$$len".to_string()) {
                     Some(hook) => TextLenGen(try!(from_json(hook))),
                     None => { return Err(format!("expected a block (text source or node), \
                                                   got an unrecognized object")); }
@@ -375,9 +375,9 @@ impl<T:FromJson> FromJson for Block<T> {
             }
         };
 
-        let then = map.pop(&"$then".to_strbuf());
-        let default = map.pop(&"$default".to_strbuf());
-        let else_ = map.pop(&"$else".to_strbuf());
+        let then = map.pop(&"$then".to_string());
+        let default = map.pop(&"$default".to_string());
+        let else_ = map.pop(&"$else".to_string());
         if then.is_some() && !map.is_empty() {
             return Err(format!("`$then` cannot be used with other alternatives in the block"));
         }
@@ -498,10 +498,10 @@ impl FromJson for TextSource {
             Object(mut map) => {
                 // {"$": "number"}
                 // {"$": "number", "format": "##00.00"}
-                let dynamic = map.pop(&"$".to_strbuf());
+                let dynamic = map.pop(&"$".to_string());
                 if dynamic.is_some() {
                     let id = try!(from_json(dynamic.unwrap()));
-                    let format = match map.pop(&"format".to_strbuf()) {
+                    let format = match map.pop(&"format".to_string()) {
                         None => NoFormat,
                         Some(fmt) => try!(from_json(fmt)),
                     };
@@ -529,7 +529,7 @@ impl FromJson for Node {
 
             Object(mut map) => {
                 // {"$debug": "message"}
-                let debug = map.pop(&"$debug".to_strbuf());
+                let debug = map.pop(&"$debug".to_string());
                 if debug.is_some() {
                     let msg = match debug.unwrap() {
                         String(msg) => msg,
@@ -540,7 +540,7 @@ impl FromJson for Node {
                 }
 
                 // {"$line": null, "from": [x,y], "to": [x,y], "color": "#rgb"}
-                let line = map.pop(&"$line".to_strbuf());
+                let line = map.pop(&"$line".to_string());
                 if line.is_some() {
                     match line.unwrap() {
                         Null => {}
@@ -555,18 +555,18 @@ impl FromJson for Node {
 
                 // {"$rect": null, "at": [[px,py], [qx,qy]], "color": "#rgb", "alpha": 0.5}
                 // {"$rect": "tex", "at": [[px,py], [qx,qy]], "clip": [[tpx,tpy], [tqx,tqy]]}
-                let rect = map.pop(&"$rect".to_strbuf());
+                let rect = map.pop(&"$rect".to_string());
                 if rect.is_some() {
                     let tex = match rect.unwrap() {
                         Null => None,
                         tex => Some(try!(from_json(tex))),
                     };
                     let at = try!(from_json(pop!(map, "at", "the rectangle")));
-                    let color = match map.pop(&"color".to_strbuf()) {
+                    let color = match map.pop(&"color".to_string()) {
                         Some(color) => Some(try!(from_json::<Color>(color))),
                         None => None,
                     };
-                    let opacity = match map.pop(&"opacity".to_strbuf()) {
+                    let opacity = match map.pop(&"opacity".to_string()) {
                         Some(Number(a)) => Some(a),
                         Some(opacity) =>
                             fail_with_json!(opacity, "a number in the rectangle opacity"),
@@ -596,7 +596,7 @@ impl FromJson for Node {
                                                         both the RGBA `color` and `opacity`"));
                                 }
                             };
-                            let clip = match map.pop(&"clip".to_strbuf()) {
+                            let clip = match map.pop(&"clip".to_string()) {
                                 Some(clip) => Some(try!(from_json(clip))),
                                 None => None,
                             };
@@ -606,11 +606,11 @@ impl FromJson for Node {
                 }
 
                 // {"$text": "some text", "at": [x,y], "size": h, "anchor": "left", "color": "#rgb"}
-                let text = map.pop(&"$text".to_strbuf());
+                let text = map.pop(&"$text".to_string());
                 if text.is_some() {
                     let text = try!(from_json(text.unwrap()));
                     let at = try!(from_json(pop!(map, "at", "the text")));
-                    let size = match map.pop(&"size".to_strbuf()) {
+                    let size = match map.pop(&"size".to_string()) {
                         Some(Number(size)) if size > 0.0 => size as f32,
                         Some(Number(_)) => {
                             return Err(format!("nonpositive `size` in the text"));
@@ -618,7 +618,7 @@ impl FromJson for Node {
                         Some(size) => fail_with_json!(size, "a text size"),
                         None => NROWS as f32,
                     };
-                    let anchor = match map.pop(&"anchor".to_strbuf()) {
+                    let anchor = match map.pop(&"anchor".to_string()) {
                         Some(String(s)) => match s.as_slice() {
                             "left"   => (0.0, 0.0),
                             "center" => (0.5, 0.0),
@@ -641,7 +641,7 @@ impl FromJson for Node {
                 }
 
                 // {"$clip": [[px,py],[qx,qy]]}
-                let clip = map.pop(&"$clip".to_strbuf());
+                let clip = map.pop(&"$clip".to_string());
                 if clip.is_some() {
                     let at = try!(from_json(clip.unwrap()));
                     ensure_empty!(map, "the reclipping command");
@@ -654,7 +654,7 @@ impl FromJson for Node {
                 // {"$clipright":  w} = {"$clip": [[0,0],["100%-w","100%"]]}
                 macro_rules! clip_to(
                     ($key:expr, $num_to_rect:expr) => ({
-                        let clipto = map.pop(&$key.to_strbuf());
+                        let clipto = map.pop(&$key.to_string());
                         if clipto.is_some() {
                             let v = try!(from_json(clipto.unwrap()));
                             ensure_empty!(map, "the reclipping command");
@@ -696,7 +696,7 @@ impl FromJson for Skin {
             // {"scalars": {...}, "nodes": [...]}
             Object(mut map) => {
                 let mut scalars = HashMap::new();
-                match map.pop(&"scalars".to_strbuf()) {
+                match map.pop(&"scalars".to_string()) {
                     Some(Object(scalarmap)) => {
                         for (k, v) in scalarmap.move_iter() {
                             scalars.insert(k.into_owned(), try!(from_json(v)));
