@@ -6,7 +6,7 @@
 
 use std::{str, iter, f64, char, fmt};
 use std::str::MaybeOwned;
-use rand::Rng;
+use std::rand::Rng;
 use encoding::EncodingRef;
 
 use format::obj::{BPM, Duration, Seconds, Measures, ImageSlice};
@@ -78,7 +78,7 @@ impl<'r> BmsCommand<'r> {
     /// Converts the command that refers to the borrowed slice into the command that doesn't.
     pub fn into_send(self) -> BmsCommand<'static> {
         fn into_send_str<'r>(s: MaybeOwned<'r>) -> MaybeOwned<'static> {
-            s.into_owned().into_maybe_owned()
+            s.into_string().into_maybe_owned()
         }
         match self {
             BmsUnknown(s) => BmsUnknown(into_send_str(s)),

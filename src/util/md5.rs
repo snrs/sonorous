@@ -382,7 +382,7 @@ impl<'r> ToHex for &'r [u8] {
             ret.push_char(HEXDIGITS[(c >> 4) as uint] as char);
             ret.push_char(HEXDIGITS[(c & 15) as uint] as char);
         }
-        ret.into_owned()
+        ret.into_string()
     }
 }
 

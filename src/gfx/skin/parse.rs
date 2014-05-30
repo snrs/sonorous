@@ -350,7 +350,7 @@ impl FromJson for Rect {
 impl FromJson for Id {
     fn from_json(json: Json) -> Result<Id,String> {
         match json {
-            String(s) => Ok(Id(s.into_owned())),
+            String(s) => Ok(Id(s.into_string())),
             _ => fail_with_json!(json, "an identifier")
         }
     }
@@ -402,7 +402,7 @@ impl<T:FromJson> FromJson for Block<T> {
             (None, default, else_, false) => {
                 let map = result::collect(map.move_iter().map(|(k,v)|
                     match from_json::<T>(v) {
-                        Ok(v) => Ok((k.into_owned(), v)),
+                        Ok(v) => Ok((k.into_string(), v)),
                         Err(err) => Err(err),
                     }
                 ));
@@ -490,7 +490,7 @@ impl FromJson for TextSource {
     fn from_json(json: Json) -> Result<TextSource,String> {
         match json {
             // "static text"
-            String(s) => Ok(StaticText(s.into_owned())),
+            String(s) => Ok(StaticText(s.into_string())),
 
             // ["concat", "enated ", "text"]
             List(l) => Ok(TextConcat(try!(from_json(List(l))))),
@@ -536,7 +536,7 @@ impl FromJson for Node {
                         debug => fail_with_json!(debug, "a debug message")
                     };
                     ensure_empty!(map, "the debug message");
-                    return Ok(Debug(msg.into_owned()));
+                    return Ok(Debug(msg.into_string()));
                 }
 
                 // {"$line": null, "from": [x,y], "to": [x,y], "color": "#rgb"}
@@ -699,7 +699,7 @@ impl FromJson for Skin {
                 match map.pop(&"scalars".to_string()) {
                     Some(Object(scalarmap)) => {
                         for (k, v) in scalarmap.move_iter() {
-                            scalars.insert(k.into_owned(), try!(from_json(v)));
+                            scalars.insert(k.into_string(), try!(from_json(v)));
                         }
                     }
                     Some(scalarmap) => fail_with_json!(scalarmap, "an object with scalars"),

@@ -5,7 +5,7 @@
 //! BMS loader. Uses a BMS parser (`format::bms::parse`) to produce `format::bms::Bms` structure.
 
 use std::{iter, cmp};
-use rand::Rng;
+use std::rand::Rng;
 
 use format::obj::*;
 use format::bms::parse;
@@ -115,28 +115,28 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
         match cmd {
             parse::BmsTitle(s) => {
-                let s = s.into_owned();
+                let s = s.into_string();
                 if s.is_empty() { diag!(BmsHasEmptyTITLE at lineno); }
                 if title.is_some() { diag!(BmsHasMultipleTITLEs at lineno); }
                 title = Some(s);
             }
             parse::BmsSubtitle(s) => {
-                subtitles.push(s.into_owned());
+                subtitles.push(s.into_string());
             }
             parse::BmsGenre(s) => {
-                let s = s.into_owned();
+                let s = s.into_string();
                 if s.is_empty() { diag!(BmsHasEmptyGENRE at lineno); }
                 if genre.is_some() { diag!(BmsHasMultipleGENREs at lineno); }
                 genre = Some(s);
             }
             parse::BmsArtist(s) => {
-                let s = s.into_owned();
+                let s = s.into_string();
                 if s.is_empty() { diag!(BmsHasEmptyARTIST at lineno); }
                 if artist.is_some() { diag!(BmsHasMultipleARTISTs at lineno); }
                 artist = Some(s);
             }
             parse::BmsSubartist(s) => {
-                subartists.push(s.into_owned());
+                subartists.push(s.into_string());
             }
             parse::BmsComment(s) => {
                 let mut s_ = s.as_slice().trim();
@@ -147,10 +147,10 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             }
 
             parse::BmsStageFile(s) => {
-                stagefile = Some(s.into_owned());
+                stagefile = Some(s.into_string());
             }
             parse::BmsBanner(s) => {
-                banner = Some(s.into_owned());
+                banner = Some(s.into_string());
             }
 
             parse::BmsBPM(bpm) => {
@@ -201,10 +201,10 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             }
 
             parse::BmsWAV(Key(i), s) => {
-                sndpath.as_mut_slice()[i as uint] = Some(s.into_owned());
+                sndpath.as_mut_slice()[i as uint] = Some(s.into_string());
             }
             parse::BmsBMP(Key(i), s) => {
-                imgpath.as_mut_slice()[i as uint] = Some(s.into_owned());
+                imgpath.as_mut_slice()[i as uint] = Some(s.into_string());
             }
             parse::BmsBGA(Key(i), Key(j), slice) => {
                 imgslices.as_mut_slice()[i as uint] = Some((ImageRef(Key(j)), slice));
@@ -239,7 +239,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             }
             parse::BmsData(measure, chan, data) => {
                 bmsline.push(BmsLine { measure: measure, chan: chan,
-                                       data: data.into_owned(), lineno: lineno })
+                                       data: data.into_string(), lineno: lineno })
             }
 
             parse::BmsFlow(_) => { fail!("unexpected"); }

@@ -26,7 +26,6 @@
 
 #[phase(syntax, link)] extern crate log;
 extern crate libc;
-extern crate rand;
 extern crate collections;
 extern crate serialize;
 extern crate sync;
@@ -148,7 +147,7 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
             print_command(parsed, |line, msg| callback(line, msg));
         }
     } else {
-        let mut r = rand::task_rng();
+        let mut r = std::rand::task_rng();
         for parsed in PreprocessingParser::new(&mut f, &mut r, parseropts).iter() {
             print_command(parsed, |line, msg| callback(line, msg));
         }
@@ -186,7 +185,7 @@ pub fn play(bmspath: &Path, opts: ui::options::Options) {
         }
 
         // parses the file and sanitizes it
-        let mut r = rand::task_rng();
+        let mut r = std::rand::task_rng();
         let preproc = match std::io::File::open(bmspath) {
             Ok(mut f) => preprocess_bms(bmspath, &mut f, &opts,
                                         &mut r, &opts.loader_options(), print_diag),

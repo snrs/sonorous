@@ -5,7 +5,7 @@
 //! BMS preprocessor.
 
 use std::fmt;
-use rand::Rng;
+use std::rand::Rng;
 
 use format::bms::diag::*;
 

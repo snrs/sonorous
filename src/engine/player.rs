@@ -6,8 +6,8 @@
 
 use std::{slice, cmp, num};
 use std::rc::Rc;
+use std::rand::Rng;
 use libc;
-use rand::Rng;
 
 use sdl::{get_ticks, event};
 use sdl_mixer;

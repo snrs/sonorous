@@ -8,7 +8,7 @@ use std::{str, cmp, io, os, comm, task};
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::comm::{Sender, Receiver};
-use rand::{task_rng, Rng};
+use std::rand::{task_rng, Rng};
 use sync::{Arc, RWLock};
 
 use sdl::{event, get_ticks};
