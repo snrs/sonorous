@@ -346,7 +346,7 @@ pub mod builder {
     /// contents and to use this and `TimelineBuilder::{mutate,delete}` methods.
     pub struct Mark(uint);
 
-    impl<S:Eq+Clone,I:Eq+Clone> TimelineBuilder<S,I> {
+    impl<S:PartialEq+Clone,I:PartialEq+Clone> TimelineBuilder<S,I> {
         /// Creates a new timeline builder.
         pub fn new() -> TimelineBuilder<S,I> {
             TimelineBuilder { initbpm: None, objs: Vec::new(), endvpos: 0.0 }

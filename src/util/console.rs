@@ -15,6 +15,7 @@ local_data_key!(console_encoding_key: EncodingRef)
 
 /// Returns an encoding usable for console I/O.
 #[cfg(target_os = "win32")]
+#[allow(experimental)]
 fn get_console_encoding() -> EncodingRef {
     use ext::win32::ll::GetACP;
     use encoding::all::ASCII;

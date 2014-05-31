@@ -140,9 +140,6 @@ pub struct Ticker {
     pub lastinfo: Option<uint>
 }
 
-/// Returns a new ticker with a default display interval.
-pub fn Ticker() -> Ticker { Ticker::new() }
-
 impl Ticker {
     /// Returns a new ticker with a default display interval.
     pub fn new() -> Ticker {

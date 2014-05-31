@@ -10,7 +10,7 @@
 
 use std::{fmt, hash};
 use std::clone::Clone;
-use std::cmp::{Eq, TotalEq, Ord, TotalOrd, Equiv};
+use std::cmp::{PartialEq, Eq, PartialOrd, Ord, Equiv};
 use std::cmp::Ordering;
 use std::container::Container;
 use std::default::Default;
@@ -73,23 +73,23 @@ impl<'r,T:fmt::Show> fmt::Show for MaybeOwnedVec<'r,T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.as_slice().fmt(f) }
 }
 
-impl<'r,T:Eq> Eq for MaybeOwnedVec<'r,T> {
+impl<'r,T:PartialEq> PartialEq for MaybeOwnedVec<'r,T> {
     #[inline]
     fn eq(&self, other: &MaybeOwnedVec<'r,T>) -> bool {
         self.as_slice().eq(&other.as_slice())
     }
 }
 
-impl<'r,T:TotalEq> TotalEq for MaybeOwnedVec<'r,T> {}
+impl<'r,T:Eq> Eq for MaybeOwnedVec<'r,T> {}
 
-impl<'r,T:Eq,V:Vector<T>> Equiv<V> for MaybeOwnedVec<'r,T> {
+impl<'r,T:PartialEq,V:Vector<T>> Equiv<V> for MaybeOwnedVec<'r,T> {
     #[inline]
     fn equiv(&self, other: &V) -> bool {
         self.as_slice().eq(&other.as_slice())
     }
 }
 
-impl<'r,T:Eq+Ord> Ord for MaybeOwnedVec<'r,T> {
+impl<'r,T:PartialEq+PartialOrd> PartialOrd for MaybeOwnedVec<'r,T> {
     #[inline]
     fn lt(&self, other: &MaybeOwnedVec<'r,T>) -> bool {
         self.as_slice().lt(&other.as_slice())
@@ -111,7 +111,7 @@ impl<'r,T:Eq+Ord> Ord for MaybeOwnedVec<'r,T> {
     }
 }
 
-impl<'r,T:TotalOrd> TotalOrd for MaybeOwnedVec<'r,T> {
+impl<'r,T:Ord> Ord for MaybeOwnedVec<'r,T> {
     #[inline]
     fn cmp(&self, other: &MaybeOwnedVec<'r,T>) -> Ordering {
         self.as_slice().cmp(&other.as_slice())

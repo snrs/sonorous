@@ -10,7 +10,7 @@ use std::rand::Rng;
 use format::bms::diag::*;
 
 /// Represents one line of BMS command that may affect the control flow.
-#[deriving(Eq,Clone)]
+#[deriving(PartialEq,Clone)]
 pub enum BmsFlowCommand {
     BmsRandom(int),                             // #RANDOM
     BmsSetRandom(int),                          // #SETRANDOM
@@ -49,7 +49,7 @@ impl fmt::Show for BmsFlowCommand {
 }
 
 /// The state of the block, for determining which lines should be processed.
-#[deriving(Eq,TotalEq)]
+#[deriving(PartialEq,Eq)]
 enum BlockState {
     /// Not contained in the #IF block.
     Outside,
@@ -79,7 +79,7 @@ impl BlockState {
  * a state within #RANDOM, so it follows that #RANDOM/#SETRANDOM blocks can nest but #IF
  * can't nest unless its direct parent is #RANDOM/#SETRANDOM.
  */
-#[deriving(Eq,TotalEq)]
+#[deriving(PartialEq,Eq)]
 struct Block {
     /// A generated value if any. It can be `None` if this block is the topmost one (which
     /// is actually not a block but rather a sentinel) or the last `#RANDOM` or `#SETRANDOM`

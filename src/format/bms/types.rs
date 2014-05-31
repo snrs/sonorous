@@ -9,7 +9,7 @@ use format::obj::Lane;
 
 /// Two-letter alphanumeric identifier used for virtually everything, including resource
 /// management, variable BPM and chart specification.
-#[deriving(Eq,Ord,TotalEq,TotalOrd,Clone)]
+#[deriving(PartialEq,PartialOrd,Eq,Ord,Clone)]
 pub struct Key(pub int);
 
 /// The number of all possible alphanumeric keys.
@@ -100,7 +100,7 @@ impl fmt::Show for Key {
 
 /// Same as `Key` but accepts one-letter alphanumeric keys, encoded as a negative number
 /// from -1 (`0`) to -36 (`Z`) which is invalid in a plain `Key`.
-#[deriving(Eq,Ord,Clone)]
+#[deriving(PartialEq,PartialOrd,Clone)]
 pub struct PartialKey(pub int);
 
 impl Deref<int> for PartialKey {

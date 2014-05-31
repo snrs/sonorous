@@ -296,7 +296,6 @@ impl PlayingScene {
 
 /// The list of grade names and corresponding color scheme.
 pub static GRADES: &'static [(&'static str,Gradient)] = &[
-    // Rust: can we just use `Gradient()`???
     ("MISS",  Gradient { zero: RGB(0xff,0xc0,0xc0), one: RGB(0xff,0x40,0x40) }),
     ("BAD",   Gradient { zero: RGB(0xff,0xc0,0xff), one: RGB(0xff,0x40,0xff) }),
     ("GOOD",  Gradient { zero: RGB(0xff,0xff,0xc0), one: RGB(0xff,0xff,0x40) }),
@@ -486,11 +485,11 @@ impl Scene for PlayingScene {
                 if self.player.lastcombo > 1 {
                     d.string(cx, cy - 12.0, 1.0, Centered,
                              format!("{} COMBO", self.player.lastcombo).as_slice(),
-                             Gradient(RGB(0xff,0xff,0xff), RGB(0x80,0x80,0x80)));
+                             Gradient { zero: RGB(0xff,0xff,0xff), one: RGB(0x80,0x80,0x80) });
                 }
                 if self.player.opts.is_autoplay() {
                     d.string(cx, cy + 2.0, 1.0, Centered, "(AUTO)",
-                             Gradient(RGB(0xc0,0xc0,0xc0), RGB(0x40,0x40,0x40)));
+                             Gradient { zero: RGB(0xc0,0xc0,0xc0), one: RGB(0x40,0x40,0x40) });
                 }
             }
         });

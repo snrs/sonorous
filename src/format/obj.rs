@@ -8,7 +8,7 @@ use std::fmt;
 
 /// A game play element mapped to the single input element (for example, button) and the screen
 /// area (henceforth "lane").
-#[deriving(Eq,TotalEq,Clone)]
+#[deriving(PartialEq,Eq,Clone)]
 pub struct Lane(pub uint);
 
 /// The maximum number of lanes.
@@ -22,7 +22,7 @@ impl Deref<uint> for Lane {
 }
 
 /// BGA layers.
-#[deriving(Eq,TotalEq,Show,Clone)]
+#[deriving(PartialEq,Eq,Show,Clone)]
 pub enum BGALayer {
     /// The lowest layer. BMS channel #04.
     Layer1 = 0,
@@ -40,7 +40,7 @@ pub static NLAYERS: uint = 4;
 
 /// Beats per minute. Used as a conversion factor between the time position and actual time
 /// in BMS.
-#[deriving(Eq,Show,Clone)]
+#[deriving(PartialEq,Show,Clone)]
 pub struct BPM(pub f64);
 
 impl Deref<f64> for BPM {
@@ -60,7 +60,7 @@ impl BPM {
 
 /// A duration from the particular point. It may be specified in measures or seconds. Used in
 /// the `Stop` object.
-#[deriving(Eq,Show,Clone)]
+#[deriving(PartialEq,Show,Clone)]
 pub enum Duration { Seconds(f64), Measures(f64) }
 
 impl Duration {
@@ -82,7 +82,7 @@ impl Duration {
 /// A damage value upon the MISS grade. Normally it is specified in percents of the full gauge
 /// (as in `MAXGAUGE`), but sometimes it may cause an instant death. Used in the `Bomb` object
 /// (normal note objects have a fixed value).
-#[deriving(Eq,Show,Clone)]
+#[deriving(PartialEq,Show,Clone)]
 pub enum Damage { GaugeDamage(f64), InstantDeath }
 
 /**
@@ -93,13 +93,13 @@ pub enum Damage { GaugeDamage(f64), InstantDeath }
  * but not the lower-right corner. The region is clipped to make the upper-left corner has
  * non-negative coordinates and the size of the region doesn't exceed the canvas dimension.
  */
-#[deriving(Eq,Show,Clone)]
+#[deriving(PartialEq,Show,Clone)]
 pub struct ImageSlice {
     pub sx: int, pub sy: int, pub dx: int, pub dy: int, pub w: int, pub h: int,
 }
 
 /// A reference to the BGA target, i.e. something that can be displayed in a single BGA layer.
-#[deriving(Eq,Show,Clone)]
+#[deriving(PartialEq,Show,Clone)]
 pub enum BGARef<ImageRef> {
     /// Fully transparent image.
     BlankBGA,
@@ -120,7 +120,7 @@ impl<I> BGARef<I> {
 }
 
 /// A data for objects (or object-like effects). Does not include the time information.
-#[deriving(Eq,Clone)]
+#[deriving(PartialEq,Clone)]
 pub enum ObjData<SoundRef,ImageRef> {
     /// Deleted object. Only used during various processing.
     Deleted,
@@ -529,7 +529,7 @@ impl<S:Clone,I:Clone,T:WithObjData<S,I>+Clone> ObjConvOps<S,I> for T {
 }
 
 /// Axes available to the objects. See `Obj` for more information.
-#[deriving(Eq,TotalEq,Show,Clone)]
+#[deriving(PartialEq,Eq,Show,Clone)]
 pub enum ObjAxis {
     /// Virtual position.
     VirtualPos  = 0,
@@ -542,7 +542,7 @@ pub enum ObjAxis {
 }
 
 /// Object location per axis.
-#[deriving(Eq,Show,Clone)]
+#[deriving(PartialEq,Show,Clone)]
 pub struct ObjLoc<T> {
     /// Virtual position in measures.
     pub vpos: T,
@@ -556,7 +556,7 @@ pub struct ObjLoc<T> {
     pub time: T,
 }
 
-impl<T:Clone+Ord> Ord for ObjLoc<T> {
+impl<T:Clone+PartialOrd> PartialOrd for ObjLoc<T> {
     fn lt(&self, other: &ObjLoc<T>) -> bool { self.time < other.time }
     fn le(&self, other: &ObjLoc<T>) -> bool { self.time <= other.time }
     fn ge(&self, other: &ObjLoc<T>) -> bool { self.time >= other.time }
@@ -617,12 +617,12 @@ pub struct Obj<SoundRef,ImageRef> {
     pub data: ObjData<SoundRef,ImageRef>
 }
 
-impl<S:Clone,I:Clone> Eq for Obj<S,I> {
+impl<S:Clone,I:Clone> PartialEq for Obj<S,I> {
     fn eq(&self, other: &Obj<S,I>) -> bool { self.loc == other.loc }
     fn ne(&self, other: &Obj<S,I>) -> bool { self.loc != other.loc }
 }
 
-impl<S:Clone,I:Clone> Ord for Obj<S,I> {
+impl<S:Clone,I:Clone> PartialOrd for Obj<S,I> {
     fn lt(&self, other: &Obj<S,I>) -> bool { self.loc < other.loc }
     fn le(&self, other: &Obj<S,I>) -> bool { self.loc <= other.loc }
     fn ge(&self, other: &Obj<S,I>) -> bool { self.loc >= other.loc }

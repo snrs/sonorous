@@ -64,7 +64,7 @@ use gfx::color::{Color, Gradient};
 use gfx::skin::scalar::{Scalar, ImageScalar};
 
 /// Numerical expression.
-#[deriving(Eq,Show)]
+#[deriving(PartialEq,Show)]
 pub enum Expr {
     ENum(f32),
     ERatioNum(f32, f32),
@@ -79,7 +79,7 @@ pub struct Pos { pub x: Expr, pub y: Expr }
 pub struct Rect { pub p: Pos, pub q: Pos }
 
 /// An identifier to the hook. Different kind of hooks can share the same identifier.
-#[deriving(Eq,TotalEq,Hash,Show)]
+#[deriving(PartialEq,Eq,Hash,Show)]
 pub struct Id(pub String);
 
 impl Id {

@@ -13,7 +13,7 @@ use gfx::skin::ast::Skin;
 use gfx::skin::parse::load_skin;
 
 /// Game play modes.
-#[deriving(Eq,TotalEq,Clone)]
+#[deriving(PartialEq,Eq,Clone)]
 pub enum Mode {
     /// Normal game play. The graphical display and input is enabled.
     PlayMode,
@@ -26,7 +26,7 @@ pub enum Mode {
 }
 
 /// Modifiers that affect the game data.
-#[deriving(Eq,TotalEq,Clone)]
+#[deriving(PartialEq,Eq,Clone)]
 pub enum Modf {
     /// Swaps all "key" (i.e. `KeyKind::counts_as_key` returns true) lanes in the reverse order.
     /// See `player::apply_mirror_modf` for the detailed algorithm.
@@ -44,7 +44,7 @@ pub enum Modf {
 }
 
 /// Specifies how the BGA is displayed.
-#[deriving(Eq,TotalEq,Clone)]
+#[deriving(PartialEq,Eq,Clone)]
 pub enum Bga {
     /// Both the BGA image and movie is displayed.
     BgaAndMovie,
@@ -56,7 +56,7 @@ pub enum Bga {
 }
 
 /// Global options set from the command line and environment variables.
-#[deriving(Eq,Clone)]
+#[deriving(PartialEq,Clone)]
 pub struct Options {
     /// Game play mode.
     pub mode: Mode,
@@ -127,7 +127,7 @@ impl Options {
 }
 
 /// A return value from `parse_opts`.
-#[deriving(Eq,Clone)]
+#[deriving(PartialEq,Clone)]
 pub enum ParsingResult {
     /// The caller is expected to show the version information.
     ShowVersion,

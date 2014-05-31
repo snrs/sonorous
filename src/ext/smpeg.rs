@@ -34,7 +34,7 @@ pub mod ll {
         pub current_time: c_double,
         pub total_time: c_double
     }
-    #[deriving(Eq, TotalEq, Clone)]
+    #[deriving(PartialEq, Eq, Clone)]
     #[repr(C)]
     pub enum SMPEGstatus {
         SMPEG_ERROR = -1,

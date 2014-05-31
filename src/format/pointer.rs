@@ -57,7 +57,7 @@ fn bsearch_no_less<T>(v: &[T], f: |&T| -> Ordering) -> uint {
     base
 }
 
-impl<S,I> Eq for Pointer<S,I> {
+impl<S,I> PartialEq for Pointer<S,I> {
     fn eq(&self, other: &Pointer<S,I>) -> bool {
         has_same_timeline(self, other) && self.loc == other.loc
     }
@@ -66,7 +66,7 @@ impl<S,I> Eq for Pointer<S,I> {
     }
 }
 
-impl<S,I> Ord for Pointer<S,I> {
+impl<S,I> PartialOrd for Pointer<S,I> {
     fn lt(&self, other: &Pointer<S,I>) -> bool {
         assert!(has_same_timeline(self, other));
         self.loc < other.loc

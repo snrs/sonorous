@@ -67,7 +67,7 @@ pub fn initial_bga_state() -> BGAState {
 
 /// Grades. Sonorous performs the time-based grading as long as possible (it can go wrong when
 /// the object is near the discontinuity due to the current implementation strategy).
-#[deriving(Eq,TotalEq)]
+#[deriving(PartialEq,Eq)]
 pub enum Grade {
     /**
      * Issued when the player did not input the object at all, the player was pressing the key

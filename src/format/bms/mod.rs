@@ -47,11 +47,11 @@ pub mod parse;
 pub mod load;
 
 /// Sound reference.
-#[deriving(Eq,TotalEq,Clone)]
+#[deriving(PartialEq,Eq,Clone)]
 pub struct SoundRef(pub Key);
 
 /// Image reference.
-#[deriving(Eq,TotalEq,Clone)]
+#[deriving(PartialEq,Eq,Clone)]
 pub struct ImageRef(pub Key);
 
 impl Deref<Key> for SoundRef {
@@ -82,7 +82,7 @@ pub static DefaultBPM: BPM = BPM(130.0);
 /// Play mode specified in the BMS file. This maps to BMS #PLAYER command. Over the course of
 /// the evolution of the BMS format, this value became highly ambiguous and the client is advised
 /// not to solely rely on this value.
-#[deriving(Eq,TotalEq,Clone)]
+#[deriving(PartialEq,Eq,Clone)]
 pub enum PlayMode {
     /// Single Play (SP), where only channels #1x are used for the game play.
     SinglePlay = 1,
@@ -104,7 +104,7 @@ pub enum PlayMode {
 
 /// Difficulty level specified by the author. This maps to BMS #DIFFICULTY command. Does not affect
 /// the actual game play but affects the selection screen by grouping related BMSes.
-#[deriving(Eq,TotalEq,Ord,Clone)]
+#[deriving(PartialEq,Eq,PartialOrd,Clone)]
 pub struct Difficulty(pub int);
 
 impl Difficulty {

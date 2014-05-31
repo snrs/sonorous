@@ -174,7 +174,7 @@ pub struct TextualViewingScene {
 impl TextualViewingScene {
     /// Creates a new text-only viewing scene.
     pub fn new(player: Player) -> Box<TextualViewingScene> {
-        box TextualViewingScene { player: player, ticker: Ticker() }
+        box TextualViewingScene { player: player, ticker: Ticker::new() }
     }
 }
 

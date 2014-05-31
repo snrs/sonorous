@@ -22,17 +22,12 @@ pub fn to_rgba(c: Color) -> (u8, u8, u8, u8) {
 }
 
 /// Linear color gradient.
-#[deriving(Eq)]
+#[deriving(PartialEq)]
 pub struct Gradient {
     /// A color at the position 0.0. Normally used as a topmost value.
     pub zero: Color,
     /// A color at the position 1.0. Normally used as a bottommost value.
     pub one: Color
-}
-
-/// Creates a new color gradient (for text printing).
-pub fn Gradient(top: Color, bottom: Color) -> Gradient {
-    Gradient { zero: top, one: bottom }
 }
 
 /// A trait for color or color gradient. The color at the particular position can be calculated
