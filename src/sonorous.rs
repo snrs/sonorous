@@ -82,6 +82,7 @@ pub mod gfx {
 pub mod format {
     //! Data structures and operations for formats used by music video games.
     pub mod obj;
+    pub mod metadata;
     pub mod timeline;
     pub mod pointer;
     pub mod bms;

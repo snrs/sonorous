@@ -8,11 +8,12 @@ use std::{iter, cmp};
 use std::rand::Rng;
 
 use format::obj::*;
+use format::metadata::{Level, LevelSystemBms, Difficulty, Meta};
 use format::bms::parse;
 use format::bms::types::{Key, MAXKEY};
 use format::bms::diag::*;
 use format::bms::{ImageRef, SoundRef, DefaultBPM, BmsMeta, Bms};
-use format::bms::{SinglePlay, CouplePlay, DoublePlay, BattlePlay, Difficulty};
+use format::bms::{SinglePlay, CouplePlay, DoublePlay, BattlePlay};
 
 /// Loader options for BMS format.
 pub struct LoaderOptions {
@@ -66,7 +67,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     let mut banner = None;
     let mut basepath = None;
     let mut mode = SinglePlay;
-    let mut playlevel = 0;
+    let mut level = None;
     let mut difficulty = None;
     let mut rank = 2;
     let /*mut*/ canvassize = (256, 256);
@@ -177,7 +178,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
             parse::BmsPlayLevel(v) => {
                 if v < 0 { diag!(BmsHasNegativePLAYLEVEL at lineno); }
-                playlevel = v;
+                level = Some(Level { value: v, system: LevelSystemBms });
             }
             parse::BmsDifficulty(v) => {
                 if v < 1 || v > 5 { diag!(BmsHasDIFFICULTYOutOfRange at lineno); }
@@ -476,12 +477,13 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     builder.set_end(endt + 1.0);
 
     let timeline = builder.build();
-    Ok(Bms { bmspath: None,
-             meta: BmsMeta { encoding: encoding, title: title, subtitles: subtitles, genre: genre,
-                             artist: artist, subartists: subartists, comments: comments,
-                             stagefile: stagefile, banner: banner, basepath: basepath, mode: mode,
-                             playlevel: playlevel, difficulty: difficulty, rank: rank,
-                             sndpath: sndpath, imgpath: imgpath },
-             timeline: timeline })
+    let meta = BmsMeta {
+        common: Meta { title: title, subtitles: subtitles, genre: genre,
+                       artist: artist, subartists: subartists, comments: comments,
+                       level: level, difficulty: difficulty },
+        encoding: encoding, stagefile: stagefile, banner: banner, basepath: basepath,
+        mode: mode, rank: rank, sndpath: sndpath, imgpath: imgpath,
+    };
+    Ok(Bms { bmspath: None, meta: meta, timeline: timeline })
 }
 

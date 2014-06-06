@@ -48,7 +48,7 @@
             ],
 
             {"$text": [{"$": "meta.duration", "format": "..00:00.0"},
-                       " | Level ", {"$": "meta.playlevel"},
+                       " | Level ", {"$": "meta.level"},
                        " | BPM ", {"$": "timeline.initbpm", "format": "..0.00"},
                                   {"$$": "timeline.bpmchange", "$then": "?"},
                        " | ", {"$": "timeline.#notes"},

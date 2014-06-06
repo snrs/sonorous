@@ -34,6 +34,7 @@
 use std::fmt;
 
 use format::obj::*;
+use format::metadata::Meta;
 use format::timeline::Timeline;
 use format::pointer::Pointer;
 
@@ -102,45 +103,15 @@ pub enum PlayMode {
     BattlePlay = 4,
 }
 
-/// Difficulty level specified by the author. This maps to BMS #DIFFICULTY command. Does not affect
-/// the actual game play but affects the selection screen by grouping related BMSes.
-#[deriving(PartialEq,Eq,PartialOrd,Clone)]
-pub struct Difficulty(pub int);
-
-impl Difficulty {
-    /// Returns a string for representing the difficulty if any. This is used only for convenience.
-    pub fn name(&self) -> Option<&'static str> {
-        // this set of strings is designed to be unique in the first character and compatible to
-        // existing subtitle detection rules in other implementations.
-        match *self {
-            Difficulty(1) => Some("BEGINNER"),
-            Difficulty(2) => Some("NORMAL"),
-            Difficulty(3) => Some("HARD"),
-            Difficulty(4) => Some("EXTRA"),
-            Difficulty(5) => Some("INSANE"),
-            _ => None,
-        }
-    }
-}
-
 /// Loaded BMS metadata and resources.
 pub struct BmsMeta {
+    /// Common metadata.
+    pub common: Meta,
+
     /// The name of character encoding used by the BMS file, and its confidence between 0 and 1.
     /// Confidence is set to infinity when it is forced by the loader.
     pub encoding: (&'static str, f64),
 
-    /// Title. Maps to BMS #TITLE command.
-    pub title: Option<String>,
-    /// Subtitle(s). Maps to BMS #SUBTITLE command.
-    pub subtitles: Vec<String>,
-    /// Genre. Maps to BMS #GENRE command.
-    pub genre: Option<String>,
-    /// Artist. Maps to BMS #ARTIST command.
-    pub artist: Option<String>,
-    /// Secondary artist(s). Maps to BMS #SUBARTIST command.
-    pub subartists: Vec<String>,
-    /// Comment(s). Maps to BMS #COMMENT command.
-    pub comments: Vec<String>,
     /// Path to an image for loading screen. Maps to BMS #STAGEFILE command.
     pub stagefile: Option<String>,
     /// Path to an image for banner image for the selection screen. Maps to BMS #BANNER command.
@@ -150,11 +121,6 @@ pub struct BmsMeta {
 
     /// Game mode. Maps to BMS #PLAYER command.
     pub mode: PlayMode,
-    /// Game level specified by the author. Does not affect the actual game play. Maps to BMS
-    /// #PLAYLEVEL command.
-    pub playlevel: int,
-    /// Difficulty level specified by the author. Maps to BMS #DIFFICULTY command.
-    pub difficulty: Option<Difficulty>,
     /// Gauge difficulty. Higher is easier. Maps to BMS #RANK command.
     pub rank: int,
 

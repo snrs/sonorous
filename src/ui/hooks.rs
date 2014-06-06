@@ -4,7 +4,7 @@
 
 //! Common skin hooks for various types.
 
-use format::{timeline, bms};
+use format::{timeline, metadata, bms};
 use engine::keyspec;
 use ui::options;
 
@@ -68,21 +68,15 @@ impl Hook for timeline::TimelineInfo {
     }
 }
 
-impl Hook for bms::BmsMeta {
+impl Hook for metadata::Meta {
     fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
         match id {
-            "meta.encoding" => Some(self.encoding.val0().into_scalar()),
-            "meta.encoding.confidence" => {
-                let mut confidence = self.encoding.val1();
-                if confidence > 1.0 { confidence = 1.0; }
-                Some(confidence.into_scalar())
-            },
             "meta.title" => self.title.as_ref().map(|s| s.as_scalar()),
             "meta.genre" => self.genre.as_ref().map(|s| s.as_scalar()),
             "meta.artist" => self.artist.as_ref().map(|s| s.as_scalar()),
-            "meta.playlevel" => Some(self.playlevel.into_scalar()),
+            "meta.level" => self.level.as_ref().map(|lv| lv.value.into_scalar()),
             "meta.difficulty" => match self.difficulty {
-                Some(bms::Difficulty(diff)) => Some(diff.into_scalar()),
+                Some(metadata::Difficulty(diff)) => Some(diff.into_scalar()),
                 None => None,
             },
             _ => None,
@@ -106,23 +100,48 @@ impl Hook for bms::BmsMeta {
                 self.comments.iter().advance(|s|
                     body(&parent.add_text("meta.comment", s.as_slice()), ""));
             }
+            "meta.level" => { self.level.is_some() && body(parent, ""); }
+            "meta.levelsystem" => match self.level.as_ref().map(|lv| lv.system) {
+                Some(metadata::LevelSystemBms) => { body(parent, "bms"); }
+                None => {}
+            },
+            "meta.difficulty" => match self.difficulty {
+                Some(metadata::Difficulty(1)) => { body(parent, "beginner"); }
+                Some(metadata::Difficulty(2)) => { body(parent, "normal"); }
+                Some(metadata::Difficulty(3)) => { body(parent, "hard"); }
+                Some(metadata::Difficulty(4)) => { body(parent, "extra"); }
+                Some(metadata::Difficulty(5)) => { body(parent, "insane"); }
+                Some(metadata::Difficulty(_)) => { body(parent, "???"); }
+                None => {}
+            },
+            _ => { return false; }
+        }
+        true
+    }
+}
+
+impl Hook for bms::BmsMeta {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
+        match id {
+            "meta.encoding" => Some(self.encoding.val0().into_scalar()),
+            "meta.encoding.confidence" => {
+                let mut confidence = self.encoding.val1();
+                if confidence > 1.0 { confidence = 1.0; }
+                Some(confidence.into_scalar())
+            },
+            _ => self.common.scalar_hook(id)
+        }
+    }
+
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
+        match id {
             "meta.playmode" => match self.mode {
                 bms::SinglePlay => { body(parent, "single"); }
                 bms::CouplePlay => { body(parent, "couple"); }
                 bms::DoublePlay => { body(parent, "double"); }
                 bms::BattlePlay => { body(parent, "battle"); }
             },
-            "meta.playlevel" => { self.playlevel > 0 && body(parent, ""); }
-            "meta.difficulty" => match self.difficulty {
-                Some(bms::Difficulty(1)) => { body(parent, "beginner"); }
-                Some(bms::Difficulty(2)) => { body(parent, "normal"); }
-                Some(bms::Difficulty(3)) => { body(parent, "hard"); }
-                Some(bms::Difficulty(4)) => { body(parent, "extra"); }
-                Some(bms::Difficulty(5)) => { body(parent, "insane"); }
-                Some(bms::Difficulty(_)) => { body(parent, "???"); }
-                None => {}
-            },
-            _ => { return false; }
+            _ => { return self.common.run_block_hook(id, parent, &mut body); }
         }
         true
     }

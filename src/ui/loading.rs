@@ -272,26 +272,27 @@ impl TextualLoadingScene {
 impl Scene for TextualLoadingScene {
     fn activate(&mut self) -> SceneCommand {
         if self.context.opts.showinfo {
+            let meta = &self.context.bms.meta.common;
             printerr(format!("\
 ----------------------------------------------------------------------------------------------
 Title:    {title}",
-                    title = self.context.bms.meta.title.as_ref().map_or("", |s| s.as_slice())
+                    title = meta.title.as_ref().map_or("", |s| s.as_slice())
                 ).as_slice());
-            for subtitle in self.context.bms.meta.subtitles.iter() {
+            for subtitle in meta.subtitles.iter() {
                 printerr(format!("
           {subtitle}", subtitle = *subtitle).as_slice());
             }
             printerr(format!("
 Genre:    {genre}
 Artist:   {artist}",
-                    genre = self.context.bms.meta.genre.as_ref().map_or("", |s| s.as_slice()),
-                    artist = self.context.bms.meta.artist.as_ref().map_or("", |s| s.as_slice())
+                    genre = meta.genre.as_ref().map_or("", |s| s.as_slice()),
+                    artist = meta.artist.as_ref().map_or("", |s| s.as_slice())
                 ).as_slice());
-            for subartist in self.context.bms.meta.subartists.iter() {
+            for subartist in meta.subartists.iter() {
                 printerr(format!("
           {subartist}", subartist = *subartist).as_slice());
             }
-            for comment in self.context.bms.meta.comments.iter() {
+            for comment in meta.comments.iter() {
                 printerr(format!("
 \"{comment}\"", comment = *comment).as_slice());
             }
@@ -299,16 +300,15 @@ Artist:   {artist}",
 Level {level} | BPM {bpm:.2}{hasbpmchange} | \
 {nnotes, plural, =1{# note} other{# notes}} [{nkeys}KEY{haslongnote}{difficulty}]
 ----------------------------------------------------------------------------------------------",
-                    level = self.context.bms.meta.playlevel,
+                    level = meta.level.as_ref().map_or(0, |lv| lv.value),
                     bpm = *self.context.bms.timeline.initbpm,
                     hasbpmchange = if self.context.infos.hasbpmchange {"?"} else {""},
                     nnotes = self.context.infos.nnotes, nkeys = self.context.keyspec.nkeys(),
                     haslongnote = if self.context.infos.haslongnote {"-LN"} else {""},
                     difficulty =
-                        self.context.bms.meta.difficulty
-                            .and_then(|d| d.name()).as_ref()
-                            .map_or("".to_string(),
-                                    |name| " ".to_string().append(*name))).as_slice());
+                        meta.difficulty.and_then(|d| d.name()).as_ref()
+                                       .map_or("".to_string(),
+                                               |name| " ".to_string().append(*name))).as_slice());
         }
         Continue
     }
