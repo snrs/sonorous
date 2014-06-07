@@ -58,7 +58,7 @@
  * ~~~~
  */
 
-use collections::HashMap;
+use std::collections::HashMap;
 
 use gfx::color::{Color, Gradient};
 use gfx::skin::scalar::{Scalar, ImageScalar};

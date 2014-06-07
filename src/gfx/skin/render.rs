@@ -12,7 +12,7 @@ use std::{num, str, mem};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::io::{IoResult, MemWriter};
-use collections::HashMap;
+use std::collections::HashMap;
 
 use gl = opengles::gl2;
 use sdl_image;

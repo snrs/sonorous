@@ -9,7 +9,7 @@
 //! A (sort of) parser for Scene description language.
 
 use std::{num, result, mem};
-use collections::{TreeMap, HashMap};
+use std::collections::{TreeMap, HashMap};
 use serialize::json::{Json, Null, Boolean, Number, String, List, Object};
 use serialize::json::from_reader;
 

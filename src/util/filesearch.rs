@@ -10,7 +10,7 @@
 
 use std::{str, io};
 use std::rc::Rc;
-use collections::HashMap;
+use std::collections::HashMap;
 
 /// Context for searching files.
 pub struct SearchContext {

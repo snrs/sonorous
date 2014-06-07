@@ -5,7 +5,7 @@
 //! Global game options.
 
 use std::{char, str, io, os};
-use collections::HashMap;
+use std::collections::HashMap;
 use encoding::label::encoding_from_whatwg_label;
 
 use format::bms::load::LoaderOptions;

@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 use std::cell::RefCell;
-use collections::{Deque, DList};
+use std::collections::{Deque, DList};
 
 use sdl::{event, get_ticks};
 use format::timeline::TimelineInfo;

@@ -5,7 +5,7 @@
 //! Mapping from actual inputs to virtual inputs.
 
 use std::hash;
-use collections::HashMap;
+use std::collections::HashMap;
 use sdl::event;
 
 use format::obj::Lane;

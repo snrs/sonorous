@@ -26,7 +26,6 @@
 
 #[phase(syntax, link)] extern crate log;
 extern crate libc;
-extern crate collections;
 extern crate serialize;
 extern crate sync;
 extern crate native;
@@ -160,6 +159,7 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
 pub fn play(bmspath: &Path, opts: ui::options::Options) {
     use std::rc::Rc;
     use std::cell::RefCell;
+    use std::collections::HashMap;
 
     use ui::init::{init_audio, init_video, init_joystick};
     use ui::scene::{Scene, run_scene};
@@ -218,8 +218,7 @@ pub fn play(bmspath: &Path, opts: ui::options::Options) {
             };
         } else {
             screen = None;
-            // in this case we explicitly ignore keymaps
-            keymap = collections::HashMap::new();
+            keymap = HashMap::new(); // in this case we explicitly ignore keymaps
         }
 
         scene = if opts.is_exclusive() {
