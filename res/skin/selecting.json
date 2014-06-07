@@ -9,9 +9,23 @@
         {"$$": "entries", "$then": [
             {"$$": "entry.inverted", "$then": [
                 {"$rect": null, "at": [[0,0], ["100%",20]], "color": "white"},
-                {"$text": {"$": "entry.path"}, "at": [2,2], "size": 16, "color": "black"}
+                {"$$": "entry.meta", "$then": [
+                    {"$text": {"$$": "meta.level",
+                               "$then": {"$": "meta.level", "format": "00"}, "$else": "--"},
+                     "at": [2,2], "size": 16, "color": "gray"},
+                    {"$text": {"$": "meta.title"}, "at": [26,2], "size": 16, "color": "black"}
+                 ], "$else": [
+                    {"$text": {"$": "entry.path"}, "at": [2,2], "size": 16, "color": "#444"}
+                 ]}
             ], "$else": [
-                {"$text": {"$": "entry.path"}, "at": [2,2], "size": 16, "color": "white"}
+                {"$$": "entry.meta", "$then": [
+                    {"$text": {"$$": "meta.level",
+                               "$then": {"$": "meta.level", "format": "00"}, "$else": "--"},
+                     "at": [2,2], "size": 16, "color": "gray"},
+                    {"$text": {"$": "meta.title"}, "at": [26,2], "size": 16, "color": "white"}
+                 ], "$else": [
+                    {"$text": {"$": "entry.path"}, "at": [2,2], "size": 16, "color": "#ccc"}
+                 ]}
             ]},
             {"$$": "entry.hash", "$then": [
                 {"$text": {"$": "entry.hash"},

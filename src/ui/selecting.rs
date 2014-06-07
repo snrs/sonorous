@@ -13,6 +13,7 @@ use sync::{Arc, RWLock};
 
 use sdl::{event, get_ticks};
 use format::timeline::TimelineInfo;
+use format::metadata::Meta;
 use format::bms;
 use format::bms::Bms;
 use util::filesearch::SearchContext;
@@ -122,6 +123,8 @@ pub struct Entry {
     pub path: Path,
     /// MD5 hash. Only present when it has been read.
     pub hash: Option<[u8, ..16]>,
+    /// TODO doc
+    pub meta: Option<Meta>,
 }
 
 /// Song/pattern selection scene context. Used when the directory path is specified.
@@ -474,7 +477,7 @@ impl Scene for SelectingScene {
                         self.preloaded = PreloadAfter(0);
                     }
                     for path in paths.move_iter() {
-                        self.files.push(Entry { path: path, hash: None });
+                        self.files.push(Entry { path: path, hash: None, meta: None });
                     }
                 }
                 Ok(NoMoreFiles) => {
@@ -490,6 +493,8 @@ impl Scene for SelectingScene {
                 }
                 Ok(BmsLoaded(bmspath,preproc,messages)) => {
                     if !self.is_current(&bmspath) { continue; }
+                    self.files.as_mut_slice()[self.offset].meta =
+                        Some(preproc.bms.meta.common.clone());
                     self.preloaded = Preloaded(PreloadedData::new(preproc, messages));
                 }
                 Ok(BmsBannerLoaded(bmspath,imgpath,prepared)) => {
@@ -662,7 +667,8 @@ impl<'a> Hook for (&'a SelectingScene, bool, &'a Entry) {
                 Some(path.display().to_str().into_scalar())
             },
             "entry.hash" => entry.hash.map(|h| h.to_hex().into_scalar()),
-            _ => scene.scalar_hook(id)
+            _ => entry.meta.as_ref().and_then(|meta| meta.scalar_hook(id))
+                      .or_else(|| scene.scalar_hook(id))
         }
     }
 
@@ -670,8 +676,10 @@ impl<'a> Hook for (&'a SelectingScene, bool, &'a Entry) {
         let (scene, inverted, entry) = *self;
         match id {
             "entry.hash" => { entry.hash.is_some() && body(parent, ""); }
+            "entry.meta" => { entry.meta.is_some() && body(parent, ""); }
             "entry.inverted" => { inverted && body(parent, ""); }
-            _ => { return scene.run_block_hook(id, parent, &mut body); }
+            _ => { return entry.meta.run_block_hook(id, parent, &mut body) ||
+                          scene.run_block_hook(id, parent, &mut body); }
         }
         true
     }

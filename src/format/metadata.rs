@@ -48,6 +48,7 @@ impl Difficulty {
 }
 
 /// Common metadata for music data formats.
+#[deriving(Clone)]
 pub struct Meta {
     /// Title.
     pub title: Option<String>,
