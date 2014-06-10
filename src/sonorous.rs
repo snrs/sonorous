@@ -24,7 +24,7 @@
 #![comment = "Sonorous"]
 #![license = "GPLv2+"]
 
-#[phase(syntax, link)] extern crate log;
+#[phase(plugin, link)] extern crate log;
 extern crate libc;
 extern crate serialize;
 extern crate sync;

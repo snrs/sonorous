@@ -12,7 +12,7 @@ use std::{fmt, hash};
 use std::clone::Clone;
 use std::cmp::{PartialEq, Eq, PartialOrd, Ord, Equiv};
 use std::cmp::Ordering;
-use std::container::Container;
+use std::collections::Collection;
 use std::default::Default;
 use std::slice::Vector;
 
@@ -118,7 +118,7 @@ impl<'r,T:Ord> Ord for MaybeOwnedVec<'r,T> {
     }
 }
 
-impl<'r,T> Container for MaybeOwnedVec<'r,T> {
+impl<'r,T> Collection for MaybeOwnedVec<'r,T> {
     #[inline]
     fn len(&self) -> uint { self.as_slice().len() }
 }
