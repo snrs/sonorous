@@ -544,9 +544,9 @@ impl Scene for PlayingScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(~self) -> Box<Scene>: {
+    fn consume(~self) -> Box<Scene> {
         let PlayingScene { screen, player, .. } = *self;
-        PlayResultScene::new(screen, player) as Box<Scene>:
+        PlayResultScene::new(screen, player) as Box<Scene>
     }
 }
 

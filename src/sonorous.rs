@@ -177,7 +177,7 @@ pub fn play(bmspath: &Path, opts: ui::options::Options) {
         init_audio();
         for &joyidx in opts.joystick.iter() { init_joystick(joyidx); }
         let screen = Rc::new(RefCell::new(init_video(false, opts.fullscreen)));
-        scene = SelectingScene::new(screen, bmspath, wrap_opts(opts)) as Box<Scene>:
+        scene = SelectingScene::new(screen, bmspath, wrap_opts(opts)) as Box<Scene>
     } else {
         if opts.debug_dumpbmscommand || opts.debug_dumpbmscommandfull {
             dump_bmscommand(bmspath, opts.debug_dumpbmscommandfull,
@@ -223,10 +223,10 @@ pub fn play(bmspath: &Path, opts: ui::options::Options) {
 
         scene = if opts.is_exclusive() {
             TextualLoadingScene::new(screen, bms, infos,
-                                     keyspec, keymap, wrap_opts(opts)) as Box<Scene>:
+                                     keyspec, keymap, wrap_opts(opts)) as Box<Scene>
         } else {
             LoadingScene::new(screen.unwrap(), bms, infos,
-                              keyspec, keymap, wrap_opts(opts)) as Box<Scene>:
+                              keyspec, keymap, wrap_opts(opts)) as Box<Scene>
         };
     }
 

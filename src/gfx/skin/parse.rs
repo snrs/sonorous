@@ -70,9 +70,10 @@ fn treemap_keys(map: &TreeMap<String,Json>) -> String {
 macro_rules! ensure_empty(
     ($map:expr, $i:expr) => (
         if !$map.is_empty() {
-            return Err(format!("{} has {, plural, =1{an unexpected key} \
-                                               other{unexpected keys}}: {}",
-                               $i, $map.len(), treemap_keys($map)));
+            return Err(format!("{} has {}: {}",
+                               $i,
+                               if $map.len() == 1 {"an unexpected key"} else {"unexpected keys"},
+                               treemap_keys($map)));
         }
     )
 )

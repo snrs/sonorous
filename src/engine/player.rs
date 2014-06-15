@@ -552,7 +552,8 @@ impl Player {
             Some(ref reverse) => {
                 assert!(*self.bpm < 0.0 && curtime >= reverse.loc.time);
                 let newpos = reverse.loc.pos + self.bpm.sec_to_measure(curtime - reverse.loc.time);
-                self.cur.seek(ActualPos, newpos - self.cur.loc.pos);
+                let posdiff = newpos - self.cur.loc.pos; // XXX #6268
+                self.cur.seek(ActualPos, posdiff);
             }
             None => {
                 // apply object-like effects while advancing `self.cur`

@@ -360,7 +360,7 @@ impl SelectingScene {
 
     /// Creates a new `LoadingScene` from the currently selected entry. It will load the BMS file
     /// or use the preloaded data if possible.
-    pub fn create_loading_scene(&mut self) -> Option<Box<Scene>:> {
+    pub fn create_loading_scene(&mut self) -> Option<Box<Scene>> {
         use std::mem::replace;
 
         let preloaded = replace(&mut self.preloaded, PreloadAfter(0));
@@ -394,7 +394,7 @@ impl SelectingScene {
             Err(err) => die!("{}", err)
         };
         Some(LoadingScene::new(self.screen.clone(), bms, infos,
-                               keyspec, keymap, self.opts.clone()) as Box<Scene>:)
+                               keyspec, keymap, self.opts.clone()) as Box<Scene>)
     }
 }
 
@@ -418,17 +418,20 @@ impl Scene for SelectingScene {
                 // navigation
                 event::KeyEvent(event::UpKey,true,_,_) => {
                     if self.offset > 0 {
-                        self.update_offset(self.offset - 1);
+                        let offset = self.offset - 1; // XXX #6268
+                        self.update_offset(offset);
                     }
                 }
                 event::KeyEvent(event::DownKey,true,_,_) => {
                     if self.offset + 1 < self.files.len() {
-                        self.update_offset(self.offset + 1);
+                        let offset = self.offset + 1; // XXX #6268
+                        self.update_offset(offset);
                     }
                 }
                 event::KeyEvent(event::PageUpKey,true,_,_) => {
                     if self.offset > (NUMENTRIES-1) - 1 {
-                        self.update_offset(self.offset - (NUMENTRIES-1));
+                        let offset = self.offset - (NUMENTRIES-1); // XXX #6268
+                        self.update_offset(offset);
                     } else if self.offset > 0 {
                         self.update_offset(0);
                     }
@@ -436,7 +439,8 @@ impl Scene for SelectingScene {
                 event::KeyEvent(event::PageDownKey,true,_,_) => {
                     let nfiles = self.files.len();
                     if self.offset + (NUMENTRIES-1) < nfiles {
-                        self.update_offset(self.offset + (NUMENTRIES-1));
+                        let offset = self.offset + (NUMENTRIES-1); // XXX #6268
+                        self.update_offset(offset);
                     } else if self.offset + 1 < nfiles {
                         self.update_offset(nfiles - 1);
                     }
@@ -556,7 +560,7 @@ impl Scene for SelectingScene {
         *self.keepgoing.write() = false;
     }
 
-    fn consume(~self) -> Box<Scene>: { fail!("unreachable"); }
+    fn consume(~self) -> Box<Scene> { fail!("unreachable"); }
 }
 
 ////////////////////////////////////////////////////////////////////////

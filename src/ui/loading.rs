@@ -242,11 +242,11 @@ impl Scene for LoadingScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(~self) -> Box<Scene>: {
+    fn consume(~self) -> Box<Scene> {
         let LoadingScene { context, screen, .. } = *self;
         let (player, imgres) = context.to_player();
         match PlayingScene::new(player, screen, imgres) {
-            Ok(scene) => scene as Box<Scene>:,
+            Ok(scene) => scene as Box<Scene>,
             Err(err) => die!("{}", err),
         }
     }
@@ -298,12 +298,14 @@ Artist:   {artist}",
             }
             printerrln(format!("
 Level {level} | BPM {bpm:.2}{hasbpmchange} | \
-{nnotes, plural, =1{# note} other{# notes}} [{nkeys}KEY{haslongnote}{difficulty}]
+{nnotes} {nnotes_text} [{nkeys}KEY{haslongnote}{difficulty}]
 ----------------------------------------------------------------------------------------------",
                     level = meta.level.as_ref().map_or(0, |lv| lv.value),
                     bpm = *self.context.bms.timeline.initbpm,
                     hasbpmchange = if self.context.infos.hasbpmchange {"?"} else {""},
-                    nnotes = self.context.infos.nnotes, nkeys = self.context.keyspec.nkeys(),
+                    nnotes = self.context.infos.nnotes,
+                    nnotes_text = if self.context.infos.nnotes == 1 {"note"} else {"notes"},
+                    nkeys = self.context.keyspec.nkeys(),
                     haslongnote = if self.context.infos.haslongnote {"-LN"} else {""},
                     difficulty =
                         meta.difficulty.and_then(|d| d.name()).as_ref()
@@ -340,12 +342,12 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
         }
     }
 
-    fn consume(~self) -> Box<Scene>: {
+    fn consume(~self) -> Box<Scene> {
         let TextualLoadingScene { context, screen } = *self;
         let (player, imgres) = context.to_player();
         match screen {
-            Some(screen) => ViewingScene::new(screen, imgres, player) as Box<Scene>:,
-            None => TextualViewingScene::new(player) as Box<Scene>:,
+            Some(screen) => ViewingScene::new(screen, imgres, player) as Box<Scene>,
+            None => TextualViewingScene::new(player) as Box<Scene>,
         }
     }
 }

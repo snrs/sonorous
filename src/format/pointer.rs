@@ -399,8 +399,9 @@ impl<S,I> Pointer<S,I> {
     pub fn mut_upto<'r>(&'r mut self, end: &Pointer<S,I>) -> MutUptoIterator<'r,S,I> {
         assert!(has_same_timeline(self, end));
         let donotupdate = self.index > end.index || self.loc > end.loc;
+        let index = self.index; // XXX #6268
         MutUptoIterator { ptr: self, finished: donotupdate, lastloc: None,
-                          cur: self.index, end: end.index, endloc: end.loc.clone() }
+                          cur: index, end: end.index, endloc: end.loc.clone() }
     }
 
     /// Iterates objects until the object is no less than `delta` measures/seconds away from
@@ -410,8 +411,9 @@ impl<S,I> Pointer<S,I> {
     pub fn mut_until<'r>(&'r mut self, axis: ObjAxis, delta: f64) -> MutUntilIterator<'r,S,I> {
         let donotupdate = delta <= 0.0;
         let pos = self.loc[axis] + delta;
+        let index = self.index; // XXX #6268
         MutUntilIterator { ptr: self, finished: donotupdate, lastloc: None,
-                           cur: self.index, axis: axis, endpos: pos }
+                           cur: index, axis: axis, endpos: pos }
     }
 
     /// Finds the next object that satisfies given condition if any, without updating itself.
