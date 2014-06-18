@@ -28,6 +28,7 @@ use gfx::skin::render::Renderer;
 use engine::input::read_keymap;
 use engine::keyspec::{KeySpec, key_spec};
 use engine::resource::{SearchContextAdditions, LoadedImageResource, LoadedImage};
+use engine::cache::MetadataCache;
 use engine::player::apply_modf;
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PushScene, PopScene, Exit};
 use ui::options::Options;
@@ -123,7 +124,7 @@ pub struct Entry {
     pub path: Path,
     /// MD5 hash. Only present when it has been read.
     pub hash: Option<[u8, ..16]>,
-    /// TODO doc
+    /// Loaded metadata if any.
     pub meta: Option<Meta>,
 }
 
@@ -215,23 +216,31 @@ impl SelectingScene {
         let sender = self.sender.clone();
         let sender_ = self.sender.clone();
         let keepgoing = self.keepgoing.clone();
+        let dataroot = self.opts.dataroot.clone();
+        let metadatacache = self.opts.metadatacache.clone();
         spawn_worker_task("scanner", proc() {
-            fn recur(search: &mut SearchContext, root: Path,
+            fn recur(cache: &MetadataCache, root: Path,
                      sender: &Sender<Message>, keepgoing: &Arc<RWLock<bool>>) -> bool {
                 if !*keepgoing.read() { return false; }
 
-                let (dirs, files) = {
-                    let (dirs, files) = search.get_entries(&root);
-                    (dirs.to_owned(), files.iter().map(|e| e.clone()).filter(is_bms_file).collect())
-                }; // so that we can reborrow `search`
+                let (dirs, files) = match cache.get_entries(&root) {
+                    Ok((dirs, files)) => (dirs, files.move_iter().filter(is_bms_file).collect()),
+                    Err(err) => {
+                        warn!("scanner failed to read {}: {}", root.display(), err);
+                        (Vec::new(), Vec::new())
+                    }
+                };
                 sender.send(PushFiles(files));
                 for dir in dirs.move_iter() {
-                    if !recur(search, dir, sender, keepgoing) { return false; }
+                    if !recur(cache, dir, sender, keepgoing) { return false; }
                 }
                 true
             }
-            let mut search = SearchContext::new();
-            if recur(&mut search, root.clone(), &sender, &keepgoing) {
+            let cache = match metadatacache {
+                Some(ref cache) => MetadataCache::open(dataroot, cache),
+                None => MetadataCache::open_in_memory(dataroot),
+            };
+            if recur(&cache.unwrap(), root.clone(), &sender, &keepgoing) {
                 sender.send(NoMoreFiles);
             }
         }, proc() {

@@ -92,6 +92,7 @@ pub mod engine {
     pub mod keyspec;
     pub mod input;
     pub mod resource;
+    pub mod cache;
     pub mod player;
 }
 
@@ -271,6 +272,8 @@ Options:
   -M, --no-movie          Do not load and show the BGA movie
   -j N, --joystick N      Enables the joystick with index N (normally 0)
   -E ENCODING             Forces the use of specified encoding
+  -D PATH, --database-root PATH
+                          Sets the database path which should be writable
   -Y PATH, --skin-root PATH
                           Sets the skin lookup path (default: <root>/res/skin)
   -Z OPTION               Enables the specified debugging option

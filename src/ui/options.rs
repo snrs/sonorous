@@ -81,8 +81,12 @@ pub struct Options {
     pub playspeed: f64,
     /// A character encoding *name* forced to the loader.
     pub encoding: Option<String>,
+    /// A root path to the data files. This is used to normalize the cached path.
+    pub dataroot: Path,
     /// A root path to the skin.
     pub skinroot: Path,
+    /// A path to the metadata cache file. When omitted it redirects to the in-memory database.
+    pub metadatacache: Option<Path>,
 
     /// If set, prints the recognized BMS commands after parsing and exits.
     pub debug_dumpbmscommandfull: bool,
@@ -151,10 +155,12 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
         ("--random", 'r'), ("--random-ex", 'R'), ("--preset", 'k'),
         ("--key-spec", 'K'), ("--bga", ' '), ("--no-bga", 'B'),
         ("--movie", ' '), ("--no-movie", 'M'), ("--joystick", 'j'),
-        ("--encoding", 'E'), ("--skin-root", 'Y'), ("--debug", 'Z')
+        ("--encoding", 'E'), ("--database-root", 'D'), ("--skin-root", 'Y'),
+        ("--debug", 'Z')
     ).move_iter().collect();
 
     let nargs = args.len();
+    let selforcwd = os::self_exe_path().unwrap_or(Path::new("."));
 
     let mut bmspath = None;
     let mut mode = PlayMode;
@@ -168,7 +174,9 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
     let mut rightkeys = None;
     let mut playspeed = 1.0;
     let mut encoding = None;
-    let mut skinroot = os::self_exe_path().unwrap_or(Path::new(".")).join_many(["res", "skin"]);
+    let mut skinroot = selforcwd.join_many(["res", "skin"]);
+    let mut dataroot = selforcwd.clone();
+    let mut metadatacache = None;
     let mut debug_dumpbmscommandfull = false;
     let mut debug_dumpbmscommand = false;
     let mut debug_dumptimeline = false;
@@ -262,6 +270,16 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                             None => { return Error(format!("Invalid encoding name: {}", arg)); }
                         }
                     }
+                    'D' => {
+                        let arg = fetch_arg!('D');
+                        match Path::new_opt(arg.as_slice()) {
+                            Some(path) => {
+                                metadatacache = Some(path.join("metadata.db"));
+                                dataroot = path;
+                            }
+                            None => { return Error(format!("Invalid database path: {}", arg)); }
+                        }
+                    }
                     'Y' => {
                         let arg = fetch_arg!('Y');
                         match Path::new_opt(arg.as_slice()) {
@@ -303,7 +321,9 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
             leftkeys: leftkeys, rightkeys: rightkeys,
             playspeed: playspeed,
             encoding: encoding,
+            dataroot: dataroot,
             skinroot: skinroot,
+            metadatacache: metadatacache,
             debug_dumpbmscommandfull: debug_dumpbmscommandfull,
             debug_dumpbmscommand: debug_dumpbmscommand,
             debug_dumptimeline: debug_dumptimeline,
