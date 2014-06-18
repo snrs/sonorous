@@ -205,7 +205,7 @@ impl Scene for TextualViewingScene {
         update_line("");
     }
 
-    fn consume(~self) -> Box<Scene>: { fail!("unreachable"); }
+    fn consume(~self) -> Box<Scene> { fail!("unreachable"); }
 }
 
 /// BGA-only viewing scene context. Used for the exclusive mode with BGA enabled.
@@ -260,6 +260,6 @@ impl Scene for ViewingScene {
 
     fn deactivate(&mut self) { self.parent.deactivate() }
 
-    fn consume(~self) -> Box<Scene>: { fail!("unreachable"); }
+    fn consume(~self) -> Box<Scene> { fail!("unreachable"); }
 }
 
