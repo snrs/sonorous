@@ -95,6 +95,7 @@ struct State<'a> {
 }
 
 impl<'a> State<'a> {
+    /// Creates a new render state, with a clipping region of the whole screen.
     fn new(renderer: &'a mut Renderer, screen: &'a mut Screen) -> State<'a> {
         let initclip = ClipRect { dx: 0.0, dy: 0.0,
                                   w: screen.width as f32, h: screen.height as f32 };
@@ -102,6 +103,7 @@ impl<'a> State<'a> {
                 draw: RefCell::new(ToBeDrawn), clip: Cell::new(initclip) }
     }
 
+    /// Evaluates an expression.
     fn expr(&self, _hook: &Hook, pos: &Expr, reference: f32) -> f32 {
         match *pos {
             ENum(v) => v,
@@ -109,16 +111,23 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Evaluates a position.
     fn pos(&self, hook: &Hook, pos: &Pos) -> (f32, f32) {
         let clip = self.clip.get();
         (clip.dx + self.expr(hook, &pos.x, clip.w),
          clip.dy + self.expr(hook, &pos.y, clip.h))
     }
 
+    /// Evaluates a rectangle.
     fn rect(&self, hook: &Hook, rect: &Rect) -> ((f32, f32), (f32, f32)) {
         (self.pos(hook, &rect.p), self.pos(hook, &rect.q))
     }
 
+    /// Given a block call generator, calls `body` zero or more times.
+    /// Returns true if there were a matching identifier (no matter `body` has been called or not).
+    ///
+    /// The `body` receives the inner hook object and the optional variant string
+    /// (defaults to an empty string), and can return `false` to stop the iteration.
     fn gen(&self, hook: &Hook, gen: &Gen, body: |&Hook, &str| -> bool) -> bool {
         match *gen {
             HookGen(ref id) => hook.block_hook(id.as_slice(), hook, body),
@@ -143,6 +152,11 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Processes block nodes (`{"$$": "id", ...}`) by calling `body` zero or more times.
+    /// Returns true if there were a matching identifier (no matter `body` has been called or not).
+    ///
+    /// The `body` receives the inner hook object and the optional variant string
+    /// (defaults to an empty string), and can return `false` to stop the iteration.
     fn block<T>(&self, hook: &Hook, block: &Block<T>, body: |&Hook, &T| -> bool) {
         match *block {
             CondBlock { ref gen, ref then, ref else_ } => {
@@ -187,6 +201,7 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Formats the scalar value with given format specification (`{"$": ..., "format": "..."}`).
     fn scalar_format<'a>(&self, scalar: Scalar<'a>, fmt: &ScalarFormat,
                          out: &mut Writer) -> IoResult<()> {
         fn to_f64<'a>(scalar: Scalar<'a>) -> Option<f64> {
@@ -260,6 +275,7 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Processes text fragments (`"foo"`, `{"$": "id"}` etc.) and renders it to given `Writer`.
     fn text_source<'a>(&self, hook: &'a Hook, text: &'a TextSource,
                        out: &mut Writer) -> IoResult<()> {
         match *text {
@@ -291,6 +307,7 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Processes texts (`{"$text": ..., ...}`) and renders it as a `MaybeOwned` string.
     fn text<'a>(&self, hook: &'a Hook, text: &'a TextSource) -> str::MaybeOwned<'a> {
         let mut out = MemWriter::new();
         match self.text_source(hook, text, &mut out) {
@@ -304,6 +321,9 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Processes texture references (`{"$rect": "tex", ...}`) and calls the callback with
+    /// an appropriate reference-counted reference to the texture if any.
+    /// `callback` gets called at most once.
     fn texture<'a,T>(&'a self, hook: &'a Hook, id: &str,
                      callback: |Option<&Rc<Texture2D>>| -> T) -> T {
         let mut rendererref = self.renderer.borrow_mut();
@@ -331,6 +351,7 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Commits the current draw call to given screen.
     fn commit_to(&self, draw: ActiveDraw, screen: &mut Screen) {
         match draw {
             ToBeDrawn => {}
@@ -340,6 +361,9 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Draws to the screen by committing when only needed.
+    /// `try_to_draw` should return `None` when the current draw call has to be committed;
+    /// `new_draw` should return a new draw call from given screen.
     fn draw_or_commit<T>(&self, try_to_draw: |&mut ActiveDraw| -> Option<T>,
                          new_draw: |&mut Screen| -> ActiveDraw) -> T {
         let mut drawref = self.draw.borrow_mut();
@@ -360,24 +384,29 @@ impl<'a> State<'a> {
         }
     }
 
+    /// Commits any remaining active draw call.
     fn finish(&self) {
         self.draw_or_commit(
             |draw| match draw { &ToBeDrawn => Some(()), _ => None },
             |_screen| ToBeDrawn);
     }
 
+    /// Forces a `ShadedLines` draw call and calls a callback with the associated drawing.
     fn shaded_lines<T>(&self, f: |&mut ShadedDrawing| -> T) -> T {
         self.draw_or_commit(
             |draw| match draw { &ShadedLines(ref mut d) => Some(f(d)), _ => None },
             |_screen| ShadedLines(ShadedDrawing::new(gl::LINES)))
     }
 
+    /// Forces a `Shaded` draw call and calls a callback with the associated drawing.
     fn shaded<T>(&self, f: |&mut ShadedFontDrawing| -> T) -> T {
         self.draw_or_commit(
             |draw| match draw { &Shaded(ref mut d) => Some(f(d)), _ => None },
             |screen| Shaded(ShadedFontDrawing::new(gl::TRIANGLES, screen.font.clone())))
     }
 
+    /// Forces a `Textured` draw call with given texture
+    /// and calls a callback with the associated drawing.
     fn textured<T>(&self, tex: &Rc<Texture2D>, f: |&mut TexturedDrawing| -> T) -> T {
         self.draw_or_commit(
             |draw| match draw {
@@ -393,6 +422,8 @@ impl<'a> State<'a> {
             })
     }
 
+    /// Processes and renders nodes.
+    /// Returns `false` when the current render should jump out of the innermost clipping group.
     fn nodes(&self, hook: &Hook, nodes: &[Node]) -> bool {
         for node in nodes.iter() {
             match *node {
@@ -452,14 +483,16 @@ impl<'a> State<'a> {
                     self.clip.set(newclip);
                     if newclip.w <= 0.0 || newclip.h <= 0.0 {
                         // no need to render past this node.
-                        // XXX this should propagate to parent nodes up to the innermost group
                         return false;
                     }
                 }
                 Block(ref block) => {
+                    let mut keepgoing = true;
                     self.block(hook, block, |hook_, nodes_| {
-                        self.nodes(hook_, nodes_.as_slice())
+                        keepgoing = self.nodes(hook_, nodes_.as_slice());
+                        keepgoing
                     });
+                    if !keepgoing { return false; }
                 }
             }
         }
