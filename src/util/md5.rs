@@ -377,7 +377,7 @@ impl<'r> ToHex for &'r [u8] {
     fn to_hex(&self) -> String {
         // XXX not quite fast.
         let mut ret = String::new();
-        static HEXDIGITS: &'static [u8] = bytes!("0123456789abcdef");
+        static HEXDIGITS: &'static [u8] = b"0123456789abcdef";
         for &c in self.iter() {
             ret.push_char(HEXDIGITS[(c >> 4) as uint] as char);
             ret.push_char(HEXDIGITS[(c & 15) as uint] as char);

@@ -250,9 +250,29 @@ impl<'r> SurfacePixels<'r> {
         Color::from_mapped(self.pixels[x + y * self.pitch], self.fmt)
     }
 
+    /// Returns a pixel at given position, only when the position is valid.
+    pub fn get_pixel_checked(&self, x: uint, y: uint) -> Option<Color> {
+        if x < self.width && y < self.height {
+            Some(self.get_pixel(x, y))
+        } else {
+            None
+        }
+    }
+
     /// Sets a pixel to given position. (C: `putpixel`)
     pub fn put_pixel(&mut self, x: uint, y: uint, c: Color) {
         self.pixels[x + y * self.pitch] = c.to_mapped(self.fmt);
+    }
+
+    /// Sets a pixel to given position, only when the position is valid.
+    /// Returns true when the pixel has really been set.
+    pub fn put_pixel_checked(&mut self, x: uint, y: uint, c: Color) -> bool {
+        if x < self.width && y < self.height {
+            self.put_pixel(x, y, c);
+            true
+        } else {
+            false
+        }
     }
 
     /// Sets or blends (if `c` is `RGBA`) a pixel to given position. (C: `putblendedpixel`)
@@ -267,5 +287,18 @@ impl<'r> SurfacePixels<'r> {
             }
         }
     }
+
+    /// Sets or blends (if `c` is `RGBA`) a pixel to given position,
+    /// only when the position is valid.
+    /// Returns true when the pixel has really been set.
+    pub fn put_blended_pixel_checked(&mut self, x: uint, y: uint, c: Color) -> bool {
+        if x < self.width && y < self.height {
+            self.put_blended_pixel(x, y, c);
+            true
+        } else {
+            false
+        }
+    }
+
 }
 

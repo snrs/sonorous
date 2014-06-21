@@ -33,42 +33,28 @@ fn test_encode_path() {
     }
 
     let root = path([".", "a", "b"]);
-    assert_eq!(encode_path(&root, &path([".", "c", "d"])).as_slice(),
-               bytes!(".\0..\0..\0c\0d"));
-    assert_eq!(encode_path(&root, &path([".", "c", "d", ""])).as_slice(),
-               bytes!(".\0..\0..\0c\0d"));
-    assert_eq!(encode_path(&root, &path([".", "a", "e"])).as_slice(),
-               bytes!(".\0..\0e"));
-    assert_eq!(encode_path(&root, &path([".", "a", "b", "f"])).as_slice(),
-               bytes!(".\0f"));
+    assert_eq!(encode_path(&root, &path([".", "c", "d"])).as_slice(), b".\0..\0..\0c\0d");
+    assert_eq!(encode_path(&root, &path([".", "c", "d", ""])).as_slice(), b".\0..\0..\0c\0d");
+    assert_eq!(encode_path(&root, &path([".", "a", "e"])).as_slice(), b".\0..\0e");
+    assert_eq!(encode_path(&root, &path([".", "a", "b", "f"])).as_slice(), b".\0f");
 
     if cfg!(target_os = "win32") {
-        assert_eq!(encode_path(&root, &path(["\\", "x", "y", "z"])).as_slice(),
-                   bytes!("\\\0x\0y\0z"));
-        assert_eq!(encode_path(&root, &path(["C:\\", "x", "y", "z"])).as_slice(),
-                   bytes!("C:\\\0x\0y\0z"));
-        assert_eq!(encode_path(&root, &path(["c:\\", "x", "y", "z"])).as_slice(),
-                   bytes!("C:\\\0x\0y\0z"));
-        assert_eq!(encode_path(&root, &path(["C:.", "x", "y", "z"])).as_slice(),
-                   bytes!("C:\0x\0y\0z"));
-        assert_eq!(encode_path(&root, &path(["c:.", "x", "y", "z"])).as_slice(),
-                   bytes!("C:\0x\0y\0z"));
+        assert_eq!(encode_path(&root, &path(["\\", "x", "y", "z"])).as_slice(), b"\\\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["C:\\", "x", "y", "z"])).as_slice(), b"C:\\\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["c:\\", "x", "y", "z"])).as_slice(), b"C:\\\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["C:.", "x", "y", "z"])).as_slice(), b"C:\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["c:.", "x", "y", "z"])).as_slice(), b"C:\0x\0y\0z");
 
         let absroot = path(["C:\\", "a", "b"]);
-        assert_eq!(encode_path(&absroot, &path(["C:\\", "c", "d"])).as_slice(),
-                   bytes!(".\0..\0..\0c\0d"));
-        assert_eq!(encode_path(&absroot, &path(["D:\\", "c", "d"])).as_slice(),
-                   bytes!("D:\\\0c\0d"));
+        assert_eq!(encode_path(&absroot, &path(["C:\\", "c", "d"])).as_slice(), b".\0..\0..\0c\0d");
+        assert_eq!(encode_path(&absroot, &path(["D:\\", "c", "d"])).as_slice(), b"D:\\\0c\0d");
     } else {
-        assert_eq!(encode_path(&root, &path(["/", "x", "y", "z"])).as_slice(),
-                   bytes!("/\0x\0y\0z"));
+        assert_eq!(encode_path(&root, &path(["/", "x", "y", "z"])).as_slice(), b"/\0x\0y\0z");
 
         let absroot = path(["/", "a", "b"]);
-        assert_eq!(encode_path(&absroot, &path(["/", "c", "d"])).as_slice(),
-                   bytes!(".\0..\0..\0c\0d"));
+        assert_eq!(encode_path(&absroot, &path(["/", "c", "d"])).as_slice(), b".\0..\0..\0c\0d");
         // this is why the caller should use the absolute path if possible
-        assert_eq!(encode_path(&absroot, &path([".", "c", "d"])).as_slice(),
-                   bytes!(".\0c\0d"));
+        assert_eq!(encode_path(&absroot, &path([".", "c", "d"])).as_slice(), b".\0c\0d");
     }
 }
 
@@ -119,7 +105,6 @@ impl<'a> Transaction<'a> {
     }
 }
 
-// Rust: ICE workarounds. unsure why #[unsafe_destructor] suppresses ICE. (#13853)
 #[unsafe_destructor]
 impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {

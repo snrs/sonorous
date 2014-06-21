@@ -306,8 +306,6 @@ fn is_whitespace_or_similar(c: char) -> bool {
 
 /// The main BMS parser.
 pub struct Parser<'r> {
-    /// A reference to the file.
-    f: &'r mut Reader,
     /// Parser options.
     opts: &'r ParserOptions,
     /// The file contents decoded with a detected encoding.
@@ -343,7 +341,7 @@ impl<'r> Parser<'r> {
             Some(enc) => (decode_stream(f, enc), enc, f64::INFINITY),
             None => guess_decode_stream(f),
         };
-        Parser { f: f, opts: opts, file: file, encoding: (encoding.name(), confidence) }
+        Parser { opts: opts, file: file, encoding: (encoding.name(), confidence) }
     }
 
     /// Returns a parsing iterator over this BMS file.

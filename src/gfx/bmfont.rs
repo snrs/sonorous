@@ -39,39 +39,6 @@ struct FontPolygon {
 
 /// 8x16 resizable bitmap font.
 pub struct Font {
-    /**
-     * Font data used for zoomed font reconstruction. This is actually an array of `u32`
-     * elements, where the first `u16` element forms upper 16 bits and the second forms lower
-     * 16 bits. It is reinterpreted for better compression.
-     *
-     * One glyph has 16 `u32` elements for each row from the top to the bottom. One `u32`
-     * element contains eight four-bit groups for each column from the left (lowermost group)
-     * to the right (uppermost group). Each group is a bitwise OR of following bits:
-     *
-     * - 1: the lower right triangle of the zoomed pixel should be drawn.
-     * - 2: the lower left triangle of the zoomed pixel should be drawn.
-     * - 4: the upper right triangle of the zoomed pixel should be drawn.
-     * - 8: the upper left triangle of the zoomed pixel should be drawn.
-     *
-     * So for example, if the group bits read 3 (1+2), the zoomed pixel would be drawn
-     * as follows (in the zoom factor 5):
-     *
-     *     .....
-     *     #...#
-     *     ##.##
-     *     #####
-     *     #####
-     *
-     * The group bits 15 (1+2+4+8) always draw the whole square, so in the zoom factor 1 only
-     * pixels with group bits 15 will be drawn.
-     */
-    glyphs: Vec<u16>,
-
-    /// Precalculated zoomed font per zoom factor. It is three-dimensional array which indices
-    /// are zoom factor, glyph number and row respectively. Assumes that each element has
-    /// at least zoom factor times 8 (columns per row) bits.
-    pixels: Vec<Vec<Vec<ZoomedFontRow>>>,
-
     /// Precalculated polygons for glyphs.
     polygons: Vec<Vec<FontPolygon>>,
 }
@@ -116,7 +83,33 @@ impl Font {
              Zf@UWb6>eX:GWk<&J&J7[c&&JTJTb$G?o`c~i$m`k@U:EW.O(v`T2Tb$a[Fp`M+eZ,M=UWCO-u`Q:RWGO.A(\
              M$U!Ck@a[]!G8.M(U$[!Ca[i:78&J&Jc$%[g*7?e<g0w$cD#iVAg*$[g~dB]NaaPGft~!f!7[.W(O";
 
-        /// Decompresses a font data from `dwords` and `indices`.
+        /**
+         * Decompresses a font data from `dwords` and `indices`. The font data is used
+         * for zoomed font reconstruction, and is actually an array of `u32` elements
+         * where the first `u16` element forms upper 16 bits and the second forms lower 16 bits.
+         * It has been reinterpreted for better compression.
+         *
+         * One glyph has 16 `u32` elements for each row from the top to the bottom. One `u32`
+         * element contains eight four-bit groups for each column from the left (lowermost group)
+         * to the right (uppermost group). Each group is a bitwise OR of following bits:
+         *
+         * - 1: the lower right triangle of the zoomed pixel should be drawn.
+         * - 2: the lower left triangle of the zoomed pixel should be drawn.
+         * - 4: the upper right triangle of the zoomed pixel should be drawn.
+         * - 8: the upper left triangle of the zoomed pixel should be drawn.
+         *
+         * So for example, if the group bits read 3 (1+2), the zoomed pixel would be drawn
+         * as follows (in the zoom factor 5):
+         *
+         *     .....
+         *     #...#
+         *     ##.##
+         *     #####
+         *     #####
+         *
+         * The group bits 15 (1+2+4+8) always draw the whole square, so in the zoom factor 1 only
+         * pixels with group bits 15 will be drawn.
+         */
         fn decompress(dwords: &[u16], indices: &str) -> Vec<u16> {
             let mut words = vec!(0);
             for &delta in dwords.iter() {
@@ -236,7 +229,7 @@ impl Font {
             polygons.push(calculate_polygons(glyphs.slice(base, base + NROWS * 2), NCOLUMNS));
         }
 
-        Font { glyphs: glyphs, pixels: Vec::new(), polygons: polygons }
+        Font { polygons: polygons }
     }
 }
 

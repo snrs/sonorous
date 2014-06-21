@@ -23,7 +23,7 @@ impl Deref<int> for Key {
 }
 
 /// All base-36 digits.
-static BASE36_MAP: &'static [u8] = bytes!("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+static BASE36_MAP: &'static [u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 /// Converts a single alphanumeric (base-36) letter to an integer.
 fn getdigit(n: char) -> Option<int> {

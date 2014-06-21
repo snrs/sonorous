@@ -19,7 +19,7 @@
 #![crate_type = "bin"]
 
 #![no_start]
-#![feature(macro_rules, phase, struct_variant, globs, link_args)]
+#![feature(macro_rules, phase, struct_variant, globs, link_args, unsafe_destructor)]
 
 #![comment = "Sonorous"]
 #![license = "GPLv2+"]
