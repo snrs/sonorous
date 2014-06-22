@@ -630,8 +630,7 @@ impl Hook for PreloadedData {
     fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
         match id {
             "messages" => {
-                // TODO 20 messages limit is arbitrary, should really be handled by skin
-                self.messages.iter().take(20).advance(|msg| body(&parent.delegate(msg), ""));
+                self.messages.iter().advance(|msg| body(&parent.delegate(msg), ""));
             }
             "meta.banner" => { self.banner.is_some() && body(parent, ""); }
             _ => { return self.preproc.run_block_hook(id, parent, &mut body); }
@@ -650,11 +649,16 @@ impl Hook for SelectingScene {
             "scanning" => { self.filesdone || body(parent, ""); }
             "entries" => {
                 let top = cmp::min(self.scrolloffset, self.files.len());
-                let bottom = cmp::min(self.scrolloffset + NUMENTRIES, self.files.len());
-                for (i, entry) in self.files.slice(top, bottom).iter().enumerate() {
+                self.files.slice_from(top).iter().enumerate().advance(|(i, entry)| {
                     let inverted = self.scrolloffset + i == self.offset;
-                    if !body(&(self, inverted, entry), "") { break; }
-                }
+                    body(&(self, inverted, entry), "")
+                });
+            }
+            "entries.before" => {
+                let top = cmp::min(self.scrolloffset, self.files.len());
+                self.files.slice_to(top).iter().rev().advance(|entry| {
+                    body(&(self, false, entry), "")
+                });
             }
             "preload" => match self.preloaded {
                 NothingToPreload | PreloadAfter(..) => {}
