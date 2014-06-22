@@ -122,7 +122,7 @@ impl LoadingContext {
         });
         match tex_or_err {
             Ok(tex) => { self.stagefile = Some(Rc::new(tex)); }
-            Err(_err) => { warn!("failed to load image \\#STAGEFILE ({})", path.to_str()); }
+            Err(_err) => { warn!("failed to load image #STAGEFILE ({})", path.to_str()); }
         }
     }
 
@@ -137,7 +137,7 @@ impl LoadingContext {
                 self.sndres.as_mut_slice()[i] = res.wrap();
             }
             Err(_) => {
-                warn!("failed to load sound \\#WAV{} ({})", Key(i as int).to_str(), path);
+                warn!("failed to load sound #WAV{} ({})", Key(i as int).to_str(), path);
             }
         }
     }
@@ -154,7 +154,7 @@ impl LoadingContext {
                 self.imgres.as_mut_slice()[i] = res.wrap();
             }
             Err(_) => {
-                warn!("failed to load image \\#BMP{} ({})", Key(i as int).to_str(), path);
+                warn!("failed to load image #BMP{} ({})", Key(i as int).to_str(), path);
             }
         }
     }

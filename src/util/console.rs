@@ -48,7 +48,7 @@ pub fn console_encoding() -> EncodingRef {
 fn hex_ncr_escape(_encoder: &mut Encoder, input: &str, output: &mut ByteWriter) -> bool {
     let mut escapes = String::new();
     for ch in input.chars() {
-        escapes.push_str(format!("&\\#x{:X};", ch as int).as_slice());
+        escapes.push_str(format!("&#x{:X};", ch as int).as_slice());
     }
     output.write_bytes(escapes.as_bytes());
     true
