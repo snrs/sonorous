@@ -392,6 +392,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                                     (pos, data)
                                 }
                             });
+                            lastln[*lane] = None;
                         }
                         _ => {
                             builder.add(t, LNStart(lane, Some(SoundRef(v))));
