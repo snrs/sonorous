@@ -67,8 +67,7 @@ impl Scene for PlayResultScene {
 
             static GRADEGAP: f32 = 25.0;
             static GRADEWIDTH: f32 = (SCREENW as f32 - GRADEGAP * 6.0) / 5.0 + GRADEGAP;
-            for i in range(0, 5) {
-                let i = i as uint;
+            for i in range(0u, 5) {
                 let (name, color) = playing::GRADES[4-i];
                 let count = self.player.gradecounts[4-i];
                 let x = GRADEGAP + i as f32 * GRADEWIDTH;

@@ -234,8 +234,6 @@ impl FromJson for Gradient {
 
 impl FromJson for Expr {
     fn from_json(json: Json) -> Result<Expr,String> {
-        use util::std::str::StrUtil;
-
         let expr = match json {
             String(s) => s,
             Number(v) => { return Ok(ENum(v as f32)); }
@@ -253,7 +251,7 @@ impl FromJson for Expr {
         let mut minus = false;
         loop {
             let mut v = 0.0;
-            if !lex!(s; ws*, f64 -> v, str* -> s, !) { invalid!("expected a number"); }
+            if !lex!(s; ws*, f32 -> v, str* -> s, !) { invalid!("expected a number"); }
             if minus { v = -v; }
             if s.starts_with("%") {
                 v /= 100.0;

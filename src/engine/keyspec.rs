@@ -206,6 +206,7 @@ static PRESETS: &'static [(&'static str, &'static str, &'static str)] = &[
  */
 pub fn preset_to_key_spec(bms: &Bms, preset: Option<String>) -> Option<(String, String)> {
     use std::ascii::OwnedStrAsciiExt;
+    use util::std::option::StrOption;
 
     let mut present = [false, ..NLANES];
     for obj in bms.timeline.objs.iter() {
@@ -215,7 +216,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<String>) -> Option<(String, 
     }
 
     let preset = preset.map(|s| s.into_ascii_lower());
-    let preset = match preset.as_ref().map(|s| s.as_slice()) {
+    let preset = match preset.as_ref_slice() {
         None | Some("bms") | Some("bme") | Some("bml") => {
             let isbme = present[8] || present[9] || present[36+8] || present[36+9];
             let haspedal = present[7] || present[36+7];
@@ -223,7 +224,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<String>) -> Option<(String, 
                 CouplePlay | DoublePlay => if isbme {"14"} else {"10"},
                 _                       => if isbme {"7" } else {"5" }
             };
-            if haspedal {nkeys.to_string().append("/fp")} else {nkeys.to_string()}
+            if haspedal {nkeys.to_string() + "/fp"} else {nkeys.to_string()}
         },
         Some("pms") => {
             let isbme = present[6] || present[7] || present[8] || present[9];
@@ -245,13 +246,14 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<String>) -> Option<(String, 
 pub fn key_spec(bms: &Bms, preset: Option<String>,
                 leftkeys: Option<String>, rightkeys: Option<String>) -> Result<KeySpec,String> {
     use std::ascii::StrAsciiExt;
+    use util::std::option::StrOption;
 
     let (leftkeys, rightkeys) =
         if leftkeys.is_none() && rightkeys.is_none() {
             let ext = bms.bmspath.as_ref().and_then(|p| p.extension())
                                           .and_then(str::from_utf8).map(|e| e.to_ascii_lower());
             let preset =
-                if preset.is_none() && ext.as_ref().map(|s| s.as_slice()) == Some("pms") {
+                if preset.is_none() && ext.as_ref_slice() == Some("pms") {
                     Some("pms".to_string())
                 } else {
                     preset
@@ -260,12 +262,12 @@ pub fn key_spec(bms: &Bms, preset: Option<String>,
                 Some(leftright) => leftright,
                 None => {
                     return Err(format!("Invalid preset name: {}",
-                                       preset.as_ref().map_or("", |s| s.as_slice())));
+                                       preset.as_ref_slice_or("")));
                 }
             }
         } else {
-            (leftkeys.as_ref().map_or("", |s| s.as_slice()).to_string(),
-             rightkeys.as_ref().map_or("", |s| s.as_slice()).to_string())
+            (leftkeys.as_ref_slice_or("").to_string(),
+             rightkeys.as_ref_slice_or("").to_string())
         };
 
     let mut keyspec = KeySpec { split: 0, order: Vec::new(),

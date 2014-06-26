@@ -6,7 +6,138 @@
 // the MIT license <http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-/*!
+//! Lexical analysis utilities.
+
+#![macro_escape]
+
+/// A version of `std::from_str::FromStr` which parses a prefix of the input and
+/// returns a remaining portion of the input as well.
+//
+// Rust: `std::num::from_str_bytes_common` does not recognize a number followed
+//        by garbage, so we need to parse it ourselves.
+pub trait FromStrPrefix {
+    /// Returns a parsed value and remaining string slice if possible.
+    fn from_str_prefix<'a>(s: &'a str) -> Option<(Self, &'a str)>;
+}
+
+/// A convenience function that invokes `FromStrPrefix::from_str_prefix`.
+pub fn from_str_prefix<'a, T:FromStrPrefix>(s: &'a str) -> Option<(T, &'a str)> {
+    FromStrPrefix::from_str_prefix(s)
+}
+
+/// Implementations for `FromStrPrefix`. This avoids exporting internal macros.
+mod from_str_prefix_impls {
+    use super::FromStrPrefix;
+
+    /// Returns a length of the longest prefix of given string,
+    /// which `from_str::<uint>` would in general accept without a failure, if any.
+    fn scan_uint(s: &str) -> Option<uint> {
+        match s.find(|c| !('0' <= c && c <= '9')) {
+            Some(first) if first > 0u => Some(first),
+            None if s.len() > 0u => Some(s.len()),
+            _ => None
+        }
+    }
+
+    /// Returns a length of the longest prefix of given string,
+    /// which `from_str::<int>` would in general accept without a failure, if any.
+    fn scan_int(s: &str) -> Option<uint> {
+        match s.slice_shift_char() {
+            (Some('-'), s_) | (Some('+'), s_) => scan_uint(s_).map(|pos| pos + 1u),
+            _ => scan_uint(s)
+        }
+    }
+
+    /// Returns a length of the longest prefix of given string,
+    /// which `from_str::<f64>` (and so on) would in general accept without a failure, if any.
+    fn scan_float(s: &str) -> Option<uint> {
+        scan_int(s).and_then(|pos| {
+            // scan `.` followed by digits if any
+            match s.slice_from(pos).slice_shift_char() {
+                (Some('.'), s_) => scan_uint(s_).map(|pos2| pos + 1u + pos2),
+                _ => Some(pos)
+            }
+        }).and_then(|pos| {
+            // scan `e` or `E` followed by an optional sign and digits if any
+            match s.slice_from(pos).slice_shift_char() {
+                (Some('e'), s_) | (Some('E'), s_) => scan_int(s_).map(|pos2| pos + 1u + pos2),
+                _ => Some(pos)
+            }
+        })
+    }
+
+    macro_rules! from_str_prefix_impls(
+        ($($scan:ident then $t:ty;)*) => (
+            $(
+                impl FromStrPrefix for $t {
+                    fn from_str_prefix<'a>(s: &'a str) -> Option<($t, &'a str)> {
+                        $scan(s).and_then(|pos| {
+                            from_str::<$t>(s.slice_to(pos)).map(|v| (v, s.slice_from(pos)))
+                        })
+                    }
+                }
+            )*
+        )
+    )
+
+    from_str_prefix_impls! {
+        scan_int   then int;
+        scan_int   then i8;
+        scan_int   then i16;
+        scan_int   then i32;
+        scan_int   then i64;
+        scan_uint  then uint;
+        scan_uint  then u8;
+        scan_uint  then u16;
+        scan_uint  then u32;
+        scan_uint  then u64;
+        scan_float then f32;
+        scan_float then f64;
+    }
+
+    impl FromStrPrefix for char {
+        fn from_str_prefix<'a>(s: &'a str) -> Option<(char, &'a str)> {
+            match s.slice_shift_char() {
+                (Some(c), s_) => Some((c, s_)),
+                (None, _) => None,
+            }
+        }
+    }
+}
+
+/// A trait which provides `prefix_shifted` method. Similar to `str::starts_with`, but with
+/// swapped `self` and argument.
+pub trait ShiftablePrefix {
+    /// When given string starts with `self`, returns a slice of that string excluding that prefix.
+    /// Otherwise returns `None`.
+    fn prefix_shifted<'r>(&self, s: &'r str) -> Option<&'r str>;
+}
+
+/// A convenience function that invokes `ShiftablePrefix::prefix_shifted`.
+pub fn prefix_shifted<'a, T:ShiftablePrefix>(s: &'a str, prefix: T) -> Option<&'a str> {
+    prefix.prefix_shifted(s)
+}
+
+impl ShiftablePrefix for char {
+    fn prefix_shifted<'r>(&self, s: &'r str) -> Option<&'r str> {
+        match s.slice_shift_char() {
+            (Some(c), s_) if c == *self => Some(s_),
+            (_, _) => None,
+        }
+    }
+}
+
+impl<'r> ShiftablePrefix for &'r str {
+    fn prefix_shifted<'r>(&self, s: &'r str) -> Option<&'r str> {
+        if s.starts_with(*self) {
+            Some(s.slice_from(self.len()))
+        } else {
+            None
+        }
+    }
+}
+
+/**
  * A lexer barely powerful enough to parse BMS format. Comparable to C's `sscanf`.
  *
  * `lex!(e; fmt1, fmt2, ..., fmtN)` returns an expression that evaluates to true if and only if
@@ -15,74 +146,29 @@
  *
  * - `ws`: Consumes one or more whitespace.
  * - `ws*`: Consumes zero or more whitespace.
- * - `int [-> e2]`: Consumes an integer and optionally saves it to `e2`. The integer syntax is
- *   slightly limited compared to `sscanf`.
- * - `f64 [-> e2]`: Consumes a real number and optionally saves it to `e2`. Again, the real number
- *   syntax is slightly limited; especially an exponent support is missing.
+ * - `int [-> e2]` and so on: Any type implementing the `FromStrPrefix` trait can be used.
+ *   Optionally saves the parsed value to `e2`. The default implementations includes all integers,
+ *   floating point types and `char`.
  * - `str [-> e2]`: Consumes a remaining input as a string and optionally saves it to `e2`.
  *   The string is at least one character long. Implies `!`. It can be followed by `ws*` which
  *   makes the string right-trimmed.
  * - `str* [-> e2]`: Same as above but the string can be empty.
- * - `char [-> e2]`: Consumes exactly one character and optionally saves it to `e2`. Resulting
- *   character can be whitespace.
  * - `!`: Ensures that the entire string has been consumed. Should be the last format
  *   specification.
- * - `"foo"` etc.: An ordinary expression is treated as a literal string or literal character.
+ * - `lit "foo"`, `lit '.'` etc.: A literal string or literal character.
  *
- * For the use in Sonorous, the following specifications have been added:
- *
- * - `Key [-> e2]`: Consumes a two-letter alphanumeric key and optionally saves it to `e2`.
- * - `PartialKey [-> e2]`: Consumes an one- or two-letter alphanumeric key and saves it to `e2`.
- *   Use `PartialKey::into_key` method in order to convert it to a proper alphanumeric key.
- * - `Measure [-> e2]`: Consumes exactly three digits and optionally saves it to `e2`.
- * - `ARGB [-> e2]`: Almost same as `uint [-> e2a], ',', uint [-> e2r], ',', uint [-> e2g], ',',
- *   uint [-> e2b]` but `e2` is a tuple of four `u8` values and overflows are considered an error.
+ * Whitespaces are only trimmed when `ws` or `ws*` specification is used.
+ * Therefore `char`, for example, can read a whitespace when not prepended with `ws` or `ws*`.
  */
-// Rust: - there is no `std::libc::sscanf` due to the varargs. maybe regex support will make
-//         this obsolete in the future, but not now.
-//       - it is desirable to have a matcher only accepts an integer literal or string literal,
+// Rust: - it is desirable to have a matcher only accepts an integer literal or string literal,
 //         not a generic expression.
 //       - it would be more useful to generate bindings for parsed result. this is related to
 //         many issues in general.
-
-#![macro_escape]
-
+//       - could we elide a `lit` prefix somehow?
 macro_rules! lex(
     ($e:expr; ) => (true);
     ($e:expr; !) => ($e.is_empty());
 
-    ($e:expr; int -> $dst:expr, $($tail:tt)*) => ({
-        let _line: &str = $e;
-        // Rust: `std::num::from_str_bytes_common` does not recognize a number followed
-        //        by garbage, so we need to parse it ourselves.
-        _line.scan_int().map_or(false, |_endpos| {
-            let _prefix = _line.slice_to(_endpos);
-            from_str(_prefix).map_or(false, |_value| {
-                $dst = _value;
-                lex!(_line.slice_from(_endpos); $($tail)*)
-            })
-        })
-    });
-    ($e:expr; uint -> $dst:expr, $($tail:tt)*) => ({
-        let _line: &str = $e;
-        _line.scan_uint().map_or(false, |_endpos| {
-            let _prefix = _line.slice_to(_endpos);
-            from_str(_prefix).map_or(false, |_value| {
-                $dst = _value;
-                lex!(_line.slice_from(_endpos); $($tail)*)
-            })
-        })
-    });
-    ($e:expr; f64 -> $dst:expr, $($tail:tt)*) => ({
-        let _line: &str = $e;
-        _line.scan_f64().map_or(false, |_endpos| {
-            let _prefix = _line.slice_to(_endpos);
-            from_str(_prefix).map_or(false, |_value| {
-                $dst = _value;
-                lex!(_line.slice_from(_endpos); $($tail)*)
-            })
-        })
-    });
     ($e:expr; str -> $dst:expr, ws*, $($tail:tt)*) => ({
         let _line: &str = $e;
         if !_line.is_empty() {
@@ -111,59 +197,13 @@ macro_rules! lex(
         $dst = _line.slice_from(0); // Rust: why we need to reborrow `_line` here?!
         lex!(""; $($tail)*) // optimization!
     });
-    ($e:expr; char -> $dst:expr, $($tail:tt)*) => ({
+    ($e:expr; $t:ty -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        if !_line.is_empty() {
-            let _range = _line.char_range_at(0);
-            $dst = _range.ch;
-            lex!(_line.slice_from(_range.next); $($tail)*)
-        } else {
-            false
-        }
-    });
-    // start Sonorous-specific
-    ($e:expr; Key -> $dst:expr, $($tail:tt)*) => ({
-        let _line: &str = $e;
-        ::format::bms::types::Key::from_str(_line).map_or(false, |_value| {
-            $dst = _value;
-            lex!(_line.slice_from(2u); $($tail)*)
-        })
-    });
-    ($e:expr; PartialKey -> $dst:expr, $($tail:tt)*) => ({
-        let _line: &str = $e;
-        ::format::bms::types::PartialKey::from_str(_line).map_or(false, |(_value, _line)| {
+        ::util::lex::from_str_prefix::<$t>(_line).map_or(false, |(_value, _line)| {
             $dst = _value;
             lex!(_line; $($tail)*)
         })
     });
-    ($e:expr; Measure -> $dst:expr, $($tail:tt)*) => ({
-        let _line: &str = $e;
-        let _isdigit = |c| { '0' <= c && c <= '9' };
-        // Rust: this is plain annoying.
-        if _line.len() >= 3 && _isdigit(_line.char_at(0)) && _isdigit(_line.char_at(1)) &&
-                _isdigit(_line.char_at(2)) {
-            $dst = from_str(_line.slice_to(3u)).unwrap();
-            lex!(_line.slice_from(3u); $($tail)*)
-        } else {
-            false
-        }
-    });
-    ($e:expr; ARGB -> $dst:expr, $($tail:tt)*) => ({
-        let mut _a: uint = 0;
-        let mut _r: uint = 0;
-        let mut _g: uint = 0;
-        let mut _b: uint = 0;
-        let mut _remainder: &str = "";
-        if lex!($e; uint -> _a, ws*, ',', ws*, uint -> _r, ws*, ',', ws*,
-                    uint -> _g, ws*, ',', ws*, uint -> _b, str* -> _remainder, !) &&
-           _a < 256 && _r < 256 && _g < 256 && _b < 256 {
-            $dst = (_a as u8, _r as u8, _g as u8, _b as u8);
-            lex!(_remainder; $($tail)*)
-        } else {
-            false
-        }
-    });
-    // end Sonorous-specific
 
     ($e:expr; ws, $($tail:tt)*) => ({
         let _line: &str = $e;
@@ -177,80 +217,32 @@ macro_rules! lex(
         let _line: &str = $e;
         lex!(_line.trim_left(); $($tail)*)
     });
-    ($e:expr; int, $($tail:tt)*) => ({
-        let mut _dummy: int = 0;
-        lex!($e; int -> _dummy, $($tail)*)
-    });
-    ($e:expr; uint, $($tail:tt)*) => ({
-        let mut _dummy: uint = 0;
-        lex!($e; uint -> _dummy, $($tail)*)
-    });
-    ($e:expr; f64, $($tail:tt)*) => ({
-        let mut _dummy: f64 = 0.0;
-        lex!($e; f64 -> _dummy, $($tail)*)
-    });
     ($e:expr; str, $($tail:tt)*) => ({
         !$e.is_empty() && lex!(""; $($tail)*) // optimization!
     });
     ($e:expr; str*, $($tail:tt)*) => ({
         lex!(""; $($tail)*) // optimization!
     });
-    ($e:expr; char, $($tail:tt)*) => ({
-        let mut _dummy: char = '\x00';
-        lex!($e; char -> _dummy, $($tail)*)
+    ($e:expr; $t:ty, $($tail:tt)*) => ({
+        let mut _dummy: $t; // unused
+        lex!($e; $t -> _dummy, $($tail)*)
     });
-    // start Sonorous-specific
-    ($e:expr; Key, $($tail:tt)*) => ({
-        let mut _dummy: Key = Key::dummy();
-        lex!($e; Key -> _dummy, $($tail)*)
-    });
-    ($e:expr; PartialKey, $($tail:tt)*) => ({
-        let mut _dummy: PartialKey = PartialKey::dummy();
-        lex!($e; PartialKey -> _dummy, $($tail)*)
-    });
-    ($e:expr; Measure, $($tail:tt)*) => ({
-        let mut _dummy: uint = 0;
-        lex!($e; Measure -> _dummy, $($tail)*)
-    });
-    ($e:expr; ARGB, $($tail:tt)*) => ({
-        let mut _dummy: (u8,u8,u8,u8) = (0,0,0,0);
-        lex!($e; ARGB -> _dummy, $($tail)*)
-    });
-    // end Sonorous-specific
-    ($e:expr; $lit:expr, $($tail:tt)*) => ({
-        $lit.prefix_shifted($e).map_or(false, |_line| {
+    ($e:expr; lit $lit:expr, $($tail:tt)*) => ({
+        ::util::lex::prefix_shifted($e, $lit).map_or(false, |_line| {
             lex!(_line; $($tail)*)
         })
     });
 
-    ($e:expr; int -> $dst:expr) => (lex!($e; int -> $dst, ));
-    ($e:expr; uint -> $dst:expr) => (lex!($e; uint -> $dst, ));
-    ($e:expr; f64 -> $dst:expr) => (lex!($e; f64 -> $dst, ));
     ($e:expr; str -> $dst:expr) => (lex!($e; str -> $dst, ));
     ($e:expr; str -> $dst:expr, ws*) => (lex!($e; str -> $dst, ws*, ));
     ($e:expr; str* -> $dst:expr) => (lex!($e; str* -> $dst, ));
     ($e:expr; str* -> $dst:expr, ws*) => (lex!($e; str* -> $dst, ws*, ));
-    ($e:expr; char -> $dst:expr) => (lex!($e; char -> $dst, ));
-    // start Sonorous-specific
-    ($e:expr; Key -> $dst:expr) => (lex!($e; Key -> $dst, ));
-    ($e:expr; PartialKey -> $dst:expr) => (lex!($e; PartialKey -> $dst, ));
-    ($e:expr; Measure -> $dst:expr) => (lex!($e; Measure -> $dst, ));
-    ($e:expr; ARGB -> $dst:expr) => (lex!($e; ARGB -> $dst, ));
-    // end Sonorous-specific
+    ($e:expr; $t:ty -> $dst:expr) => (lex!($e; $t -> $dst, ));
 
     ($e:expr; ws) => (lex!($e; ws, ));
     ($e:expr; ws*) => (lex!($e; ws*, ));
-    ($e:expr; int) => (lex!($e; int, ));
-    ($e:expr; uint) => (lex!($e; uint, ));
-    ($e:expr; f64) => (lex!($e; f64, ));
     ($e:expr; str) => (lex!($e; str, ));
     ($e:expr; str*) => (lex!($e; str*, ));
-    ($e:expr; char) => (lex!($e; char, ));
-    // start Sonorous-specific
-    ($e:expr; Key) => (lex!($e; Key, ));
-    ($e:expr; PartialKey) => (lex!($e; PartialKey, ));
-    ($e:expr; Measure) => (lex!($e; Measure, ));
-    ($e:expr; ARGB) => (lex!($e; ARGB, ));
-    // end Sonorous-specific
-    ($e:expr; $lit:expr) => (lex!($e; $lit, ))
+    ($e:expr; $t:ty) => (lex!($e; $t, ));
+    ($e:expr; lit $lit:expr) => (lex!($e; lit $lit, ))
 )

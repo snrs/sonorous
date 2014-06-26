@@ -300,7 +300,7 @@ Available debugging options:
 /// The entry point for subprograms. Only enabled with `--cfg subprogram`.
 #[cfg(subprogram)]
 pub fn subprogram(args: &[String]) -> ! {
-    let ret: int = match args.head().as_ref().map(|s| s.as_slice()) {
+    let ret: int = match args.head().map(|s| s.as_slice()) {
         None => {
             let _ = write!(&mut std::io::stderr(), "\
 The list of available subprograms:

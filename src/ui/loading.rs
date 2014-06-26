@@ -271,12 +271,14 @@ impl TextualLoadingScene {
 
 impl Scene for TextualLoadingScene {
     fn activate(&mut self) -> SceneCommand {
+        use util::std::option::StrOption;
+
         if self.context.opts.showinfo {
             let meta = &self.context.bms.meta.common;
             printerr(format!("\
 ----------------------------------------------------------------------------------------------
 Title:    {title}",
-                    title = meta.title.as_ref().map_or("", |s| s.as_slice())
+                    title = meta.title.as_ref_slice_or("")
                 ).as_slice());
             for subtitle in meta.subtitles.iter() {
                 printerr(format!("
@@ -285,8 +287,8 @@ Title:    {title}",
             printerr(format!("
 Genre:    {genre}
 Artist:   {artist}",
-                    genre = meta.genre.as_ref().map_or("", |s| s.as_slice()),
-                    artist = meta.artist.as_ref().map_or("", |s| s.as_slice())
+                    genre = meta.genre.as_ref_slice_or(""),
+                    artist = meta.artist.as_ref_slice_or("")
                 ).as_slice());
             for subartist in meta.subartists.iter() {
                 printerr(format!("
@@ -310,7 +312,7 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
                     difficulty =
                         meta.difficulty.and_then(|d| d.name()).as_ref()
                                        .map_or("".to_string(),
-                                               |name| " ".to_string().append(*name))).as_slice());
+                                               |name| " ".to_string() + *name)).as_slice());
         }
         Continue
     }

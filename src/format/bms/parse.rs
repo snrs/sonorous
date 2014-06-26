@@ -9,6 +9,7 @@ use std::str::MaybeOwned;
 use std::rand::Rng;
 use encoding::EncodingRef;
 
+use util::lex::FromStrPrefix;
 use format::obj::{BPM, Duration, Seconds, Measures, ImageSlice};
 use format::bms::types::{Key, PartialKey};
 use format::bms::diag::*;
@@ -20,6 +21,38 @@ use format::bms::encoding::{decode_stream, guess_decode_stream};
 
 /// A tuple of four `u8` values. Mainly used for BMS #ARGB command and its family.
 pub type ARGB = (u8,u8,u8,u8);
+
+impl FromStrPrefix for ARGB {
+    fn from_str_prefix<'a>(s: &'a str) -> Option<(ARGB, &'a str)> {
+        let mut a: uint = 0;
+        let mut r: uint = 0;
+        let mut g: uint = 0;
+        let mut b: uint = 0;
+        let mut remainder: &str = "";
+        if lex!(s; uint -> a, ws*, lit ',', ws*, uint -> r, ws*, lit ',', ws*,
+                   uint -> g, ws*, lit ',', ws*, uint -> b, str* -> remainder, !) &&
+           a < 256 && r < 256 && g < 256 && b < 256 {
+            Some(((a as u8, r as u8, g as u8, b as u8), remainder))
+        } else {
+            None
+        }
+    }
+}
+
+/// A wrapper type for a measure number. Only used for parsing.
+struct Measure(uint);
+
+impl FromStrPrefix for Measure {
+    fn from_str_prefix<'a>(s: &'a str) -> Option<(Measure, &'a str)> {
+        let isdigit = |c| '0' <= c && c <= '9';
+        if s.len() >= 3 && isdigit(s.char_at(0)) && isdigit(s.char_at(1)) && isdigit(s.char_at(2)) {
+            let measure = from_str::<uint>(s.slice_to(3)).unwrap();
+            Some((Measure(measure), s.slice_from(3)))
+        } else {
+            None
+        }
+    }
+}
 
 /// Represents one line of BMS file.
 #[deriving(PartialEq,Clone)]
@@ -208,7 +241,7 @@ impl<'r> fmt::Show for BmsCommand<'r> {
             BmsPoorBGA(poorbga) => write!(f, "#POORBGA {}", poorbga),
             BmsSwBGA(key, fr, time, line, doloop, argb, ref pattern) =>
                 write!(f, "#SWBGA{} {}:{}:{}:{}:{} {}", key, fr, time, line,
-                       if doloop {1} else {0}, fmt_argb(argb), *pattern),
+                       if doloop {1u} else {0u}, fmt_argb(argb), *pattern),
             BmsARGB(key, argb) => write!(f, "#ARGB{} {}", key, fmt_argb(argb)),
             BmsCharFile(ref s) => write!(f, "#CHARFILE {}", *s),
             BmsVideoFile(ref s) => write!(f, "#VIDEOFILE {}", *s),
@@ -355,7 +388,6 @@ impl<'r> Parser<'r> {
 impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
     fn next(&mut self) -> Option<Parsed<'r>> {
         use std::ascii::StrAsciiExt;
-        use util::std::str::{StrUtil, ShiftablePrefix};
 
         // return the queued items first
         match self.queued.shift() {
@@ -664,7 +696,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 let mut x1 = 0; let mut y1 = 0; let mut x2 = 0; let mut y2 = 0;
                 let mut dx = 0; let mut dy = 0;
                 if lex!(line; PartialKey -> src, ws, int -> x1, ws, int -> y1, ws,
-                        int -> x2, ws, int -> y2, ws, int -> dx, ws, int -> dy) {
+                              int -> x2, ws, int -> y2, ws, int -> dx, ws, int -> dy) {
                     let src = warn_on_partial_key!(src);
                     let slice = ImageSlice { sx: x1, sy: y1, dx: dx, dy: dy, w: x2-x1, h: y2-y1 };
                     emit!(BmsBGA(dst, src, slice));
@@ -676,7 +708,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 let mut sx = 0; let mut sy = 0; let mut w = 0; let mut h = 0;
                 let mut dx = 0; let mut dy = 0;
                 if lex!(line; PartialKey -> src, ws, int -> sx, ws, int -> sy, ws,
-                        int -> w, ws, int -> h, ws, int -> dx, ws, int -> dy) {
+                              int -> w, ws, int -> h, ws, int -> dx, ws, int -> dy) {
                     let src = warn_on_partial_key!(src);
                     let slice = ImageSlice { sx: sx, sy: sy, dx: dx, dy: dy, w: w, h: h };
                     emit!(BmsBGA(dst, src, slice));
@@ -691,9 +723,9 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 let mut doloop = 0;
                 let mut argb = (0,0,0,0);
                 let mut pattern = "";
-                if lex!(line; int -> fr, ws*, ':', ws*, int -> time, ws*, ':', ws*,
-                              PartialKey -> linekey, ws*, ':', ws*, int -> doloop, ws*, ':', ws*,
-                              ARGB -> argb, ws, str -> pattern, ws*, !) {
+                if lex!(line; int -> fr, ws*, lit ':', ws*, int -> time, ws*, lit ':', ws*,
+                              PartialKey -> linekey, ws*, lit ':', ws*, int -> doloop, ws*,
+                              lit ':', ws*, ARGB -> argb, ws, str -> pattern, ws*, !) {
                     let linekey = warn_on_partial_key!(linekey);
                     if doloop == 0 || doloop == 1 {
                         emit!(BmsSwBGA(key, fr, time, linekey, doloop == 1,
@@ -730,11 +762,12 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             })
 
             if_prefix!("STP" |line| { // #STP<int>.<int> <int>
-                let mut measure = 0;
+                let mut measure = Measure(0);
                 let mut frac = 0;
                 let mut duration = 0;
-                if lex!(line; Measure -> measure, '.', uint -> frac, ws,
+                if lex!(line; Measure -> measure, lit '.', uint -> frac, ws,
                               int -> duration) && duration > 0 {
+                    let Measure(measure) = measure;
                     let pos = measure as f64 + frac as f64 * 0.001;
                     let duration = Seconds(duration as f64 * 0.001);
                     emit!(BmsStp(pos, duration));
@@ -776,10 +809,11 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 if_prefix!("END"           -> BmsFlow(BmsEndIf); BmsHasENDNotFollowedByIF)
             }
 
-            let mut measure = 0;
+            let mut measure = Measure(0);
             let mut chan = Key::dummy();
             let mut data = "";
-            if lex!(line; Measure -> measure, Key -> chan, ':', ws*, str -> data, ws*, !) {
+            if lex!(line; Measure -> measure, Key -> chan, lit ':', ws*, str -> data, ws*, !) {
+                let Measure(measure) = measure;
                 if chan == Key(2) { // #xxx02:<float>
                     let mut shorten = 0.0;
                     if lex!(data; ws*, f64 -> shorten) {

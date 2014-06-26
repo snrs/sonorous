@@ -5,6 +5,7 @@
 //! Common types for BMS format.
 
 use std::{str, fmt};
+use util::lex::FromStrPrefix;
 use format::obj::Lane;
 
 /// Two-letter alphanumeric identifier used for virtually everything, including resource
@@ -84,6 +85,12 @@ impl Key {
             _ => fail!("non-object channel")
         };
         Lane(player * 36 + **self as uint % 36)
+    }
+}
+
+impl FromStrPrefix for Key {
+    fn from_str_prefix<'a>(s: &'a str) -> Option<(Key, &'a str)> {
+        Key::from_str(s).map(|key| (key, s.slice_from(2)))
     }
 }
 
@@ -175,6 +182,12 @@ impl PartialKey {
     pub fn into_key(self) -> Key {
         assert!(self.is_valid());
         if *self < 0 {Key(-*self - 1)} else {Key(*self)}
+    }
+}
+
+impl FromStrPrefix for PartialKey {
+    fn from_str_prefix<'a>(s: &'a str) -> Option<(PartialKey, &'a str)> {
+        PartialKey::from_str(s)
     }
 }
 

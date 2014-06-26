@@ -184,13 +184,11 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<String>) -> Resul
 
     /// Parses an `Input` value from the string. E.g. `"backspace"`, `"button 2"` or `"axis 0"`.
     fn parse_input(s: &str) -> Option<Input> {
-        use util::std::str::{StrUtil, ShiftablePrefix};
-
         let mut idx = 0;
         let s = s.trim();
-        if lex!(s; "button", ws, uint -> idx) {
+        if lex!(s; lit "button", ws, uint -> idx) {
             Some(JoyButtonInput(idx))
-        } else if lex!(s; "axis", ws, uint -> idx) {
+        } else if lex!(s; lit "axis", ws, uint -> idx) {
             Some(JoyAxisInput(idx))
         } else {
             sdl_key_from_name(s).map(|key| KeyInput(key))

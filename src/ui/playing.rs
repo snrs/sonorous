@@ -67,8 +67,8 @@ impl LaneStyle {
 
         // render a background sprite (0 at top, <1 at bottom)
         let backcolor = Gradient { zero: RGB(0,0,0), one: self.basecolor };
-        for i in range(140, SCREENH - 80) {
-            sprite.fill_area((left, i), (self.width, 1), backcolor.blend(i as int - 140, 1000));
+        for i in range(140u, SCREENH - 80) {
+            sprite.fill_area((left, i), (self.width, 1u), backcolor.blend(i as int - 140, 1000));
         }
 
         // render note and bomb sprites (1/2 at middle, 1 at border)
@@ -77,9 +77,9 @@ impl LaneStyle {
         let bombcolor = Gradient { zero: RGB(0,0,0),          one: RGB(0xc0,0,0) };
         for i in range(0, self.width / 2) {
             let num = (self.width - i) as int;
-            sprite.fill_area((noteleft+i, 0), (self.width-i*2, SCREENH),
+            sprite.fill_area((noteleft+i, 0u), (self.width-i*2, SCREENH),
                              notecolor.blend(num, denom));
-            sprite.fill_area((bombleft+i, 0), (self.width-i*2, SCREENH),
+            sprite.fill_area((bombleft+i, 0u), (self.width-i*2, SCREENH),
                              bombcolor.blend(num, denom));
         }
     }
@@ -191,13 +191,13 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>,
     sprite.with_pixels(|pixels| {
         let topgrad = Gradient { zero: RGB(0x60,0x60,0x60), one: RGB(0xc0,0xc0,0xc0) };
         let botgrad = Gradient { zero: RGB(0x40,0x40,0x40), one: RGB(0xc0,0xc0,0xc0) };
-        for j in range(-244, 556) {
-            for i in range(-10, 20) {
+        for j in range(-244i, 556) {
+            for i in range(-10i, 20) {
                 let c = (i*2+j*3+750) % 2000;
                 pixels.put_pixel((j+244) as uint, (i+10) as uint,
                                  topgrad.blend(850 - num::abs(c-1000), 700));
             }
-            for i in range(-20, 60) {
+            for i in range(-20i, 60) {
                 let c = (i*3+j*2+750) % 2000;
                 let bottom = (SCREENH - 60) as int;
                 pixels.put_pixel((j+244) as uint, (i+bottom) as uint,
@@ -205,19 +205,19 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>,
             }
         }
     });
-    sprite.fill_area((10, SCREENH-36), (leftmost, 1), RGB(0x40,0x40,0x40));
+    sprite.fill_area((10u, SCREENH-36), (leftmost, 1u), RGB(0x40,0x40,0x40));
 
     // erase portions of panels left unused
     let leftgap = leftmost + 20;
     let rightgap = rightmost.map_or(SCREENW, |x| x - 20);
     let gapwidth = rightgap - leftgap;
     let black = RGB(0,0,0);
-    sprite.fill_area((leftgap, 0), (gapwidth, 30), black);
-    sprite.fill_area((leftgap, SCREENH-80), (gapwidth, 80), black);
+    sprite.fill_area((leftgap, 0u), (gapwidth, 30u), black);
+    sprite.fill_area((leftgap, SCREENH-80), (gapwidth, 80u), black);
     sprite.with_pixels(|pixels| {
         for i in range(0u, 20) {
             // Rust: this cannot be `uint` since `-1u` underflows!
-            for j in iter::range_step(20, 0, -1) {
+            for j in iter::range_step(20i, 0, -1) {
                 let j = j as uint;
                 if i*i + j*j <= 400 { break; } // circled border
                 pixels.put_pixel(leftmost + j, 10 + i, black);

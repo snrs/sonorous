@@ -145,7 +145,7 @@ pub mod builder {
         /// and the algorithm removes or replaces objects which have the same or conflicting type
         /// in the same position. Conflicting types are specified by `merge_types` function.
         fn sanitize<S:Clone,I:Clone>(objs: &mut [ObjDataWithVpos<S,I>],
-                                     to_type: |&ObjData<S,I>| -> Option<int>,
+                                     to_type: |&ObjData<S,I>| -> Option<uint>,
                                      merge_types: |int| -> int) {
             let len = objs.len();
             let mut i = 0;
@@ -185,12 +185,12 @@ pub mod builder {
         for lane in range(0, NLANES) {
             let lane0 = Lane(lane);
 
-            static LNDONE: int = 0;
-            static LNSTART: int = 1;
-            static VISIBLE: int = 2;
-            static INVISIBLE: int = 3;
-            static BOMB: int = 4;
-            let to_type = |obj: &ObjData<S,I>| -> Option<int> {
+            static LNDONE: uint = 0;
+            static LNSTART: uint = 1;
+            static VISIBLE: uint = 2;
+            static INVISIBLE: uint = 3;
+            static BOMB: uint = 4;
+            let to_type = |obj: &ObjData<S,I>| -> Option<uint> {
                 match *obj {
                     Visible(lane,_) if lane == lane0 => Some(VISIBLE),
                     Invisible(lane,_) if lane == lane0 => Some(INVISIBLE),
