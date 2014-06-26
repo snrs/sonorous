@@ -21,8 +21,8 @@ use gfx::gl::Texture2D;
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
 use gfx::bmfont::{NCOLUMNS, NROWS, FontDrawingUtils, LeftAligned};
 use gfx::screen::{Screen, ShadedFontDrawing, ScreenDraw, ScreenTexturedDraw};
-use gfx::skin::scalar::{Scalar, TextureScalar, ImageScalar};
-use gfx::skin::ast::{Expr, ENum, ERatioNum, Pos, Rect};
+use gfx::skin::scalar::{Scalar, ImageScalar, TextureSource, PathSource, ImageClip};
+use gfx::skin::ast::{Expr, ENum, Pos, Rect};
 use gfx::skin::ast::{Gen, HookGen, TextGen, TextLenGen};
 use gfx::skin::ast::{Block, CondBlock, MultiBlock};
 use gfx::skin::ast::{ScalarFormat, NoFormat, NumFormat, MsFormat, HmsFormat};
@@ -104,10 +104,9 @@ impl<'a> State<'a> {
     }
 
     /// Evaluates an expression.
-    fn expr(&self, _hook: &Hook, pos: &Expr, reference: f32) -> f32 {
+    fn expr(&self, hook: &Hook, pos: &Expr, reference: f32) -> f32 {
         match *pos {
-            ENum(v) => v,
-            ERatioNum(r, v) => r * reference + v,
+            ENum(ref v) => v.to_num(&reference),
         }
     }
 
@@ -322,10 +321,10 @@ impl<'a> State<'a> {
     }
 
     /// Processes texture references (`{"$rect": "tex", ...}`) and calls the callback with
-    /// an appropriate reference-counted reference to the texture if any.
+    /// an appropriate reference-counted reference to the texture and clipping rectangle.
     /// `callback` gets called at most once.
     fn texture<'a,T>(&'a self, hook: &'a Hook, id: &str,
-                     callback: |Option<&Rc<Texture2D>>| -> T) -> T {
+                     callback: |Option<(&Rc<Texture2D>, &ImageClip)>| -> T) -> T {
         let mut rendererref = self.renderer.borrow_mut();
         let renderer = rendererref.deref_mut();
 
@@ -334,9 +333,9 @@ impl<'a> State<'a> {
             scalar = renderer.skin.scalars.find_equiv(&id).map(|v| v.clone());
         }
         match scalar {
-            Some(TextureScalar(tex)) => callback(Some(tex)),
-            Some(ImageScalar(path)) => {
-                let ret = renderer.imagecache.find_or_insert_with(path, |path| {
+            Some(ImageScalar(TextureSource(tex), ref clip)) => callback(Some((tex, clip))),
+            Some(ImageScalar(PathSource(ref path), ref clip)) => {
+                let ret = renderer.imagecache.find_or_insert_with(path.clone(), |path| {
                     match sdl_image::load(path) {
                         Ok(surface) => match Texture2D::from_owned_surface(surface, false, false) {
                             Ok(tex) => Some(Rc::new(tex)),
@@ -345,7 +344,7 @@ impl<'a> State<'a> {
                         Err(..) => None,
                     }
                 });
-                callback(ret.as_ref())
+                callback(ret.as_ref().map(|tex| (tex, clip)))
             },
             _ => callback(None),
         }
@@ -444,20 +443,20 @@ impl<'a> State<'a> {
                 }
                 TexturedRect { ref tex, ref at, ref rgba, ref clip } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
-                    self.texture(hook, tex.as_slice(), |texture| match (texture, *clip) {
-                        (Some(tex), Some(ref clip)) => {
-                            let (tw, th) = (tex.width as f32, tex.height as f32);
-                            let tx1 = self.expr(hook, &clip.p.x, tw);
-                            let ty1 = self.expr(hook, &clip.p.y, th);
-                            let tx2 = self.expr(hook, &clip.q.x, tw);
-                            let ty2 = self.expr(hook, &clip.q.y, th);
+                    self.texture(hook, tex.as_slice(), |ret| match ret {
+                        Some((tex, texclip)) => {
+                            let tl = texclip.x.to_num(&(tex.width as f32));
+                            let tt = texclip.y.to_num(&(tex.height as f32));
+                            let tw = texclip.w.to_num(&(tex.width as f32));
+                            let th = texclip.h.to_num(&(tex.height as f32));
+                            let tx1 = tl + self.expr(hook, &clip.p.x, tw);
+                            let ty1 = tt + self.expr(hook, &clip.p.y, th);
+                            let tx2 = tl + self.expr(hook, &clip.q.x, tw);
+                            let ty2 = tt + self.expr(hook, &clip.q.y, th);
                             self.textured(tex, |d| d.rect_area_rgba(x1, y1, x2, y2,
                                                                     tx1, ty1, tx2, ty2, *rgba));
                         }
-                        (Some(tex), None) => {
-                            self.textured(tex, |d| d.rect_rgba(x1, y1, x2, y2, *rgba));
-                        }
-                        (_, _) => {
+                        _ => {
                             warn!("skin: `{id}` is not a texture hook, will ignore",
                                   id = tex.as_slice());
                         }

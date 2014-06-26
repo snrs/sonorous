@@ -70,6 +70,7 @@ pub mod ext {
 pub mod gfx {
     //! Various graphics routines.
     pub mod color;
+    pub mod ratio_num;
     pub mod surface;
     pub mod gl;
     pub mod draw;

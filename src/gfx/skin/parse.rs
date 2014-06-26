@@ -14,9 +14,11 @@ use serialize::json::{Json, Null, Boolean, Number, String, List, Object};
 use serialize::json::from_reader;
 
 use gfx::color::{Color, Gradient, RGB, RGBA};
+use gfx::ratio_num::RatioNum;
 use gfx::bmfont::{NROWS};
 use gfx::skin::scalar::{Scalar, ImageScalar, IntoScalar};
-use gfx::skin::ast::{Expr, ENum, ERatioNum};
+use gfx::skin::scalar::{PathSource, ImageClip};
+use gfx::skin::ast::{Expr, ENum};
 use gfx::skin::ast::{Pos, Rect, Id};
 use gfx::skin::ast::{HookGen, TextGen, TextLenGen};
 use gfx::skin::ast::{Block, CondBlock, MultiBlock};
@@ -116,14 +118,29 @@ impl FromJson for Scalar<'static> {
                         String(path) => Path::new(path),
                         image => fail_with_json!(image, "a path for the image scalar")
                     };
+                    let clip = match map.pop(&"clip".to_string()) {
+                        Some(clip) => try!(from_json(clip)),
+                        None => ImageClip::new(),
+                    };
                     ensure_empty!(map, "the image scalar");
-                    return Ok(ImageScalar(path));
+                    return Ok(ImageScalar(PathSource(path), clip));
                 }
 
                 Err(format!("expected a scalar, got an unrecognized object"))
             },
 
             _ => fail_with_json!(json, "a scalar")
+        }
+    }
+}
+
+impl FromJson for ImageClip {
+    fn from_json(json: Json) -> Result<ImageClip,String> {
+        let rect = try!(from_json::<Rect>(json));
+        match rect {
+            Rect { p: Pos { x: ENum(px), y: ENum(py) }, q: Pos { x: ENum(qx), y: ENum(qy) } } =>
+                Ok(ImageClip { x: px, y: py, w: qx - px, h: qy - py }),
+            //_ => Err("clip coordinates for images should be a simple number".to_string()),
         }
     }
 }
@@ -236,7 +253,7 @@ impl FromJson for Expr {
     fn from_json(json: Json) -> Result<Expr,String> {
         let expr = match json {
             String(s) => s,
-            Number(v) => { return Ok(ENum(v as f32)); }
+            Number(v) => { return Ok(ENum(RatioNum::from_num(v as f32))); }
             _ => fail_with_json!(json, "an expression")
         };
 
@@ -245,8 +262,7 @@ impl FromJson for Expr {
         )
 
         // parse <num> ['%'] {('+' | '-') <num> ['%']}
-        let mut ratio = None;
-        let mut num = 0.0;
+        let mut num = RatioNum::zero();
         let mut s = expr.as_slice();
         let mut minus = false;
         loop {
@@ -254,11 +270,10 @@ impl FromJson for Expr {
             if !lex!(s; ws*, f32 -> v, str* -> s, !) { invalid!("expected a number"); }
             if minus { v = -v; }
             if s.starts_with("%") {
-                v /= 100.0;
-                ratio.mutate_or_set(v, |r| r + v);
+                num = num + RatioNum::from_ratio(v / 100.0);
                 s = s.slice_from(1);
             } else {
-                num += v;
+                num = num + RatioNum::from_num(v);
             }
             s = s.trim_left();
             if s.is_empty() { break; }
@@ -273,10 +288,7 @@ impl FromJson for Expr {
             }
         }
 
-        match ratio {
-            Some(r) => Ok(ERatioNum(r, num)),
-            None => Ok(ENum(num)),
-        }
+        Ok(ENum(num))
     }
 }
 
@@ -575,16 +587,22 @@ impl FromJson for Node {
                         (Some(RGB(r,g,b)), Some(a)) => (Some(RGBA(r,g,b,from_0_1(a))), None),
                         (color, opacity) => (color, opacity),
                     };
+                    let clip = match map.pop(&"clip".to_string()) {
+                        Some(clip) => Some(try!(from_json(clip))),
+                        None => None,
+                    };
                     ensure_empty!(map, "the rectangle");
-                    return match (tex, color, opacity) {
-                        (None, Some(color), None) =>
+                    return match (tex, color, opacity, clip) {
+                        (None, Some(color), None, None) =>
                             Ok(ColoredRect { at: at, color: color }),
-                        (None, Some(_), Some(_)) =>
+                        (None, Some(_), Some(_), _) =>
                             Err(format!("the colored rectangle cannot have both \
                                          the RGBA `color` and `opacity`")),
-                        (None, None, _) =>
+                        (None, None, _, _) =>
                             Err(format!("expected `color` in the colored rectangle")),
-                        (Some(tex), color, opacity) => {
+                        (None, _, _, Some(..)) =>
+                            Err(format!("the colored rectangle cannot have `clip`")),
+                        (Some(tex), color, opacity, clip) => {
                             let rgba = match (color, opacity) {
                                 (Some(RGB(r,g,b)), None) => (r,g,b,255),
                                 (Some(RGBA(r,g,b,a)), None) => (r,g,b,a),
@@ -595,10 +613,7 @@ impl FromJson for Node {
                                                         both the RGBA `color` and `opacity`"));
                                 }
                             };
-                            let clip = match map.pop(&"clip".to_string()) {
-                                Some(clip) => Some(try!(from_json(clip))),
-                                None => None,
-                            };
+                            let clip = clip.unwrap_or(Rect::new());
                             Ok(TexturedRect { tex: tex, at: at, rgba: rgba, clip: clip })
                         },
                     };
@@ -662,23 +677,23 @@ impl FromJson for Node {
                     })
                 )
                 fn invert(e: Expr) -> Expr {
+                    let one: RatioNum<f32> = RatioNum::one();
                     match e {
-                        ENum(v) => ERatioNum(1.0, -v),
-                        ERatioNum(r, v) => ERatioNum(1.0-r, -v),
+                        ENum(v) => ENum(one - v),
                     }
                 }
                 clip_to!("$cliptop",
-                         |h| Rect { p: Pos { x: ENum(0.0), y: h },
-                                    q: Pos { x: ERatioNum(1.0,0.0), y: ERatioNum(1.0,0.0) } })
+                         |h| Rect { p: Pos { x: Expr::zero(), y: h },
+                                    q: Pos { x: Expr::one(), y: Expr::one() } })
                 clip_to!("$clipbottom",
-                         |h| Rect { p: Pos { x: ENum(0.0), y: ENum(0.0) },
-                                    q: Pos { x: ERatioNum(1.0,0.0), y: invert(h) } })
+                         |h| Rect { p: Pos { x: Expr::zero(), y: Expr::zero() },
+                                    q: Pos { x: Expr::one(), y: invert(h) } })
                 clip_to!("$clipleft",
-                         |w| Rect { p: Pos { x: w, y: ENum(0.0) },
-                                    q: Pos { x: ERatioNum(1.0,0.0), y: ERatioNum(1.0,0.0) } })
+                         |w| Rect { p: Pos { x: w, y: Expr::zero() },
+                                    q: Pos { x: Expr::one(), y: Expr::one() } })
                 clip_to!("$clipright",
-                         |w| Rect { p: Pos { x: ENum(0.0), y: ENum(0.0) },
-                                    q: Pos { x: invert(w), y: ERatioNum(1.0,0.0) } })
+                         |w| Rect { p: Pos { x: Expr::zero(), y: Expr::zero() },
+                                    q: Pos { x: invert(w), y: Expr::one() } })
 
                 // {"$$": "even?", ...} etc. (delegated to Block)
                 Ok(Block(try!(from_json(Object(map)))))

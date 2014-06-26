@@ -12,14 +12,11 @@ use std::fmt;
 use std::rc::Rc;
 use std::str::MaybeOwned;
 
+use gfx::ratio_num::RatioNum;
 use gfx::gl::Texture2D;
 
-/// The scalar value.
-pub enum Scalar<'a> {
-    /// An owned string. Analogous to `std::str::MaybeOwned`.
-    OwnedStrScalar(String),
-    /// A borrowed string slice. Analogous to `std::str::MaybeOwned`.
-    BorrowedStrScalar(&'a str),
+/// The image reference in the scalar value.
+pub enum ImageSource<'a> {
     /**
      * A reference to the texture, contained in the `Rc` box.
      *
@@ -28,10 +25,64 @@ pub enum Scalar<'a> {
      * The renderer does try not to touch the `Rc` box itself until strictly required,
      * thus it requires the *reference* to the `Rc` box containing the texture.
      */
-    TextureScalar(&'a Rc<Texture2D>),
+    TextureSource(&'a Rc<Texture2D>),
     /// A reference to the image file.
     /// The renderer is free to cache the resulting texture per the path.
-    ImageScalar(Path),
+    PathSource(Path),
+}
+
+impl<'a> Clone for ImageSource<'a> {
+    fn clone(&self) -> ImageSource<'a> {
+        match *self {
+            TextureSource(tex) => TextureSource(tex),
+            PathSource(ref path) => PathSource(path.clone()),
+        }
+    }
+}
+
+/// The clipping rectangle.
+#[deriving(Clone, Show)]
+pub struct ImageClip {
+    pub x: RatioNum<f32>,
+    pub y: RatioNum<f32>,
+    pub w: RatioNum<f32>,
+    pub h: RatioNum<f32>,
+}
+
+impl ImageClip {
+    /// Returns a new, full-screen clipping rectangle.
+    pub fn new() -> ImageClip {
+        ImageClip { x: RatioNum::zero(), w: RatioNum::one(),
+                    y: RatioNum::zero(), h: RatioNum::one() }
+    }
+
+    /// Substitutes the current base rectangle with another clipping rectangle:
+    ///
+    /// ```notrust
+    /// +---------------+
+    /// | +-------+     |
+    /// | |       | <-------- self
+    /// | +-------+     | <-- other
+    /// |               |
+    /// +---------------+
+    /// ```
+    pub fn subst(&self, other: &ImageClip) -> ImageClip {
+        let x = other.x + self.x.subst(&other.w);
+        let y = other.y + self.y.subst(&other.h);
+        let w = self.w.subst(&other.w);
+        let h = self.h.subst(&other.h);
+        ImageClip { x: x, y: y, w: w, h: h }
+    }
+}
+
+/// The scalar value.
+pub enum Scalar<'a> {
+    /// An owned string. Analogous to `std::str::MaybeOwned`.
+    OwnedStrScalar(String),
+    /// A borrowed string slice. Analogous to `std::str::MaybeOwned`.
+    BorrowedStrScalar(&'a str),
+    /// An image reference and the clipping rectangle in pixels.
+    ImageScalar(ImageSource<'a>, ImageClip),
     /// A signed integer.
     IntScalar(int),
     /// An unsigned integer.
@@ -52,18 +103,10 @@ impl<'a> Scalar<'a> {
         }
     }
 
-    /// Extracts the texture reference if any.
-    pub fn as_texture(&'a self) -> Option<&'a Rc<Texture2D>> {
+    /// Extracts the image reference if any.
+    pub fn as_image_source(&'a self) -> Option<&'a ImageSource<'a>> {
         match *self {
-            TextureScalar(tex) => Some(tex),
-            _ => None,
-        }
-    }
-
-    /// Extracts a path to the image file if any.
-    pub fn as_image(&'a self) -> Option<&'a Path> {
-        match *self {
-            ImageScalar(ref path) => Some(path),
+            ImageScalar(ref src, _clip) => Some(src),
             _ => None,
         }
     }
@@ -94,7 +137,10 @@ impl IntoScalar<'static> for String {
 }
 
 impl<'a> AsScalar<'a> for Rc<Texture2D> {
-    #[inline] fn as_scalar(&'a self) -> Scalar<'a> { TextureScalar(self) }
+    #[inline]
+    fn as_scalar(&'a self) -> Scalar<'a> {
+        ImageScalar(TextureSource(self), ImageClip::new())
+    }
 }
 
 macro_rules! scalar_conv_impls(
@@ -121,16 +167,24 @@ scalar_conv_impls!(u32  -> |v| UintScalar(v as uint))
 scalar_conv_impls!(f32  -> |v| F32Scalar(v))
 scalar_conv_impls!(f64  -> |v| F64Scalar(v))
 
+impl<'a> fmt::Show for ImageSource<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            TextureSource(tex) => {
+                let tex = tex.deref();
+                write!(f, "<texture {}x{}>", tex.width, tex.height)
+            },
+            PathSource(ref path) => write!(f, "<external {}>", path.display()),
+        }
+    }
+}
+
 impl<'a> fmt::Show for Scalar<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             OwnedStrScalar(ref s) => s.fmt(f),
             BorrowedStrScalar(s) => s.fmt(f),
-            TextureScalar(tex) => {
-                let tex = tex.deref();
-                write!(f, "<texture {}x{}>", tex.width, tex.height)
-            },
-            ImageScalar(ref path) => write!(f, "<image {}>", path.display()),
+            ImageScalar(ref src, ref clip) => write!(f, "ImageScalar({}, {})", *src, *clip),
             IntScalar(v) => v.fmt(f),
             UintScalar(v) => v.fmt(f),
             F32Scalar(v) => v.fmt(f),
@@ -157,7 +211,6 @@ macro_rules! scalar_to_prim_impl(
                     match *self {
                         OwnedStrScalar(..) => None,
                         BorrowedStrScalar(..) => None,
-                        TextureScalar(..) => None,
                         ImageScalar(..) => None,
                         IntScalar(v) => v.$f(),
                         UintScalar(v) => v.$f(),
@@ -181,8 +234,7 @@ impl<'a> Clone for Scalar<'a> {
         match *self {
             OwnedStrScalar(ref s) => OwnedStrScalar(s.to_string()),
             BorrowedStrScalar(s) => BorrowedStrScalar(s),
-            TextureScalar(tex) => TextureScalar(tex),
-            ImageScalar(ref path) => ImageScalar(path.clone()),
+            ImageScalar(ref src, ref clip) => ImageScalar(src.clone(), clip.clone()),
             IntScalar(v) => IntScalar(v),
             UintScalar(v) => UintScalar(v),
             F32Scalar(v) => F32Scalar(v),

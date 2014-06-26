@@ -61,22 +61,8 @@
 use std::collections::HashMap;
 
 use gfx::color::{Color, Gradient};
-use gfx::skin::scalar::{Scalar, ImageScalar};
-
-/// Numerical expression.
-#[deriving(PartialEq,Show)]
-pub enum Expr {
-    ENum(f32),
-    ERatioNum(f32, f32),
-}
-
-/// Two-dimensional position.
-#[deriving(Show)]
-pub struct Pos { pub x: Expr, pub y: Expr }
-
-/// Two-dimensional rectangle.
-#[deriving(Show)]
-pub struct Rect { pub p: Pos, pub q: Pos }
+use gfx::ratio_num::RatioNum;
+use gfx::skin::scalar::{Scalar, ImageScalar, PathSource};
 
 /// An identifier to the hook. Different kind of hooks can share the same identifier.
 #[deriving(PartialEq,Eq,Hash,Show)]
@@ -87,6 +73,40 @@ impl Id {
     pub fn as_slice<'a>(&'a self) -> &'a str {
         let &Id(ref id) = self;
         id.as_slice()
+    }
+}
+
+/// Numerical expression.
+#[deriving(Show)]
+pub enum Expr {
+    ENum(RatioNum<f32>),
+}
+
+impl Expr {
+    /// Returns a value of zero.
+    pub fn zero() -> Expr {
+        ENum(RatioNum::zero())
+    }
+
+    /// Returns a value equal to the base value.
+    pub fn one() -> Expr {
+        ENum(RatioNum::one())
+    }
+}
+
+/// Two-dimensional position.
+#[deriving(Show)]
+pub struct Pos { pub x: Expr, pub y: Expr }
+
+/// Two-dimensional rectangle.
+#[deriving(Show)]
+pub struct Rect { pub p: Pos, pub q: Pos }
+
+impl Rect {
+    /// Returns a new, full-screen clipping rectangle.
+    pub fn new() -> Rect {
+        Rect { p: Pos { x: ENum(RatioNum::zero()), y: ENum(RatioNum::zero()) },
+               q: Pos { x: ENum(RatioNum::one()), y: ENum(RatioNum::one()) } }
     }
 }
 
@@ -159,7 +179,7 @@ pub enum Node {
     // colored rect at given position
     ColoredRect { pub at: Rect, pub color: Color },
     // textured rect at given position, optionally clipped
-    TexturedRect { pub tex: Id, pub at: Rect, pub rgba: (u8,u8,u8,u8), pub clip: Option<Rect> },
+    TexturedRect { pub tex: Id, pub at: Rect, pub rgba: (u8,u8,u8,u8), pub clip: Rect },
     // text with fixed anchor
     Text { pub at: Pos, pub size: f32, pub anchor: (f32,f32),
            pub color: Gradient, pub text: TextSource },
@@ -185,7 +205,7 @@ impl Skin {
         let Skin { mut scalars, nodes } = self;
         for (_, v) in scalars.mut_iter() {
             match *v {
-                ImageScalar(ref mut path) => { *path = base.join(&*path); }
+                ImageScalar(PathSource(ref mut path), _clip) => { *path = base.join(&*path); }
                 _ => {}
             }
         }
