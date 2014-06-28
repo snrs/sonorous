@@ -13,7 +13,7 @@ use std::collections::{TreeMap, HashMap};
 use serialize::json::{Json, Null, Boolean, Number, String, List, Object};
 use serialize::json::from_reader;
 
-use gfx::color::{Color, Gradient, RGB, RGBA};
+use gfx::color::{Color, RGB, RGBA};
 use gfx::ratio_num::RatioNum;
 use gfx::bmfont::{NROWS};
 use gfx::skin::scalar::{Scalar, ImageScalar, IntoScalar};
@@ -24,6 +24,8 @@ use gfx::skin::ast::{HookGen, TextGen, TextLenGen};
 use gfx::skin::ast::{Block, CondBlock, MultiBlock};
 use gfx::skin::ast::{ScalarFormat, NoFormat, NumFormat, MsFormat, HmsFormat};
 use gfx::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
+use gfx::skin::ast::{ColorSource, ScalarColor, StaticColor, ColorBlock};
+use gfx::skin::ast::{GradientSource, FlatColorGradient, ColorGradient, GradientBlock};
 use gfx::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
                      Text, Group, Clip};
 use gfx::skin::ast::{Skin};
@@ -221,31 +223,71 @@ impl FromJson for Color {
     }
 }
 
-impl FromJson for Gradient {
-    fn from_json(mut json: Json) -> Result<Gradient,String> {
+impl FromJson for ColorSource {
+    fn from_json(json: Json) -> Result<ColorSource,String> {
         match json {
-            // ["#rgb", [r,g,b]] etc.
-            List(ref mut l) => if l.len() == 2 {
-                let mut it = mem::replace(l, Vec::new()).move_iter();
+            // "white", "#fff", [255,255,255] etc.
+            String(..) | List(..) => Ok(StaticColor(try!(from_json(json)))),
+
+            Object(mut map) => {
+                // {"$": "color"}
+                let dynamic = map.pop(&"$".to_string());
+                if dynamic.is_some() {
+                    let id = try!(from_json(dynamic.unwrap()));
+                    ensure_empty!(map, "the color");
+                    return Ok(ScalarColor(id));
+                }
+
+                // {"$$": "transparent?", ...} etc. (delegated to Block)
+                Ok(ColorBlock(try!(from_json(Object(map)))))
+            }
+
+            _ => fail_with_json!(json, "a color")
+        }
+    }
+}
+
+impl FromJson for GradientSource {
+    fn from_json(json: Json) -> Result<GradientSource,String> {
+        match json {
+            // "white", "#fff" etc.
+            String(..) => Ok(FlatColorGradient(StaticColor(try!(from_json(json))))),
+
+            List(mut l) => if l.len() == 2 {
+                // [x, y]
+                let mut it = mem::replace(&mut l, Vec::new()).move_iter();
                 let zero = try!(from_json(it.next().unwrap()));
                 let one = try!(from_json(it.next().unwrap()));
-                return Ok(Gradient { zero: zero, one: one });
+                Ok(ColorGradient(zero, one))
+            } else {
+                // [r, g, b] or [r, g, b, a]
+                Ok(FlatColorGradient(StaticColor(try!(from_json(List(l))))))
             },
 
-            // {"zero": x, "one": y}
             Object(mut map) => {
-                let zero = try!(from_json(pop!(map, "zero", "the gradient")));
-                let one = try!(from_json(pop!(map, "one", "the gradient")));
-                ensure_empty!(map, "the gradient");
-                return Ok(Gradient { zero: zero, one: one });
+                // {"zero": x, "one": y}
+                if map.len() == 2 && map.contains_key(&"zero".to_string())
+                                  && map.contains_key(&"one".to_string()) {
+                    let zero = try!(from_json(pop!(map, "zero", "the gradient")));
+                    let one = try!(from_json(pop!(map, "one", "the gradient")));
+                    assert!(map.is_empty());
+                    return Ok(ColorGradient(zero, one));
+                }
+
+                // {"$": "color"}
+                let dynamic = map.pop(&"$".to_string());
+                if dynamic.is_some() {
+                    let id = try!(from_json(dynamic.unwrap()));
+                    ensure_empty!(map, "the gradient");
+                    return Ok(FlatColorGradient(ScalarColor(id)));
+                }
+
+                // {"$$": "transparent?", ...} etc. (delegated to Block)
+                Ok(GradientBlock(try!(from_json(Object(map)))))
             },
 
-            _ => {}
+            _ => fail_with_json!(json, "a gradient")
         }
-
-        // otherwise same as color
-        let color = try!(from_json(json));
-        Ok(Gradient { zero: color, one: color })
     }
 }
 
@@ -560,8 +602,13 @@ impl FromJson for Node {
                     let from = try!(from_json(pop!(map, "from", "the line")));
                     let to = try!(from_json(pop!(map, "to", "the line")));
                     let color = try!(from_json(pop!(map, "color", "the line")));
+                    let opacity = match map.pop(&"opacity".to_string()) {
+                        Some(Number(a)) => a as f32,
+                        Some(opacity) => fail_with_json!(opacity, "a number in the line opacity"),
+                        None => 1.0,
+                    };
                     ensure_empty!(map, "the line");
-                    return Ok(ColoredLine { from: from, to: to, color: color });
+                    return Ok(ColoredLine { from: from, to: to, color: color, opacity: opacity });
                 }
 
                 // {"$rect": null, "at": [[px,py], [qx,qy]], "color": "#rgb", "alpha": 0.5}
@@ -574,47 +621,32 @@ impl FromJson for Node {
                     };
                     let at = try!(from_json(pop!(map, "at", "the rectangle")));
                     let color = match map.pop(&"color".to_string()) {
-                        Some(color) => Some(try!(from_json::<Color>(color))),
+                        Some(color) => Some(try!(from_json::<ColorSource>(color))),
                         None => None,
                     };
                     let opacity = match map.pop(&"opacity".to_string()) {
-                        Some(Number(a)) => Some(a),
+                        Some(Number(a)) => a as f32,
                         Some(opacity) =>
                             fail_with_json!(opacity, "a number in the rectangle opacity"),
-                        None => None,
-                    };
-                    let (color, opacity) = match (color, opacity) {
-                        (Some(RGB(r,g,b)), Some(a)) => (Some(RGBA(r,g,b,from_0_1(a))), None),
-                        (color, opacity) => (color, opacity),
+                        None => 1.0,
                     };
                     let clip = match map.pop(&"clip".to_string()) {
                         Some(clip) => Some(try!(from_json(clip))),
                         None => None,
                     };
                     ensure_empty!(map, "the rectangle");
-                    return match (tex, color, opacity, clip) {
-                        (None, Some(color), None, None) =>
-                            Ok(ColoredRect { at: at, color: color }),
-                        (None, Some(_), Some(_), _) =>
-                            Err(format!("the colored rectangle cannot have both \
-                                         the RGBA `color` and `opacity`")),
-                        (None, None, _, _) =>
+                    return match (tex, color, clip) {
+                        (None, Some(color), None) =>
+                            Ok(ColoredRect { at: at, color: color, opacity: opacity }),
+                        (None, None, _) =>
                             Err(format!("expected `color` in the colored rectangle")),
-                        (None, _, _, Some(..)) =>
+                        (None, _, Some(..)) =>
                             Err(format!("the colored rectangle cannot have `clip`")),
-                        (Some(tex), color, opacity, clip) => {
-                            let rgba = match (color, opacity) {
-                                (Some(RGB(r,g,b)), None) => (r,g,b,255),
-                                (Some(RGBA(r,g,b,a)), None) => (r,g,b,a),
-                                (None, Some(a)) => (255,255,255,from_0_1(a)),
-                                (None, None) => (255,255,255,255),
-                                (_, _) => {
-                                    return Err(format!("the textured rectangle cannot have \
-                                                        both the RGBA `color` and `opacity`"));
-                                }
-                            };
+                        (Some(tex), color, clip) => {
+                            let color = color.unwrap_or(StaticColor(RGBA(255,255,255,255)));
                             let clip = clip.unwrap_or(Rect::new());
-                            Ok(TexturedRect { tex: tex, at: at, rgba: rgba, clip: clip })
+                            Ok(TexturedRect { tex: tex, at: at, colormod: color,
+                                              opacity: opacity, clip: clip })
                         },
                     };
                 }
@@ -649,9 +681,13 @@ impl FromJson for Node {
                         None => (0.0, 0.0),
                     };
                     let color = try!(from_json(pop!(map, "color", "the text")));
+                    let zerocolor = match map.pop(&"zerocolor".to_string()) {
+                        Some(zerocolor) => Some(try!(from_json(zerocolor))),
+                        None => None,
+                    };
                     ensure_empty!(map, "the text");
                     return Ok(Text { at: at, size: size, anchor: anchor,
-                                     color: color, text: text });
+                                     color: color, zerocolor: zerocolor, text: text });
                 }
 
                 // {"$clip": [[px,py],[qx,qy]]}

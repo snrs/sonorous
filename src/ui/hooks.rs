@@ -5,7 +5,7 @@
 //! Common skin hooks for various types.
 
 use format::{timeline, metadata, bms};
-use engine::keyspec;
+use engine::{keyspec, player};
 use ui::options;
 
 use gfx::skin::scalar::{Scalar, AsScalar, IntoScalar};
@@ -166,6 +166,71 @@ impl Hook for keyspec::KeySpec {
                 Some(self.nkeys().into_scalar()),
             _ => None,
         }
+    }
+}
+
+struct GradeInfo {
+    name: &'static str,
+    count: uint,
+}
+
+impl Hook for GradeInfo {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
+        match id {
+            "grade.name" => Some(self.name.into_scalar()),
+            "grade.count" => Some(self.count.into_scalar()),
+            _ => None,
+        }
+    }
+}
+
+impl Hook for player::Player {
+    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
+        match id {
+            "meta.duration" => Some(self.duration.into_scalar()),
+            "player.playspeed" => Some(self.nominal_playspeed().into_scalar()),
+            "player.bpm" => Some(self.bpm.into_scalar()),
+            "player.now.time" => Some(self.now.into_scalar()),
+            "player.now.vpos" => Some(self.cur.loc.vpos.into_scalar()),
+            "player.ratio" => {
+                let starttime = (self.now - self.origintime) as f64;
+                let duration = self.duration * 1000.0;
+                Some((starttime / duration).into_scalar())
+            },
+            "player.score" => Some(self.score.into_scalar()),
+            "player.lastcombo" => Some(self.lastcombo.into_scalar()),
+            "player.bestcombo" => Some(self.bestcombo.into_scalar()),
+            "player.gauge" =>
+                Some((self.gauge as f64 / player::MAXGAUGE as f64).into_scalar()),
+            "player.survival" =>
+                Some((self.survival as f64 / player::MAXGAUGE as f64).into_scalar()),
+            _ => {
+                self.opts.scalar_hook(id)
+                    .or_else(|| self.meta.scalar_hook(id))
+                    .or_else(|| self.timeline.scalar_hook(id))
+                    .or_else(|| self.infos.scalar_hook(id))
+                    .or_else(|| self.keyspec.scalar_hook(id))
+            }
+        }
+    }
+
+    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
+        match id {
+            "player.survival" => { self.gauge >= self.survival && body(parent, ""); }
+            "player.grades" => {
+                static GRADENAMES: [&'static str, ..5] = ["cool", "great", "good", "bad", "miss"];
+                GRADENAMES.iter().zip(self.gradecounts.iter().rev()).advance(|(&name, &count)|
+                    body(&parent.delegate(&GradeInfo { name: name, count: count }), name));
+            },
+            _ => {
+                return self.opts.run_block_hook(id, parent, &mut body) ||
+                       self.meta.run_block_hook(id, parent, &mut body) ||
+                       self.timeline.run_block_hook(id, parent, &mut body) ||
+                       self.infos.run_block_hook(id, parent, &mut body) ||
+                       self.keyspec.run_block_hook(id, parent, &mut body);
+            }
+        }
+        true
     }
 }
 

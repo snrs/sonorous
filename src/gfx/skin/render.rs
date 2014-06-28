@@ -17,16 +17,19 @@ use std::collections::HashMap;
 use gl = opengles::gl2;
 use sdl_image;
 
+use gfx::color::{Color, Gradient, RGB, to_rgba};
 use gfx::gl::Texture2D;
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
 use gfx::bmfont::{NCOLUMNS, NROWS, FontDrawingUtils, LeftAligned};
 use gfx::screen::{Screen, ShadedFontDrawing, ScreenDraw, ScreenTexturedDraw};
-use gfx::skin::scalar::{Scalar, ImageScalar, TextureSource, PathSource, ImageClip};
+use gfx::skin::scalar::{Scalar, ImageScalar, TextureSource, PathSource, ImageClip, ColorScalar};
 use gfx::skin::ast::{Expr, ENum, Pos, Rect};
 use gfx::skin::ast::{Gen, HookGen, TextGen, TextLenGen};
 use gfx::skin::ast::{Block, CondBlock, MultiBlock};
 use gfx::skin::ast::{ScalarFormat, NoFormat, NumFormat, MsFormat, HmsFormat};
 use gfx::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
+use gfx::skin::ast::{ColorSource, ScalarColor, StaticColor, ColorBlock};
+use gfx::skin::ast::{GradientSource, FlatColorGradient, ColorGradient, GradientBlock};
 use gfx::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
                      Text, Group, Clip};
 use gfx::skin::ast::{Skin};
@@ -120,6 +123,65 @@ impl<'a> State<'a> {
     /// Evaluates a rectangle.
     fn rect(&self, hook: &Hook, rect: &Rect) -> ((f32, f32), (f32, f32)) {
         (self.pos(hook, &rect.p), self.pos(hook, &rect.q))
+    }
+
+    /// Evaluates a color source.
+    fn color_source(&self, hook: &Hook, color: &ColorSource) -> Option<Color> {
+        match *color {
+            ScalarColor(ref id) => match hook.scalar_hook(id.as_slice()) {
+                Some(ColorScalar(color)) => Some(color),
+                Some(ref scalar) => {
+                    warn!("skin: `{id}` is not a color scalar hook ({scalar}).",
+                          id = id.as_slice(), scalar = *scalar);
+                    None
+                },
+                _ => {
+                    warn!("skin: `{id}` is not a scalar hook.", id = id.as_slice());
+                    None
+                },
+            },
+            StaticColor(color) => Some(color),
+            ColorBlock(ref block) => {
+                let mut ret = None;
+                self.block(hook, block, |hook_, color_| {
+                    ret = self.color_source(hook_, *color_);
+                    false
+                });
+                ret
+            },
+        }
+    }
+
+    /// Evaluates a gradient source.
+    fn gradient_source(&self, hook: &Hook, gradient: &GradientSource) -> Option<Gradient> {
+        match *gradient {
+            FlatColorGradient(ref color) => {
+                match self.color_source(hook, color) {
+                    Some(color) => Some(Gradient { zero: color, one: color }),
+                    None => None,
+                }
+            }
+            ColorGradient(ref zero, ref one) => {
+                match (self.color_source(hook, zero), self.color_source(hook, one)) {
+                    (Some(zero), Some(one)) => Some(Gradient { zero: zero, one: one }),
+                    (_, _) => None,
+                }
+            }
+            GradientBlock(ref block) => {
+                let mut ret = None;
+                self.block(hook, block, |hook_, gradient_| {
+                    ret = self.gradient_source(hook_, *gradient_);
+                    false
+                });
+                ret
+            }
+        }
+    }
+
+    /// Combines a (possibly transparent) color with the opacity.
+    fn rgba(&self, color: Color, opacity: f32) -> (u8, u8, u8, u8) {
+        let (r, g, b, a) = to_rgba(color);
+        (r, g, b, (a as f32 * opacity) as u8)
     }
 
     /// Given a block call generator, calls `body` zero or more times.
@@ -346,7 +408,15 @@ impl<'a> State<'a> {
                 });
                 callback(ret.as_ref().map(|tex| (tex, clip)))
             },
-            _ => callback(None),
+            Some(ref scalar) => {
+                warn!("skin: `{id}` is not a texture scalar hook ({scalar}).",
+                      id = id, scalar = *scalar);
+                callback(None)
+            },
+            _ => {
+                warn!("skin: `{id}` is not a scalar hook.", id = id);
+                callback(None)
+            },
         }
     }
 
@@ -427,22 +497,33 @@ impl<'a> State<'a> {
         for node in nodes.iter() {
             match *node {
                 Nothing => {}
+
                 Debug(ref msg) => {
                     let clip = self.clip.get();
                     debug!("skin debug: dx={} dy={} w={} y={} msg={}",
                            clip.dx, clip.dy, clip.w, clip.h, *msg);
                 }
-                ColoredLine { ref from, ref to, ref color } => {
+
+                ColoredLine { ref from, ref to, ref color, opacity } => {
                     let (x1, y1) = self.pos(hook, from);
                     let (x2, y2) = self.pos(hook, to);
-                    self.shaded_lines(|d| d.line(x1, y1, x2, y2, *color));
+                    let color = self.color_source(hook, color).unwrap_or(RGB(255, 255, 255));
+                    let rgba = self.rgba(color, opacity);
+                    self.shaded_lines(|d| d.line_rgba(x1, y1, x2, y2, rgba, rgba));
                 }
-                ColoredRect { ref at, ref color } => {
+
+                ColoredRect { ref at, ref color, opacity } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
-                    self.shaded(|d| d.rect(x1, y1, x2, y2, *color));
+                    let color = self.color_source(hook, color).unwrap_or(RGB(255, 255, 255));
+                    let rgba = self.rgba(color, opacity);
+                    self.shaded(|d| d.rect_rgba(x1, y1, x2, y2, rgba, rgba, rgba, rgba));
                 }
-                TexturedRect { ref tex, ref at, ref rgba, ref clip } => {
+
+                TexturedRect { ref tex, ref at, ref colormod, opacity, ref clip } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
+                    let colormod = self.color_source(hook, colormod).unwrap_or(RGB(255, 255, 255));
+                    let rgba = self.rgba(colormod, opacity);
+
                     self.texture(hook, tex.as_slice(), |ret| match ret {
                         Some((tex, texclip)) => {
                             let tl = texclip.x.to_num(&(tex.width as f32));
@@ -454,28 +535,61 @@ impl<'a> State<'a> {
                             let tx2 = tl + self.expr(hook, &clip.q.x, tw);
                             let ty2 = tt + self.expr(hook, &clip.q.y, th);
                             self.textured(tex, |d| d.rect_area_rgba(x1, y1, x2, y2,
-                                                                    tx1, ty1, tx2, ty2, *rgba));
+                                                                    tx1, ty1, tx2, ty2, rgba));
                         }
+
                         _ => {
                             warn!("skin: `{id}` is not a texture hook, will ignore",
                                   id = tex.as_slice());
                         }
                     });
                 }
-                Text { ref at, size, anchor: (ax,ay), ref color, ref text } => {
+
+                Text { ref at, size, anchor: (ax,ay), ref color, ref zerocolor, ref text } => {
                     let (x, y) = self.pos(hook, at);
+
                     let text = self.text(hook, text);
+                    let mut zeroes;
+                    if zerocolor.is_some() {
+                        zeroes = text.as_slice().find(|c: char| c != '0').unwrap_or(text.len());
+                        if zeroes == text.len() || !text.as_slice().char_at(zeroes).is_digit() {
+                            zeroes -= 1; // keep at least one zero
+                        }
+                    } else {
+                        zeroes = 0;
+                    }
+
+                    static DEFAULT_GRADIENT: Gradient =
+                        Gradient { zero: RGB(255, 255, 255), one: RGB(255, 255, 255) };
+                    let gradient = self.gradient_source(hook, color).unwrap_or(DEFAULT_GRADIENT);
+                    let gradient0 = match *zerocolor {
+                        Some(ref color0) => self.gradient_source(hook, color0)
+                                                .unwrap_or(DEFAULT_GRADIENT),
+                        None => gradient
+                    };
+
                     let zoom = size / NROWS as f32;
                     let w = zoom * (text.as_slice().char_len() * NCOLUMNS) as f32;
                     let h = size as f32;
-                    self.shaded(|d| d.string(x - w * ax, y - h * ay, zoom,
-                                             LeftAligned, text.as_slice(), *color));
+                    self.shaded(|d| {
+                        let left = x - w * ax;
+                        let left0 = left + zoom * (zeroes * NCOLUMNS) as f32;
+                        let top = y - h * ay;
+                        if zeroes > 0 {
+                            d.string(left, top, zoom, LeftAligned,
+                                     text.as_slice().slice_to(zeroes), gradient0);
+                        }
+                        d.string(left0, top, zoom, LeftAligned,
+                                 text.as_slice().slice_from(zeroes), gradient);
+                    });
                 }
+
                 Group(ref nodes) => {
                     let savedclip = self.clip.get();
                     self.nodes(hook, nodes.as_slice());
                     self.clip.set(savedclip);
                 }
+
                 Clip { ref at } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
                     let newclip = ClipRect { dx: x1, dy: y1, w: x2 - x1, h: y2 - y1 };
@@ -485,6 +599,7 @@ impl<'a> State<'a> {
                         return false;
                     }
                 }
+
                 Block(ref block) => {
                     let mut keepgoing = true;
                     self.block(hook, block, |hook_, nodes_| {

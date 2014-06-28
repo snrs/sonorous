@@ -12,6 +12,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::str::MaybeOwned;
 
+use gfx::color::{Color, RGB, RGBA};
 use gfx::ratio_num::RatioNum;
 use gfx::gl::Texture2D;
 
@@ -91,6 +92,8 @@ pub enum Scalar<'a> {
     F32Scalar(f32),
     /// A 64-bit floating point number.
     F64Scalar(f64),
+    /// A color.
+    ColorScalar(Color),
 }
 
 impl<'a> Scalar<'a> {
@@ -154,18 +157,19 @@ macro_rules! scalar_conv_impls(
     )
 )
 
-scalar_conv_impls!(int  -> |v| IntScalar(v))
-scalar_conv_impls!(i8   -> |v| IntScalar(v as int))
-scalar_conv_impls!(i16  -> |v| IntScalar(v as int))
-scalar_conv_impls!(i64  -> |v| IntScalar(v as int))
-scalar_conv_impls!(i32  -> |v| IntScalar(v as int))
-scalar_conv_impls!(uint -> |v| UintScalar(v))
-scalar_conv_impls!(u8   -> |v| UintScalar(v as uint))
-scalar_conv_impls!(u16  -> |v| UintScalar(v as uint))
-scalar_conv_impls!(u64  -> |v| UintScalar(v as uint))
-scalar_conv_impls!(u32  -> |v| UintScalar(v as uint))
-scalar_conv_impls!(f32  -> |v| F32Scalar(v))
-scalar_conv_impls!(f64  -> |v| F64Scalar(v))
+scalar_conv_impls!(int   -> |v| IntScalar(v))
+scalar_conv_impls!(i8    -> |v| IntScalar(v as int))
+scalar_conv_impls!(i16   -> |v| IntScalar(v as int))
+scalar_conv_impls!(i64   -> |v| IntScalar(v as int))
+scalar_conv_impls!(i32   -> |v| IntScalar(v as int))
+scalar_conv_impls!(uint  -> |v| UintScalar(v))
+scalar_conv_impls!(u8    -> |v| UintScalar(v as uint))
+scalar_conv_impls!(u16   -> |v| UintScalar(v as uint))
+scalar_conv_impls!(u64   -> |v| UintScalar(v as uint))
+scalar_conv_impls!(u32   -> |v| UintScalar(v as uint))
+scalar_conv_impls!(f32   -> |v| F32Scalar(v))
+scalar_conv_impls!(f64   -> |v| F64Scalar(v))
+scalar_conv_impls!(Color -> |v| ColorScalar(v))
 
 impl<'a> fmt::Show for ImageSource<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -189,6 +193,8 @@ impl<'a> fmt::Show for Scalar<'a> {
             UintScalar(v) => v.fmt(f),
             F32Scalar(v) => v.fmt(f),
             F64Scalar(v) => v.fmt(f),
+            ColorScalar(RGB(r, g, b)) => write!(f, "#{:02x}{:02x}{:02x}", r, g, b),
+            ColorScalar(RGBA(r, g, b, a)) => write!(f, "#{:02x}{:02x}{:02x}{:02x}", r, g, b, a),
         }
     }
 }
@@ -216,6 +222,7 @@ macro_rules! scalar_to_prim_impl(
                         UintScalar(v) => v.$f(),
                         F32Scalar(v) => v.$f(),
                         F64Scalar(v) => v.$f(),
+                        ColorScalar(..) => None,
                     }
                 }
             )*
@@ -239,6 +246,7 @@ impl<'a> Clone for Scalar<'a> {
             UintScalar(v) => UintScalar(v),
             F32Scalar(v) => F32Scalar(v),
             F64Scalar(v) => F64Scalar(v),
+            ColorScalar(v) => ColorScalar(v),
         }
     }
 }

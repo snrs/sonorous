@@ -60,12 +60,12 @@
 
 use std::collections::HashMap;
 
-use gfx::color::{Color, Gradient};
+use gfx::color::Color;
 use gfx::ratio_num::RatioNum;
 use gfx::skin::scalar::{Scalar, ImageScalar, PathSource};
 
 /// An identifier to the hook. Different kind of hooks can share the same identifier.
-#[deriving(PartialEq,Eq,Hash,Show)]
+#[deriving(PartialEq, Eq, Hash, Clone, Show)]
 pub struct Id(pub String);
 
 impl Id {
@@ -77,7 +77,7 @@ impl Id {
 }
 
 /// Numerical expression.
-#[deriving(Show)]
+#[deriving(Clone, Show)]
 pub enum Expr {
     ENum(RatioNum<f32>),
 }
@@ -95,11 +95,11 @@ impl Expr {
 }
 
 /// Two-dimensional position.
-#[deriving(Show)]
+#[deriving(Clone, Show)]
 pub struct Pos { pub x: Expr, pub y: Expr }
 
 /// Two-dimensional rectangle.
-#[deriving(Show)]
+#[deriving(Clone, Show)]
 pub struct Rect { pub p: Pos, pub q: Pos }
 
 impl Rect {
@@ -111,6 +111,7 @@ impl Rect {
 }
 
 /// A block call generator.
+#[deriving(Clone)]
 pub enum Gen {
     // {"$$": "id", ...} maps to `block_hook`
     HookGen(Id),
@@ -134,6 +135,7 @@ impl Gen {
 }
 
 /// The universal flow structure.
+#[deriving(Clone)]
 pub enum Block<T> {
     // conditional
     // - `then` is called multiple times with a fresh mapping
@@ -148,6 +150,7 @@ pub enum Block<T> {
 }
 
 /// The formatting specification for scalar text.
+#[deriving(Clone)]
 pub enum ScalarFormat {
     NoFormat,
     // ['+'] [".."] {'#'} {'0'} '0' [".0" {'0'}] [('*' <mult> | '/' <div>)]
@@ -164,6 +167,7 @@ pub enum ScalarFormat {
 }
 
 /// The text source for the `$text` node.
+#[deriving(Clone)]
 pub enum TextSource {
     ScalarText(Id, ScalarFormat),
     StaticText(String),
@@ -171,18 +175,47 @@ pub enum TextSource {
     TextConcat(Vec<TextSource>),
 }
 
+/// The color source for the `color` field in `$rect`, `$line` and a part of `$text` nodes.
+/// Maps to `gfx::color::Color`.
+pub enum ColorSource {
+    ScalarColor(Id),
+    StaticColor(Color),
+    ColorBlock(Block<Box<ColorSource>>),
+}
+
+impl Clone for ColorSource {
+    fn clone(&self) -> ColorSource {
+        match *self {
+            ScalarColor(ref id) => ScalarColor(id.clone()),
+            StaticColor(color) => StaticColor(color),
+            ColorBlock(ref block) => ColorBlock(block.clone()),
+        }
+    }
+}
+
+/// The linear color gradient source for the `color` field in the `$text` node.
+/// Maps to `gfx::color::Gradient`.
+#[deriving(Clone)]
+pub enum GradientSource {
+    FlatColorGradient(ColorSource),
+    ColorGradient(/* zero */ ColorSource, /* one */ ColorSource),
+    GradientBlock(Block<Box<GradientSource>>),
+}
+
 /// The main skin commands.
+#[deriving(Clone)]
 pub enum Node {
     Nothing,
     Debug(String),
-    ColoredLine { pub from: Pos, pub to: Pos, pub color: Color },
+    ColoredLine { pub from: Pos, pub to: Pos, pub color: ColorSource, pub opacity: f32 },
     // colored rect at given position
-    ColoredRect { pub at: Rect, pub color: Color },
+    ColoredRect { pub at: Rect, pub color: ColorSource, pub opacity: f32 },
     // textured rect at given position, optionally clipped
-    TexturedRect { pub tex: Id, pub at: Rect, pub rgba: (u8,u8,u8,u8), pub clip: Rect },
+    TexturedRect { pub tex: Id, pub at: Rect, pub colormod: ColorSource,
+                   pub opacity: f32, pub clip: Rect },
     // text with fixed anchor
-    Text { pub at: Pos, pub size: f32, pub anchor: (f32,f32),
-           pub color: Gradient, pub text: TextSource },
+    Text { pub at: Pos, pub size: f32, pub anchor: (f32,f32), pub color: GradientSource,
+           pub zerocolor: Option<GradientSource>, pub text: TextSource }, // XXX no opacity yet
     // clipping group, resets the clipping region after the group
     Group(Vec<Node>),
     // reclipping command
@@ -192,6 +225,7 @@ pub enum Node {
 }
 
 /// The top-level parsed skin data.
+#[deriving(Clone)]
 pub struct Skin {
     /// The predefined scalar values.
     pub scalars: HashMap<String,Scalar<'static>>,

@@ -76,7 +76,14 @@ pub mod gfx {
     pub mod draw;
     pub mod bmfont;
     pub mod screen;
-    pub mod skin;
+    pub mod skin {
+        //! Skin engine.
+        pub mod scalar;
+        pub mod ast;
+        pub mod parse;
+        pub mod hook;
+        pub mod render;
+    }
 }
 
 pub mod format {
