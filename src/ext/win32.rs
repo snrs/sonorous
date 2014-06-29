@@ -42,9 +42,9 @@ pub mod ll {
         pub nFileExtension: WORD,
         pub lpstrDefExt: LPCWSTR,
         pub lCustData: DWORD,
-        pub lpfnHook: *(), // XXX LPOFNHOOKPROC = fn(HWND,c_uint,WPARAM,LPARAM)->c_uint
+        pub lpfnHook: *mut (), // XXX LPOFNHOOKPROC = fn(HWND,c_uint,WPARAM,LPARAM)->c_uint
         pub lpTemplateName: LPCWSTR,
-        pub pvReserved: *c_void,
+        pub pvReserved: *mut c_void,
         pub dwReserved: DWORD,
         pub FlagsEx: DWORD,
     }
@@ -69,8 +69,8 @@ pub mod ll {
     #[link(name = "kernel32")]
     extern "stdcall" {
         pub fn FindFirstFileA(lpFileName: LPCSTR,
-                              lpFindFileData: *WIN32_FIND_DATAA) -> HANDLE;
-        pub fn FindNextFileA(hFindFile: HANDLE, lpFindFileData: *WIN32_FIND_DATAA) -> BOOL;
+                              lpFindFileData: *mut WIN32_FIND_DATAA) -> HANDLE;
+        pub fn FindNextFileA(hFindFile: HANDLE, lpFindFileData: *mut WIN32_FIND_DATAA) -> BOOL;
         pub fn FindClose(hFindFile: HANDLE) -> BOOL;
         pub fn LoadLibraryA(lpFileName: LPCSTR) -> HANDLE;
         pub fn GetACP() -> c_uint;
@@ -85,7 +85,7 @@ pub mod ll {
 
     #[link(name = "comdlg32")]
     extern "stdcall" {
-        pub fn GetOpenFileNameW(lpofn: *OPENFILENAMEW) -> BOOL;
+        pub fn GetOpenFileNameW(lpofn: *mut OPENFILENAMEW) -> BOOL;
     }
 }
 

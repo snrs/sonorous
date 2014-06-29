@@ -29,7 +29,7 @@ pub mod str {
 
         /// Work with a null-terminated UTF-16 buffer of the string. Useful for calling
         /// Win32 API.
-        fn as_utf16_c_str<T>(&self, f: |*u16| -> T) -> T;
+        fn as_utf16_c_str<T>(&self, f: |*const u16| -> T) -> T;
     }
 
     impl<'r> StrUtil<'r> for &'r str {
@@ -52,7 +52,7 @@ pub mod str {
             end - start
         }
 
-        fn as_utf16_c_str<T>(&self, f: |*u16| -> T) -> T {
+        fn as_utf16_c_str<T>(&self, f: |*const u16| -> T) -> T {
             let mut s16: Vec<u16> = self.to_utf16().move_iter().collect();
             s16.push(0u16);
             f(s16.as_ptr())

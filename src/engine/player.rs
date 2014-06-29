@@ -254,7 +254,7 @@ fn create_beep() -> sdl_mixer::Chunk {
         // sawtooth wave at 3150 Hz, quadratic decay after 0.02 seconds.
         |i| { let i = i as i32; (i%28-14) * cmp::min(2000, (12000-i)*(12000-i)/50000) });
     unsafe {
-        slice::raw::buf_as_slice(samples.as_ptr() as *u8, samples.len() * 4, |samples| {
+        slice::raw::buf_as_slice(samples.as_ptr() as *const u8, samples.len() * 4, |samples| {
             sdl_mixer::Chunk::new(Vec::from_slice(samples), 128)
         })
     }
@@ -408,7 +408,7 @@ impl Player {
         // the last channel info is removed)
         let mut ch;
         loop {
-            ch = self.sndres.as_slice()[sref].chunk().unwrap().play(lastch, 0);
+            ch = self.sndres.as_mut_slice()[sref].mut_chunk().unwrap().play(lastch, 0);
             if ch >= 0 { break; }
             self.allocate_more_channels(32);
         }
@@ -433,7 +433,7 @@ impl Player {
 
     /// Plays a beep. The beep is always played in the channel 0, which is excluded from
     /// the uniform key sound and BGM management.
-    pub fn play_beep(&self) {
+    pub fn play_beep(&mut self) {
         self.beep.play(Some(0), 0);
     }
 

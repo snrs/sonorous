@@ -84,6 +84,14 @@ impl SoundResource {
         }
     }
 
+    /// Returns the associated chunk if any.
+    pub fn mut_chunk<'r>(&'r mut self) -> Option<&'r mut Chunk> {
+        match *self {
+            NoSound => None,
+            Sound(ref mut chunk) => Some(chunk)
+        }
+    }
+
     /// Returns the length of associated sound chunk in seconds. This is used for determining
     /// the actual duration of the song in presence of key and background sounds, so it may
     /// return 0.0 if no sound is present.

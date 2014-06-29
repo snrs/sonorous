@@ -9,7 +9,7 @@
 //! The minimal but functional binding for SMPEG.
 
 use libc::{c_int, c_float};
-use std::ptr::null;
+use std::ptr::mut_null;
 use sdl::video::Surface;
 pub use self::ll::{SMPEGstatus, SMPEG_ERROR, SMPEG_STOPPED, SMPEG_PLAYING};
 
@@ -43,52 +43,51 @@ pub mod ll {
     }
     #[link(name = "smpeg")]
     extern {
-        pub fn SMPEG_new(file: *c_char, info: *SMPEG_Info,
-                         sdl_audio: c_int) -> *SMPEG;
-        pub fn SMPEG_new_descr(file: c_int, info: *SMPEG_Info,
-                               sdl_audio: c_int) -> *SMPEG;
-        pub fn SMPEG_new_data(data: *c_void, size: c_int, info: *SMPEG_Info,
-                              sdl_audio: c_int) -> *SMPEG;
-        pub fn SMPEG_new_rwops(src: *SDL_RWops, info: *SMPEG_Info,
-                               sdl_audio: c_int) -> *SMPEG;
-        pub fn SMPEG_getinfo(mpeg: *SMPEG, info: *SMPEG_Info);
-        pub fn SMPEG_enableaudio(mpeg: *SMPEG, enable: c_int);
-        pub fn SMPEG_enablevideo(mpeg: *SMPEG, enable: c_int);
-        pub fn SMPEG_delete(mpeg: *SMPEG);
-        pub fn SMPEG_status(mpeg: *SMPEG) -> SMPEGstatus;
-        pub fn SMPEG_setvolume(mpeg: *SMPEG, volume: c_int);
+        pub fn SMPEG_new(file: *const c_char, info: *mut SMPEG_Info,
+                         sdl_audio: c_int) -> *mut SMPEG;
+        pub fn SMPEG_new_descr(file: c_int, info: *mut SMPEG_Info,
+                               sdl_audio: c_int) -> *mut SMPEG;
+        pub fn SMPEG_new_data(data: *mut c_void, size: c_int, info: *mut SMPEG_Info,
+                              sdl_audio: c_int) -> *mut SMPEG;
+        pub fn SMPEG_new_rwops(src: *mut SDL_RWops, info: *mut SMPEG_Info,
+                               sdl_audio: c_int) -> *mut SMPEG;
+        pub fn SMPEG_getinfo(mpeg: *mut SMPEG, info: *mut SMPEG_Info);
+        pub fn SMPEG_enableaudio(mpeg: *mut SMPEG, enable: c_int);
+        pub fn SMPEG_enablevideo(mpeg: *mut SMPEG, enable: c_int);
+        pub fn SMPEG_delete(mpeg: *mut SMPEG);
+        pub fn SMPEG_status(mpeg: *mut SMPEG) -> SMPEGstatus;
+        pub fn SMPEG_setvolume(mpeg: *mut SMPEG, volume: c_int);
         // XXX SDL_Mutex and SMPEG_DisplayCallback unimplemented
-        pub fn SMPEG_setdisplay(mpeg: *SMPEG, dst: *SDL_Surface,
-                                surfLock: *c_void, callback: *c_void);
-        pub fn SMPEG_loop(mpeg: *SMPEG, repeat: c_int);
-        pub fn SMPEG_scaleXY(mpeg: *SMPEG, width: c_int, height: c_int);
-        pub fn SMPEG_scale(mpeg: *SMPEG, scale: c_int);
-        pub fn SMPEG_move(mpeg: *SMPEG, x: c_int, y: c_int);
-        pub fn SMPEG_setdisplayregion(mpeg: *SMPEG, x: c_int, y: c_int,
-                                      w: c_int, h: c_int);
-        pub fn SMPEG_play(mpeg: *SMPEG);
-        pub fn SMPEG_pause(mpeg: *SMPEG);
-        pub fn SMPEG_stop(mpeg: *SMPEG);
-        pub fn SMPEG_rewind(mpeg: *SMPEG);
-        pub fn SMPEG_seek(mpeg: *SMPEG, bytes: c_int);
-        pub fn SMPEG_skip(mpeg: *SMPEG, seconds: c_float);
-        pub fn SMPEG_renderFrame(mpeg: *SMPEG, framenum: c_int);
-        pub fn SMPEG_renderFinal(mpeg: *SMPEG, dst: *SDL_Surface, x: c_int, y: c_int);
+        pub fn SMPEG_setdisplay(mpeg: *mut SMPEG, dst: *mut SDL_Surface,
+                                surfLock: *mut c_void, callback: *mut c_void);
+        pub fn SMPEG_loop(mpeg: *mut SMPEG, repeat: c_int);
+        pub fn SMPEG_scaleXY(mpeg: *mut SMPEG, width: c_int, height: c_int);
+        pub fn SMPEG_scale(mpeg: *mut SMPEG, scale: c_int);
+        pub fn SMPEG_move(mpeg: *mut SMPEG, x: c_int, y: c_int);
+        pub fn SMPEG_setdisplayregion(mpeg: *mut SMPEG, x: c_int, y: c_int, w: c_int, h: c_int);
+        pub fn SMPEG_play(mpeg: *mut SMPEG);
+        pub fn SMPEG_pause(mpeg: *mut SMPEG);
+        pub fn SMPEG_stop(mpeg: *mut SMPEG);
+        pub fn SMPEG_rewind(mpeg: *mut SMPEG);
+        pub fn SMPEG_seek(mpeg: *mut SMPEG, bytes: c_int);
+        pub fn SMPEG_skip(mpeg: *mut SMPEG, seconds: c_float);
+        pub fn SMPEG_renderFrame(mpeg: *mut SMPEG, framenum: c_int);
+        pub fn SMPEG_renderFinal(mpeg: *mut SMPEG, dst: *mut SDL_Surface, x: c_int, y: c_int);
         // XXX SMPEG_Filter unimplemented
-        pub fn SMPEG_filter(mpeg: *SMPEG, filter: *c_void) -> *c_void;
-        pub fn SMPEG_error(mpeg: *SMPEG) -> *c_char;
-        pub fn SMPEG_playAudio(mpeg: *SMPEG, stream: *u8, len: c_int) -> c_int;
-        pub fn SMPEG_playAudioSDL(mpeg: *c_void, stream: *u8, len: c_int) -> c_int;
-        pub fn SMPEG_wantedSpec(mpeg: *SMPEG, wanted: *SDL_AudioSpec) -> c_int;
-        pub fn SMPEG_actualSpec(mpeg: *SMPEG, spec: *SDL_AudioSpec);
+        pub fn SMPEG_filter(mpeg: *mut SMPEG, filter: *mut c_void) -> *mut c_void;
+        pub fn SMPEG_error(mpeg: *mut SMPEG) -> *mut c_char;
+        pub fn SMPEG_playAudio(mpeg: *mut SMPEG, stream: *mut u8, len: c_int) -> c_int;
+        pub fn SMPEG_playAudioSDL(mpeg: *mut c_void, stream: *mut u8, len: c_int) -> c_int;
+        pub fn SMPEG_wantedSpec(mpeg: *mut SMPEG, wanted: *mut SDL_AudioSpec) -> c_int;
+        pub fn SMPEG_actualSpec(mpeg: *mut SMPEG, spec: *mut SDL_AudioSpec);
     }
 }
 
 pub struct MPEG {
-    pub raw: *ll::SMPEG
+    pub raw: *mut ll::SMPEG
 }
 
-fn wrap_mpeg(raw: *ll::SMPEG) -> MPEG {
+fn wrap_mpeg(raw: *mut ll::SMPEG) -> MPEG {
     MPEG { raw: raw }
 }
 
@@ -102,7 +101,7 @@ impl MPEG {
     pub fn from_path(path: &Path) -> Result<MPEG, String> {
         let raw = unsafe {
             path.to_c_str().with_ref(|buf| {
-                ll::SMPEG_new(buf, null(), 0)
+                ll::SMPEG_new(buf, mut_null(), 0)
             })
         };
 
@@ -120,7 +119,7 @@ impl MPEG {
 
     pub fn set_display(&self, surface: &Surface) {
         unsafe {
-            ll::SMPEG_setdisplay(self.raw, surface.raw, null(), null());
+            ll::SMPEG_setdisplay(self.raw, surface.raw, mut_null(), mut_null());
         }
     }
 

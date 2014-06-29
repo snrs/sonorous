@@ -333,13 +333,6 @@ pub fn subprogram(_args: &[String]) -> ! {
     ui::common::exit(1);
 }
 
-#[start]
-#[doc(hidden)]
-#[allow(dead_code)]
-fn start(argc: int, argv: **u8) -> int {
-    native::start(argc, argv, main)
-}
-
 /// The entry point. Parses the command line options and delegates other things to `play`.
 pub fn main() {
     use ui::options::*;

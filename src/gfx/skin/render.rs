@@ -480,8 +480,8 @@ impl<'a> State<'a> {
         self.draw_or_commit(
             |draw| match draw {
                 // keep the current drawing only when the texture is exactly identical.
-                &Textured(ref mut d, ref tex_)
-                    if tex.deref() as *Texture2D == tex_.deref() as *Texture2D => Some(f(d)),
+                &Textured(ref mut d, ref tex_) if tex.deref() as *const Texture2D ==
+                                                  tex_.deref() as *const Texture2D => Some(f(d)),
                 _ => None,
             },
             |_screen| {

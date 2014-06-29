@@ -216,7 +216,7 @@ impl SurfaceAreaUtil for Surface {
 /// A proxy to `sdl::video::Surface` for the direct access to pixels. For now, it is for 32 bits
 /// per pixel only.
 pub struct SurfacePixels<'r> {
-    fmt: *SDL_PixelFormat,
+    fmt: *mut SDL_PixelFormat,
     width: uint,
     height: uint,
     pitch: uint,
@@ -247,7 +247,7 @@ impl SurfacePixelsUtil for Surface {
 impl<'r> SurfacePixels<'r> {
     /// Returns a pixel at given position. (C: `getpixel`)
     pub fn get_pixel(&self, x: uint, y: uint) -> Color {
-        Color::from_mapped(self.pixels[x + y * self.pitch], self.fmt)
+        Color::from_mapped(self.pixels[x + y * self.pitch], self.fmt as *const _)
     }
 
     /// Returns a pixel at given position, only when the position is valid.
@@ -261,7 +261,7 @@ impl<'r> SurfacePixels<'r> {
 
     /// Sets a pixel to given position. (C: `putpixel`)
     pub fn put_pixel(&mut self, x: uint, y: uint, c: Color) {
-        self.pixels[x + y * self.pitch] = c.to_mapped(self.fmt);
+        self.pixels[x + y * self.pitch] = c.to_mapped(self.fmt as *const _);
     }
 
     /// Sets a pixel to given position, only when the position is valid.

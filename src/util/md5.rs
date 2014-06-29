@@ -112,23 +112,23 @@ impl MD5State {
         #[cfg(target_arch="x86_64", not(md5_force_aligned))]
         #[cfg(target_arch="vax", not(md5_force_aligned))]
         #[inline(always)]
-        unsafe fn set(ptr: *u8, _block: &mut [u32plus], n: int) -> u32plus {
+        unsafe fn set(ptr: *const u8, _block: &mut [u32plus], n: int) -> u32plus {
             use std::mem;
-            *mem::transmute::<*u8,*u32>(ptr.offset(n * 4)) as u32plus
+            *mem::transmute::<*const u8, *const u32>(ptr.offset(n * 4)) as u32plus
         }
 
         #[cfg(target_arch="x86", not(md5_force_aligned))]
         #[cfg(target_arch="x86_64", not(md5_force_aligned))]
         #[cfg(target_arch="vax", not(md5_force_aligned))]
         #[inline(always)]
-        unsafe fn get(ptr: *u8, block: &mut [u32plus], n: int) -> u32plus {
+        unsafe fn get(ptr: *const u8, block: &mut [u32plus], n: int) -> u32plus {
             set(ptr, block, n)
         }
 
         #[cfg(not(target_arch="x86"), not(target_arch="x86_64"), not(target_arch="vax"))]
         #[cfg(md5_force_aligned)]
         #[inline(always)]
-        unsafe fn set(ptr: *u8, block: &mut [u32plus], n: int) -> u32plus {
+        unsafe fn set(ptr: *const u8, block: &mut [u32plus], n: int) -> u32plus {
             let v = *ptr.offset(n * 4) as u32plus |
                     (*ptr.offset(n * 4 + 1) as u32plus << 8) |
                     (*ptr.offset(n * 4 + 2) as u32plus << 16) |
@@ -140,7 +140,7 @@ impl MD5State {
         #[cfg(not(target_arch="x86"), not(target_arch="x86_64"), not(target_arch="vax"))]
         #[cfg(md5_force_aligned)]
         #[inline(always)]
-        unsafe fn get(_ptr: *u8, block: &mut [u32plus], n: int) -> u32plus {
+        unsafe fn get(_ptr: *const u8, block: &mut [u32plus], n: int) -> u32plus {
             *block.unsafe_ref(n as uint)
         }
 

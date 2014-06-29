@@ -37,7 +37,7 @@ pub struct Pointer<SoundRef,ImageRef> {
 
 /// Returns true if two pointers share the common timeline.
 fn has_same_timeline<S,I>(lhs: &Pointer<S,I>, rhs: &Pointer<S,I>) -> bool {
-    lhs.timeline.deref() as *Timeline<S,I> == rhs.timeline.deref() as *Timeline<S,I>
+    lhs.timeline.deref() as *const Timeline<S,I> == rhs.timeline.deref() as *const Timeline<S,I>
 }
 
 /// Returns the first index `i` such that `v[i]` is no `Less` than the target, or `v.len()` if
