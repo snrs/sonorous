@@ -104,8 +104,8 @@ pub fn get_path_from_dialog() -> Option<Path> {
                 lpstrCustomFilter: mut_null(), nMaxCustFilter: 0, nFilterIndex: 0,
                 lpstrFileTitle: mut_null(), nMaxFileTitle: 0,
                 lpstrInitialDir: null(), nFileOffset: 0, nFileExtension: 0,
-                lpstrDefExt: null(), lCustData: 0, lpfnHook: null(),
-                lpTemplateName: null(), pvReserved: null(),
+                lpstrDefExt: null(), lCustData: 0, lpfnHook: mut_null(),
+                lpTemplateName: null(), pvReserved: mut_null(),
                 dwReserved: 0, FlagsEx: 0,
             };
             let ret = unsafe {win32::ll::GetOpenFileNameW(mem::transmute(&ofn))};
