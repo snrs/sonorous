@@ -47,9 +47,10 @@ impl GLState {
         )
 
         // we need to preload this before initializing EGL
-        "d3dcompiler_43.dll".to_c_str().with_ref(|dllname| {
-            unsafe { LoadLibraryA(dllname); }
-        });
+        unsafe {
+            let dllname = "d3dcompiler_43.dll".to_c_str();
+            LoadLibraryA(dllname.as_ptr());
+        }
 
         let hwnd = match syswm::get_wm_info() {
             Some(wminfo) => wminfo.window,

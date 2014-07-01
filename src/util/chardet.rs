@@ -330,8 +330,8 @@ pub fn chardet_train(args: &[String]) -> int {
     let mut kotrainerja = Trainer::new(CharClassKo);
     let mut jatrainerko = Trainer::new(CharClassJa);
     let mut jatrainerja = Trainer::new(CharClassJa);
-    let mut nkowords = 0;
-    let mut njawords = 0;
+    let mut nkowords = 0u;
+    let mut njawords = 0u;
 
     let mut stream = BufferedReader::new(stdin());
     let words: Vec<String> =

@@ -557,10 +557,9 @@ pub struct ObjLoc<T> {
 }
 
 impl<T:Clone+PartialOrd> PartialOrd for ObjLoc<T> {
-    fn lt(&self, other: &ObjLoc<T>) -> bool { self.time < other.time }
-    fn le(&self, other: &ObjLoc<T>) -> bool { self.time <= other.time }
-    fn ge(&self, other: &ObjLoc<T>) -> bool { self.time >= other.time }
-    fn gt(&self, other: &ObjLoc<T>) -> bool { self.time > other.time }
+    fn partial_cmp(&self, other: &ObjLoc<T>) -> Option<Ordering> {
+        self.time.partial_cmp(&other.time)
+    }
 }
 
 impl<T:Clone> Index<ObjAxis,T> for ObjLoc<T> {
@@ -623,10 +622,9 @@ impl<S:Clone,I:Clone> PartialEq for Obj<S,I> {
 }
 
 impl<S:Clone,I:Clone> PartialOrd for Obj<S,I> {
-    fn lt(&self, other: &Obj<S,I>) -> bool { self.loc < other.loc }
-    fn le(&self, other: &Obj<S,I>) -> bool { self.loc <= other.loc }
-    fn ge(&self, other: &Obj<S,I>) -> bool { self.loc >= other.loc }
-    fn gt(&self, other: &Obj<S,I>) -> bool { self.loc > other.loc }
+    fn partial_cmp(&self, other: &Obj<S,I>) -> Option<Ordering> {
+        self.loc.partial_cmp(&other.loc)
+    }
 }
 
 impl<S:Clone,I:Clone> ToObjData<S,I> for Obj<S,I> {

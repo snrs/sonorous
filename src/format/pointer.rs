@@ -67,21 +67,9 @@ impl<S,I> PartialEq for Pointer<S,I> {
 }
 
 impl<S,I> PartialOrd for Pointer<S,I> {
-    fn lt(&self, other: &Pointer<S,I>) -> bool {
+    fn partial_cmp(&self, other: &Pointer<S,I>) -> Option<Ordering> {
         assert!(has_same_timeline(self, other));
-        self.loc < other.loc
-    }
-    fn le(&self, other: &Pointer<S,I>) -> bool {
-        assert!(has_same_timeline(self, other));
-        self.loc <= other.loc
-    }
-    fn ge(&self, other: &Pointer<S,I>) -> bool {
-        assert!(has_same_timeline(self, other));
-        self.loc >= other.loc
-    }
-    fn gt(&self, other: &Pointer<S,I>) -> bool {
-        assert!(has_same_timeline(self, other));
-        self.loc > other.loc
+        self.loc.partial_cmp(&other.loc)
     }
 }
 

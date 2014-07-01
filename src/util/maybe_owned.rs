@@ -89,25 +89,10 @@ impl<'r,T:PartialEq,V:Vector<T>> Equiv<V> for MaybeOwnedVec<'r,T> {
     }
 }
 
-impl<'r,T:PartialEq+PartialOrd> PartialOrd for MaybeOwnedVec<'r,T> {
+impl<'r,T:PartialOrd> PartialOrd for MaybeOwnedVec<'r,T> {
     #[inline]
-    fn lt(&self, other: &MaybeOwnedVec<'r,T>) -> bool {
-        self.as_slice().lt(&other.as_slice())
-    }
-
-    #[inline]
-    fn le(&self, other: &MaybeOwnedVec<'r,T>) -> bool {
-        self.as_slice().le(&other.as_slice())
-    }
-
-    #[inline]
-    fn gt(&self, other: &MaybeOwnedVec<'r,T>) -> bool {
-        self.as_slice().gt(&other.as_slice())
-    }
-
-    #[inline]
-    fn ge(&self, other: &MaybeOwnedVec<'r,T>) -> bool {
-        self.as_slice().ge(&other.as_slice())
+    fn partial_cmp(&self, other: &MaybeOwnedVec<'r,T>) -> Option<Ordering> {
+        self.as_slice().partial_cmp(&other.as_slice())
     }
 }
 

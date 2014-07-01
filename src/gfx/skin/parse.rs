@@ -489,9 +489,9 @@ impl FromJson for ScalarFormat {
         s = s.slice_from(nzeroes);
         let nsixties = if s.starts_with(":00") {
             s = s.slice_from(3);
-            if s.starts_with(":00") { s = s.slice_from(3); 2 } else { 1 }
+            if s.starts_with(":00") { s = s.slice_from(3); 2u } else { 1u }
         } else {
-            0
+            0u
         };
         let precision = if s.starts_with(".0") {
             s = s.slice_from(1);

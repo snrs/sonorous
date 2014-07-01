@@ -100,9 +100,8 @@ impl Drop for MPEG {
 impl MPEG {
     pub fn from_path(path: &Path) -> Result<MPEG, String> {
         let raw = unsafe {
-            path.to_c_str().with_ref(|buf| {
-                ll::SMPEG_new(buf, mut_null(), 0)
-            })
+            let path = path.to_c_str();
+            ll::SMPEG_new(path.as_ptr(), mut_null(), 0)
         };
 
         if raw.is_null() { Err(::sdl::get_error()) }
