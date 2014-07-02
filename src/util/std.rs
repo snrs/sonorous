@@ -53,7 +53,7 @@ pub mod str {
         }
 
         fn as_utf16_c_str<T>(&self, f: |*const u16| -> T) -> T {
-            let mut s16: Vec<u16> = self.to_utf16().move_iter().collect();
+            let mut s16: Vec<u16> = self.utf16_units().collect();
             s16.push(0u16);
             f(s16.as_ptr())
         }

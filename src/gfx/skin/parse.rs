@@ -77,7 +77,7 @@ macro_rules! ensure_empty(
             return Err(format!("{} has {}: {}",
                                $i,
                                if $map.len() == 1 {"an unexpected key"} else {"unexpected keys"},
-                               treemap_keys($map)));
+                               treemap_keys(&$map)));
         }
     )
 )
@@ -436,7 +436,7 @@ impl<T:FromJson> FromJson for Block<T> {
         }
         if map.iter().any(|(k,_)| k.as_slice().starts_with("$")) {
             return Err(format!("some alternatives in the block start with `$`: {}",
-                               treemap_keys(map)));
+                               treemap_keys(&map)));
         }
 
         fn lift<T,E>(x: Option<Result<T,E>>) -> Result<Option<T>,E> {
