@@ -34,7 +34,7 @@
     {"$text": "MAX COMBO", "at": ["60%+10",270], "size": 32, "color": "white"},
     {"$text": [{"$": "player.bestcombo", "format": "0000"}, "/"],
      "at": ["60%+10",305], "size": 48, "color": "white", "zerocolor": "gray"},
-    {"$text": {"$": "timeline.#notes", "format": "0000"},
+    {"$text": {"$": "timeline.nnotes", "format": "0000"},
      "at": ["60%+130",305], "size": 48, "color": "white", "zerocolor": "gray"},
 
     {"$text": "Press Return key to continue.",

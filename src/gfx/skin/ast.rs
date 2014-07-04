@@ -80,6 +80,12 @@ impl Id {
 #[deriving(Clone, Show)]
 pub enum Expr {
     ENum(RatioNum<f32>),
+    EScalar(Id),
+    ENeg(Box<Expr>),
+    EAdd(Box<Expr>, Box<Expr>),
+    ESub(Box<Expr>, Box<Expr>),
+    EMul(Box<Expr>, Box<Expr>),
+    EDiv(Box<Expr>, Box<Expr>),
 }
 
 impl Expr {
@@ -91,6 +97,64 @@ impl Expr {
     /// Returns a value equal to the base value.
     pub fn one() -> Expr {
         ENum(RatioNum::one())
+    }
+
+    /// Constructs an `ENeg` node or any equivalent but possibly simpler expression.
+    pub fn neg(e: Expr) -> Expr {
+        match e {
+            ENum(v) => ENum(-v),
+            ENeg(box e) => e,
+            e => ENeg(box e),
+        }
+    }
+
+    /// Constructs an `EAdd` node or any equivalent but possibly simpler expression.
+    pub fn add(lhs: Expr, rhs: Expr) -> Expr {
+        match (lhs, rhs) {
+            (ENum(lhs), ENum(rhs)) =>
+                ENum(lhs + rhs),
+            (EAdd(box lhs, box ENum(lhsv)), ENum(rhs)) |
+            (EAdd(box ENum(lhsv), box lhs), ENum(rhs)) =>
+                EAdd(box lhs, box ENum(lhsv + rhs)),
+            (ESub(box lhs, box ENum(lhsv)), ENum(rhs)) =>
+                EAdd(box lhs, box ENum(rhs - lhsv)),
+            (lhs, rhs) =>
+                EAdd(box lhs, box rhs),
+        }
+    }
+
+    /// Constructs an `ESub` node or any equivalent but possibly simpler expression.
+    pub fn sub(lhs: Expr, rhs: Expr) -> Expr {
+        match (lhs, rhs) {
+            (ENum(lhs), ENum(rhs)) =>
+                ENum(lhs - rhs),
+            (EAdd(box lhs, box ENum(lhsv)), ENum(rhs)) |
+            (EAdd(box ENum(lhsv), box lhs), ENum(rhs)) =>
+                ESub(box lhs, box ENum(rhs - lhsv)),
+            (ESub(box lhs, box ENum(lhsv)), ENum(rhs)) =>
+                ESub(box lhs, box ENum(lhsv + rhs)),
+            (lhs, rhs) =>
+                ESub(box lhs, box rhs),
+        }
+    }
+
+    /// Constructs an `EMul` node or any equivalent but possibly simpler expression.
+    pub fn mul(lhs: Expr, rhs: Expr) -> Expr {
+        match (lhs, rhs) {
+            (ENum(lhs), ENum(RatioNum { ratio: 0.0, num: rhs })) => ENum(lhs * rhs),
+            (ENum(RatioNum { ratio: 0.0, num: lhs }), ENum(rhs)) => ENum(rhs * lhs),
+            // other combinations of `ENum`s are type errors, but we defer the error here
+            (lhs, rhs) => EMul(box lhs, box rhs),
+        }
+    }
+
+    /// Constructs an `EDiv` node or any equivalent but possibly simpler expression.
+    pub fn div(lhs: Expr, rhs: Expr) -> Expr {
+        match (lhs, rhs) {
+            (ENum(lhs), ENum(RatioNum { ratio: 0.0, num: rhs })) => ENum(lhs / rhs),
+            // other combinations of `ENum`s are type errors, but we defer the error here
+            (lhs, rhs) => EDiv(box lhs, box rhs),
+        }
     }
 }
 

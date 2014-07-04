@@ -8,7 +8,7 @@
 
 //! Skin renderer.
 
-use std::{num, str, mem};
+use std::{f32, num, str, mem};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::io::{IoResult, MemWriter};
@@ -23,7 +23,7 @@ use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDra
 use gfx::bmfont::{NCOLUMNS, NROWS, FontDrawingUtils, LeftAligned};
 use gfx::screen::{Screen, ShadedFontDrawing, ScreenDraw, ScreenTexturedDraw};
 use gfx::skin::scalar::{Scalar, ImageScalar, TextureSource, PathSource, ImageClip, ColorScalar};
-use gfx::skin::ast::{Expr, ENum, Pos, Rect};
+use gfx::skin::ast::{Expr, ENum, EScalar, ENeg, EAdd, ESub, EMul, EDiv, Pos, Rect};
 use gfx::skin::ast::{Gen, HookGen, TextGen, TextLenGen};
 use gfx::skin::ast::{Block, CondBlock, MultiBlock};
 use gfx::skin::ast::{ScalarFormat, NoFormat, NumFormat, MsFormat, HmsFormat};
@@ -107,9 +107,32 @@ impl<'a> State<'a> {
     }
 
     /// Evaluates an expression.
-    fn expr(&self, hook: &Hook, pos: &Expr, reference: f32) -> f32 {
-        match *pos {
+    fn expr(&self, hook: &Hook, e: &Expr, reference: f32) -> f32 {
+        match *e {
             ENum(ref v) => v.to_num(&reference),
+            EScalar(ref id) => match hook.scalar_hook(id.as_slice()) {
+                Some(ref scalar) => match scalar.to_f32() {
+                    Some(v) => v,
+                    None => {
+                        warn!("skin: `{id}` is not a numeric scalar hook ({scalar}).",
+                              id = id.as_slice(), scalar = *scalar);
+                        f32::NAN
+                    }
+                },
+                None => {
+                    warn!("skin: `{id}` is not a scalar hook.", id = id.as_slice());
+                    f32::NAN
+                },
+            },
+            ENeg(box ref e_) => -self.expr(hook, e_, reference),
+            EAdd(box ref lhs, box ref rhs) =>
+                self.expr(hook, lhs, reference) + self.expr(hook, rhs, reference),
+            ESub(box ref lhs, box ref rhs) =>
+                self.expr(hook, lhs, reference) - self.expr(hook, rhs, reference),
+            EMul(box ref lhs, box ref rhs) =>
+                self.expr(hook, lhs, reference) * self.expr(hook, rhs, reference),
+            EDiv(box ref lhs, box ref rhs) =>
+                self.expr(hook, lhs, reference) / self.expr(hook, rhs, reference),
         }
     }
 

@@ -20,7 +20,6 @@ use util::filesearch::SearchContext;
 use util::envelope::Envelope;
 use util::md5::{MD5, ToHex};
 use gfx::gl::{PreparedSurface, Texture2D};
-use gfx::draw::{ShadedDrawingTraits, TexturedDrawingTraits};
 use gfx::screen::Screen;
 use gfx::skin::scalar::{Scalar, IntoScalar};
 use gfx::skin::hook::Hook;
@@ -550,19 +549,7 @@ impl Scene for SelectingScene {
         let mut screen = self.screen.borrow_mut();
 
         screen.clear();
-
-        // TODO should move this to the skin too
-        screen.draw_shaded_with_font(|d| {
-            use gfx::color::RGB;
-            let top = cmp::min(self.scrolloffset, self.files.len());
-            let pixelsperslot =
-                (NUMENTRIES as f32 * 20.0 - 4.0) / cmp::max(NUMENTRIES, self.files.len()) as f32;
-            d.rect(2.0, 2.0 + top as f32 * pixelsperslot,
-                   7.0, 2.0 + (top + NUMENTRIES) as f32 * pixelsperslot, RGB(0xc0,0xc0,0xc0));
-        });
-
         self.skin.borrow_mut().render(screen.deref_mut(), self);
-
         screen.swap_buffers();
     }
 
@@ -606,6 +593,23 @@ define_hooks! {
 
     for SelectingScene {
         delegate self.opts;
+
+        scalar "entries.scrollstart" => {
+            if self.files.is_empty() {
+                0.0f32.into_scalar()
+            } else {
+                let top = cmp::min(self.scrolloffset, self.files.len());
+                (top as f32 / self.files.len() as f32).into_scalar()
+            }
+        };
+        scalar "entries.scrollend" => {
+            if self.files.is_empty() {
+                1.0f32.into_scalar()
+            } else {
+                let bottom = cmp::min(self.scrolloffset + NUMENTRIES, self.files.len());
+                (bottom as f32 / self.files.len() as f32).into_scalar()
+            }
+        };
 
         block "scanning" => self.filesdone || body(parent, "");
         block "entries" => {

@@ -18,7 +18,7 @@ use gfx::ratio_num::RatioNum;
 use gfx::bmfont::{NROWS};
 use gfx::skin::scalar::{Scalar, ImageScalar, IntoScalar};
 use gfx::skin::scalar::{PathSource, ImageClip};
-use gfx::skin::ast::{Expr, ENum};
+use gfx::skin::ast::{Expr, ENum, EScalar};
 use gfx::skin::ast::{Pos, Rect, Id};
 use gfx::skin::ast::{HookGen, TextGen, TextLenGen};
 use gfx::skin::ast::{Block, CondBlock, MultiBlock};
@@ -142,7 +142,7 @@ impl FromJson for ImageClip {
         match rect {
             Rect { p: Pos { x: ENum(px), y: ENum(py) }, q: Pos { x: ENum(qx), y: ENum(qy) } } =>
                 Ok(ImageClip { x: px, y: py, w: qx - px, h: qy - py }),
-            //_ => Err("clip coordinates for images should be a simple number".to_string()),
+            _ => Err("clip coordinates for images should be a simple number".to_string()),
         }
     }
 }
@@ -293,44 +293,134 @@ impl FromJson for GradientSource {
 
 impl FromJson for Expr {
     fn from_json(json: Json) -> Result<Expr,String> {
-        let expr = match json {
-            String(s) => s,
-            Number(v) => { return Ok(ENum(RatioNum::from_num(v as f32))); }
-            _ => fail_with_json!(json, "an expression")
-        };
+        #[deriving(PartialEq, Eq)]
+        enum Type { TNum, TRatioNum }
 
-        macro_rules! invalid(
-            ($msg:expr) => (return Err(format!("invalid expression `{}`: {}", expr, $msg)))
-        )
-
-        // parse <num> ['%'] {('+' | '-') <num> ['%']}
-        let mut num = RatioNum::zero();
-        let mut s = expr.as_slice();
-        let mut minus = false;
-        loop {
+        // <atom> ::= <num> | <num> '%' | <id> | '(' <additive> ')'
+        fn atom<'a>(s: &'a str) -> Result<(&'a str, Expr, Type), String> {
+            let mut s = s.trim_left();
             let mut v = 0.0;
-            if !lex!(s; ws*, f32 -> v, str* -> s, !) { invalid!("expected a number"); }
-            if minus { v = -v; }
-            if s.starts_with("%") {
-                num = num + RatioNum::from_ratio(v / 100.0);
-                s = s.slice_from(1);
-            } else {
-                num = num + RatioNum::from_num(v);
-            }
-            s = s.trim_left();
-            if s.is_empty() { break; }
-            if s.starts_with("+") {
-                minus = false;
-                s = s.slice_from(1);
-            } else if s.starts_with("-") {
-                minus = true;
-                s = s.slice_from(1);
-            } else {
-                invalid!("expected `+` or `-`");
+            if lex!(s; f32 -> v, ws*, str* -> s, !) {
+                if s.starts_with("%") {
+                    let e = ENum(RatioNum::from_ratio(v / 100.0));
+                    Ok((s.slice_from(1), e, TRatioNum))
+                } else {
+                    let e = ENum(RatioNum::from_num(v));
+                    Ok((s, e, TNum))
+                }
+            } else if s.starts_with("(") {
+                let (s, e, t) = try!(additive(s.slice_from(1)));
+                let s = s.trim_left();
+                if s.starts_with(")") {
+                    Ok((s.slice_from(1), e, t))
+                } else {
+                    Err(format!("parsing failed at `{}`: expected `)`", s))
+                }
+            } else { // <id> ::= [a-zA-Z_] [a-zA-Z0-9_]* ('.' [a-zA-Z_] [a-zA-Z0-9_]*)*
+                let mut first = true;
+                let mut idlen = s.len();
+                for (i, c) in s.char_indices() {
+                    match c {
+                        'a'..'z' | 'A'..'Z' | '_' => { first = false; }
+                        '0'..'9' if !first => { first = false; }
+                        '.' if !first => { first = true; }
+                        _ => { idlen = i; break; }
+                    }
+                }
+                if idlen == 0 {
+                    Err(format!("parsing failed at `{}`: expected an id", s))
+                } else {
+                    let e = EScalar(Id(s.slice_to(idlen).to_string()));
+                    Ok((s.slice_from(idlen), e, TNum)) // yes, no dimensional scalar for now.
+                }
             }
         }
 
-        Ok(ENum(num))
+        // <unary> ::= <atom> | '-' <atom>
+        fn unary<'a>(s: &'a str) -> Result<(&'a str, Expr, Type), String> {
+            let s = s.trim_left();
+            if s.starts_with("-") {
+                let (s, e, t) = try!(atom(s.slice_from(1)));
+                Ok((s, Expr::neg(e), t))
+            } else {
+                atom(s)
+            }
+        }
+
+        // <multiplicative> ::= <unary> | <multiplicative> '*' <unary>
+        //                              | <multiplicative> '/' <unary>
+        fn multiplicative<'a>(s: &'a str) -> Result<(&'a str, Expr, Type), String> {
+            let s = s.trim_left();
+            let (mut s, mut e, mut t) = try!(unary(s));
+            loop {
+                s = s.trim_left();
+                if s.starts_with("*") {
+                    let (s_, e_, t_) = try!(unary(s.slice_from(1)));
+                    s = s_;
+                    e = Expr::mul(e, e_);
+                    t = match (t, t_) {
+                        (TNum, TNum) => TNum,
+                        (TNum, TRatioNum) | (TRatioNum, TNum) => TRatioNum,
+                        (TRatioNum, TRatioNum) => {
+                            return Err("invalid type: ratio * ratio".to_string());
+                        }
+                    };
+                } else if s.starts_with("/") {
+                    let (s_, e_, t_) = try!(unary(s.slice_from(1)));
+                    s = s_;
+                    e = Expr::div(e, e_);
+                    t = match (t, t_) {
+                        (TNum, TNum) => TNum,
+                        (TRatioNum, TNum) => TRatioNum,
+                        (_, TRatioNum) => {
+                            return Err("invalid type: number or ratio / ratio".to_string());
+                        }
+                    };
+                } else {
+                    break;
+                }
+            }
+            Ok((s, e, t))
+        }
+
+        // <additive> ::= <multiplicative> | <additive> '+' <unary> | <additive> '-' <unary>
+        fn additive<'a>(s: &'a str) -> Result<(&'a str, Expr, Type), String> {
+            let s = s.trim_left();
+            let (mut s, mut e, mut t) = try!(multiplicative(s));
+            loop {
+                s = s.trim_left();
+                if s.starts_with("+") {
+                    let (s_, e_, t_) = try!(multiplicative(s.slice_from(1)));
+                    s = s_;
+                    e = Expr::add(e, e_);
+                    t = if t == TNum && t_ == TNum {TNum} else {TRatioNum};
+                } else if s.starts_with("-") {
+                    let (s_, e_, t_) = try!(multiplicative(s.slice_from(1)));
+                    s = s_;
+                    e = Expr::sub(e, e_);
+                    t = if t == TNum && t_ == TNum {TNum} else {TRatioNum};
+                } else {
+                    break;
+                }
+            }
+            Ok((s, e, t))
+        }
+
+        // <expr> ::= <additive> EOF
+        fn expr<'a>(s: &'a str) -> Result<Expr, String> {
+            let (s, e, _t) = try!(additive(s));
+            if !s.trim_left().is_empty() {
+                Err(format!("parsing failed at `{}`: expected the end of string", s))
+            } else {
+                Ok(e)
+            }
+        }
+
+        match json {
+            String(s) => expr(s.as_slice()),
+            Number(v) => Ok(ENum(RatioNum::from_num(v as f32))),
+            _ => fail_with_json!(json, "an expression"),
+        }
     }
 }
 
@@ -712,12 +802,7 @@ impl FromJson for Node {
                         }
                     })
                 )
-                fn invert(e: Expr) -> Expr {
-                    let one: RatioNum<f32> = RatioNum::one();
-                    match e {
-                        ENum(v) => ENum(one - v),
-                    }
-                }
+                fn invert(e: Expr) -> Expr { Expr::sub(ENum(RatioNum::one()), e) }
                 clip_to!("$cliptop",
                          |h| Rect { p: Pos { x: Expr::zero(), y: h },
                                     q: Pos { x: Expr::one(), y: Expr::one() } })

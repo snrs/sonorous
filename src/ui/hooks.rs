@@ -42,7 +42,7 @@ impl<S,I> Hook for timeline::Timeline<S,I> {
 
 define_hooks! {
     for timeline::TimelineInfo {
-        scalar "timeline.#notes" => self.nnotes.into_scalar();
+        scalar "timeline.nnotes" => self.nnotes.into_scalar();
         scalar "timeline.maxscore" => self.maxscore.into_scalar();
 
         block "timeline.bpmchange" => self.hasbpmchange && body(parent, "");
@@ -111,7 +111,7 @@ define_hooks! {
     }
 
     for keyspec::KeySpec {
-        scalar "meta.#keys" => self.nkeys().into_scalar();
+        scalar "meta.nkeys" => self.nkeys().into_scalar();
     }
 }
 

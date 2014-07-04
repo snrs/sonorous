@@ -38,6 +38,8 @@
             ]}
         ]}
     ],
+    {"$rect": null, "at": [[2,"2+296*entries.scrollstart"],
+                           [7,"2+296*entries.scrollend"]], "color": "#c0c0c0"},
     {"$rect": null, "at": [[0,301], ["100%",302]], "color": "white"},
 
     "preloaded data if any",
@@ -65,9 +67,9 @@
                        " | Level ", {"$": "meta.level"},
                        " | BPM ", {"$": "timeline.initbpm", "format": "..0.00"},
                                   {"$$": "timeline.bpmchange", "$then": "?"},
-                       " | ", {"$": "timeline.#notes"},
-                              {"$$text": "timeline.#notes", "1": " note", "$default": " notes"},
-                       " [", {"$": "meta.#keys"}, "KEY",
+                       " | ", {"$": "timeline.nnotes"},
+                              {"$$text": "timeline.nnotes", "1": " note", "$default": " notes"},
+                       " [", {"$": "meta.nkeys"}, "KEY",
                              {"$$": "timeline.longnote", "$then": "-LN"},
                              {"$$": "meta.difficulty",
                               "beginner": " BEGINNER", "normal": " NORMAL", "hard": " HARD",
