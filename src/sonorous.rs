@@ -67,7 +67,7 @@ pub mod ext {
     pub mod win32;
 }
 
-pub mod gfx {
+#[macro_escape] pub mod gfx {
     //! Various graphics routines.
     pub mod color;
     pub mod ratio_num;
@@ -76,7 +76,7 @@ pub mod gfx {
     pub mod draw;
     pub mod bmfont;
     pub mod screen;
-    pub mod skin {
+    #[macro_escape] pub mod skin {
         //! Skin engine.
         pub mod scalar;
         pub mod ast;

@@ -127,6 +127,10 @@ pub trait IntoScalar<'a> {
     fn into_scalar(self) -> Scalar<'a>;
 }
 
+impl<'a> IntoScalar<'a> for Scalar<'a> {
+    #[inline] fn into_scalar(self) -> Scalar<'a> { self }
+}
+
 impl<'a> IntoScalar<'a> for &'a str {
     #[inline] fn into_scalar(self) -> Scalar<'a> { BorrowedStrScalar(self) }
 }

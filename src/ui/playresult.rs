@@ -9,8 +9,6 @@ use std::cell::RefCell;
 
 use sdl::event;
 use gfx::screen::Screen;
-use gfx::skin::scalar::Scalar;
-use gfx::skin::hook::Hook;
 use gfx::skin::render::Renderer;
 use engine::player::Player;
 use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, Exit};
@@ -68,16 +66,9 @@ impl Scene for PlayResultScene {
     fn consume(~self) -> Box<Scene> { fail!("unreachable"); }
 }
 
-////////////////////////////////////////////////////////////////////////
-// hooks
-
-impl Hook for PlayResultScene {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
-        self.player.scalar_hook(id)
-    }
-
-    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
-        self.player.run_block_hook(id, parent, &mut body)
+define_hooks! {
+    for PlayResultScene {
+        delegate self.player;
     }
 }
 

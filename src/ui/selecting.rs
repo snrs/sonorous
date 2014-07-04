@@ -22,7 +22,7 @@ use util::md5::{MD5, ToHex};
 use gfx::gl::{PreparedSurface, Texture2D};
 use gfx::draw::{ShadedDrawingTraits, TexturedDrawingTraits};
 use gfx::screen::Screen;
-use gfx::skin::scalar::{Scalar, AsScalar, IntoScalar};
+use gfx::skin::scalar::{Scalar, IntoScalar};
 use gfx::skin::hook::Hook;
 use gfx::skin::render::Renderer;
 use engine::input::read_keymap;
@@ -574,105 +574,61 @@ impl Scene for SelectingScene {
     fn consume(~self) -> Box<Scene> { fail!("unreachable"); }
 }
 
-////////////////////////////////////////////////////////////////////////
-// hooks
-
-impl Hook for PreprocessedBms {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
-        self.bms.scalar_hook(id)
-            .or_else(|| self.infos.scalar_hook(id))
-            .or_else(|| self.keyspec.scalar_hook(id))
+define_hooks! {
+    for PreprocessedBms {
+        delegate self.bms;
+        delegate self.infos;
+        delegate self.keyspec;
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
-        self.bms.run_block_hook(id, parent, &mut body) ||
-            self.infos.run_block_hook(id, parent, &mut body) ||
-            self.keyspec.run_block_hook(id, parent, &mut body)
-    }
-}
+    for (Option<uint>, bms::diag::BmsMessage) {
+        scalar "msg.line" => return self.val0().map(|v| v.into_scalar());
+        scalar "msg.text" => self.ref1().message.into_scalar();
 
-impl Hook for (Option<uint>, bms::diag::BmsMessage) {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
-        let (lineno, ref msg) = *self;
-        match id {
-            "msg.line" => lineno.map(|v| v.into_scalar()),
-            "msg.text" => Some(msg.message.into_scalar()),
-            _ => None,
-        }
+        block "msg" => body(parent, self.ref1().id);
+        block "msg.line" => self.val0().is_some() && body(parent, "");
+        block "msg.severity" => match self.ref1().severity {
+            bms::diag::Note    => { body(parent, "note"); }
+            bms::diag::Warning => { body(parent, "warning"); }
+            bms::diag::Fatal   => { body(parent, "fatal"); }
+        };
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, body: |&Hook, &str| -> bool) -> bool {
-        let (lineno, ref msg) = *self;
-        match id {
-            "msg" => { body(parent, msg.id); }
-            "msg.line" => { lineno.is_some() && body(parent, ""); }
-            "msg.severity" => match msg.severity {
-                bms::diag::Note    => { body(parent, "note"); }
-                bms::diag::Warning => { body(parent, "warning"); }
-                bms::diag::Fatal   => { body(parent, "fatal"); }
-            },
-            _ => { return false; }
-        }
-        true
-    }
-}
+    for PreloadedData {
+        delegate self.preproc;
 
-impl Hook for PreloadedData {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
-        match id {
-            "meta.duration" => Some(self.duration.into_scalar()),
-            "meta.banner" => match self.banner {
-                Some(ref tex) => Some(tex.as_scalar()),
-                None => None,
-            },
-            _ => self.preproc.scalar_hook(id)
-        }
+        scalar "meta.duration" => self.duration.into_scalar();
+        scalar "meta.banner" => return self.banner.as_ref().map(|tex| tex.as_scalar());
+
+        block "messages" => self.messages.iter().advance(|msg| body(&parent.delegate(msg), ""));
+        block "meta.banner" => self.banner.is_some() && body(parent, "");
     }
 
-    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
-        match id {
-            "messages" => {
-                self.messages.iter().advance(|msg| body(&parent.delegate(msg), ""));
+    for SelectingScene {
+        delegate self.opts;
+
+        block "scanning" => self.filesdone || body(parent, "");
+        block "entries" => {
+            let top = cmp::min(self.scrolloffset, self.files.len());
+            self.files.slice_from(top).iter().enumerate().advance(|(i, entry)| {
+                let inverted = self.scrolloffset + i == self.offset;
+                body(&(self, inverted, entry), "")
+            });
+        };
+        block "entries.before" => {
+            let top = cmp::min(self.scrolloffset, self.files.len());
+            self.files.slice_to(top).iter().rev().advance(|entry| {
+                body(&(self, false, entry), "")
+            });
+        };
+        block "preload" => match self.preloaded {
+            NothingToPreload | PreloadAfter(..) => {}
+            Preloading => { body(parent, "loading"); }
+            Preloaded(ref data) => { body(&parent.delegate(data), "loaded"); }
+            PreloadFailed(ref err) => {
+                body(&parent.add_text("preload.error", err.as_slice()), "failed");
             }
-            "meta.banner" => { self.banner.is_some() && body(parent, ""); }
-            _ => { return self.preproc.run_block_hook(id, parent, &mut body); }
-        }
-        true
-    }
-}
-
-impl Hook for SelectingScene {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
-        self.opts.scalar_hook(id)
-    }
-
-    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
-        match id {
-            "scanning" => { self.filesdone || body(parent, ""); }
-            "entries" => {
-                let top = cmp::min(self.scrolloffset, self.files.len());
-                self.files.slice_from(top).iter().enumerate().advance(|(i, entry)| {
-                    let inverted = self.scrolloffset + i == self.offset;
-                    body(&(self, inverted, entry), "")
-                });
-            }
-            "entries.before" => {
-                let top = cmp::min(self.scrolloffset, self.files.len());
-                self.files.slice_to(top).iter().rev().advance(|entry| {
-                    body(&(self, false, entry), "")
-                });
-            }
-            "preload" => match self.preloaded {
-                NothingToPreload | PreloadAfter(..) => {}
-                Preloading => { body(parent, "loading"); }
-                Preloaded(ref data) => { body(&parent.delegate(data), "loaded"); }
-                PreloadFailed(ref err) => {
-                    body(&parent.add_text("preload.error", err.as_slice()), "failed");
-                }
-            },
-            _ => { return self.opts.run_block_hook(id, parent, &mut body); }
-        }
-        true
+        };
     }
 }
 

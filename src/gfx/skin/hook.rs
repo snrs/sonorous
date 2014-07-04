@@ -39,6 +39,8 @@
  * this ensures that the delegated hook will continue to search on the parent hooks.
  */
 
+#![macro_escape]
+
 use gfx::skin::scalar::{Scalar, IntoScalar};
 
 /// The hook interface.
@@ -149,4 +151,44 @@ impl<'a> Hook for AddText<'a> {
         self.base.run_block_hook(id, parent, &mut body)
     }
 }
+
+macro_rules! define_hooks(
+    ($(for $ty:ty {
+        $(delegate $delegate:expr;)*
+        $(scalar $scalarname:pat => $scalarvalue:expr;)*
+        $(block $blockname:pat => $blockvalue:expr;)*
+     })*) => ($(
+        impl ::gfx::skin::hook::Hook for $ty {
+            #[allow(unused_variable)]
+            fn scalar_hook<'a>(&'a self, id: &str) -> Option<::gfx::skin::scalar::Scalar<'a>> {
+                #[allow(unused_imports)] use gfx::skin::scalar::{AsScalar, IntoScalar};
+
+                match id {
+                    $($scalarname => Some::<::gfx::skin::scalar::Scalar<'a>>($scalarvalue),)*
+                    _ => {
+                        $(match $delegate.scalar_hook(id) {
+                            Some(v) => { return Some(v); }
+                            None => {}
+                        })*
+                        None
+                    }
+                }
+            }
+
+            #[allow(unused_mut, unused_variable)]
+            fn block_hook(&self, id: &str, parent: &::gfx::skin::hook::Hook,
+                          mut body: |&::gfx::skin::hook::Hook, &str| -> bool) -> bool {
+                #[allow(unused_imports)] use gfx::skin::scalar::{AsScalar, IntoScalar};
+
+                match id {
+                    $($blockname => { $blockvalue; true })*
+                    _ => {
+                        $(if $delegate.run_block_hook(id, parent, &mut body) { return true; })*
+                        false
+                    }
+                }
+            }
+        }
+    )*)
+)
 

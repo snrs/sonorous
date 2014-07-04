@@ -15,8 +15,6 @@ use util::filesearch::SearchContext;
 use util::console::{printerr, printerrln};
 use gfx::gl::Texture2D;
 use gfx::screen::Screen;
-use gfx::skin::scalar::{Scalar, AsScalar, IntoScalar};
-use gfx::skin::hook::Hook;
 use gfx::skin::render::Renderer;
 use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
@@ -354,36 +352,19 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
     }
 }
 
-////////////////////////////////////////////////////////////////////////
-// hooks
+define_hooks! {
+    for LoadingContext {
+        delegate self.opts;
+        delegate self.bms;
+        delegate self.infos;
+        delegate self.keyspec;
 
-impl Hook for LoadingContext {
-    fn scalar_hook<'a>(&'a self, id: &str) -> Option<Scalar<'a>> {
-        match id {
-            "loading.path" => self.lastpath.as_ref().map(|s| s.as_scalar()),
-            "loading.ratio" => Some(self.processed_jobs_ratio().into_scalar()),
-            "meta.stagefile" => self.stagefile.as_ref().map(|s| s.as_scalar()),
-            _ => {
-                self.opts.scalar_hook(id)
-                    .or_else(|| self.bms.scalar_hook(id))
-                    .or_else(|| self.infos.scalar_hook(id))
-                    .or_else(|| self.keyspec.scalar_hook(id))
-            }
-        }
-    }
+        scalar "loading.path" => return self.lastpath.as_ref().map(|s| s.as_scalar());
+        scalar "loading.ratio" => self.processed_jobs_ratio().into_scalar();
+        scalar "meta.stagefile" => return self.stagefile.as_ref().map(|s| s.as_scalar());
 
-    fn block_hook(&self, id: &str, parent: &Hook, mut body: |&Hook, &str| -> bool) -> bool {
-        match id {
-            "loading" => { self.lastpath.is_some() && body(parent, ""); }
-            "meta.stagefile" => { self.stagefile.is_some() && body(parent, ""); }
-            _ => {
-                return self.opts.run_block_hook(id, parent, &mut body) ||
-                       self.bms.run_block_hook(id, parent, &mut body) ||
-                       self.infos.run_block_hook(id, parent, &mut body) ||
-                       self.keyspec.run_block_hook(id, parent, &mut body);
-            }
-        }
-        true
+        block "loading" => self.lastpath.is_some() && body(parent, "");
+        block "meta.stagefile" => self.stagefile.is_some() && body(parent, "");
     }
 }
 
