@@ -120,7 +120,7 @@ impl<'r,T:Clone> Clone for MaybeOwnedVec<'r,T> {
 
 impl<T> Default for MaybeOwnedVec<'static,T> {
     #[inline]
-    fn default() -> MaybeOwnedVec<'static,T> { VecSlice(&'static []) }
+    fn default() -> MaybeOwnedVec<'static,T> { VecSlice(&[]) }
 }
 
 impl<'r,T:hash::Hash> hash::Hash for MaybeOwnedVec<'r,T> {
