@@ -15,16 +15,16 @@ RUSTSQLITE ?= libs/rustsqlite
 DIRECTX_SDK_INCLUDES ?= libs/w32api-directx-standalone/include
 SQLITE3 ?= libs/sqlite3
 RUSTFLAGS ?= -O
-RUSTPKGFLAGS ?= -O --crate-type=rlib
+RUSTPKGFLAGS ?= -O
 CFLAGS ?= -Os
 CXXFLAGS ?= -Os
 
-LIBSDL = $(RUSTSDL)/libsdl.dummy
-LIBSDL_IMAGE = $(RUSTSDL)/libsdl_image.dummy
-LIBSDL_MIXER = $(RUSTSDL)/libsdl_mixer.dummy
-LIBOPENGLES = $(RUSTOPENGLES)/libopengles.dummy
-LIBENCODING = $(RUSTENCODING)/libencoding.dummy
-LIBSQLITE3 = $(RUSTSQLITE)/libsqlite3.dummy
+LIBSDL = $(RUSTSDL)/libsdl_rust.rlib
+LIBSDL_IMAGE = $(RUSTSDL)/libsdl_image_rust.rlib
+LIBSDL_MIXER = $(RUSTSDL)/libsdl_mixer_rust.rlib
+LIBOPENGLES = $(RUSTOPENGLES)/libopengles_rust.rlib
+LIBENCODING = $(RUSTENCODING)/libencoding.rlib
+LIBSQLITE3 = $(RUSTSQLITE)/libsqlite3_rust.rlib
 LIBS = $(LIBSDL) $(LIBSDL_IMAGE) $(LIBSDL_MIXER) $(LIBOPENGLES) $(LIBENCODING) $(LIBSQLITE3)
 
 
@@ -36,22 +36,22 @@ $(BIN): $(SRC) $(LIBS)
 	$(RUSTC) $(RUSTFLAGS) $(patsubst %,-L %,$(dir $(LIBS))) -L $(SQLITE3) $(CRATE) -o $(BIN)
 
 $(LIBSDL): $(RUSTSDL)/src/sdl/lib.rs
-	$(RUSTC) $(RUSTPKGFLAGS) $< --out-dir $(dir $@) && touch $@
+	$(RUSTC) $(RUSTPKGFLAGS) $< -C extra-filename=_rust --out-dir $(dir $@)
 
 $(LIBSDL_IMAGE): $(RUSTSDL)/src/sdl_image/lib.rs $(LIBSDL)
-	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $< --out-dir $(dir $@) && touch $@
+	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $< -C extra-filename=_rust --out-dir $(dir $@)
 
 $(LIBSDL_MIXER): $(RUSTSDL)/src/sdl_mixer/lib.rs $(LIBSDL)
-	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $< --out-dir $(dir $@) && touch $@
+	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $< -C extra-filename=_rust --out-dir $(dir $@)
 
 $(LIBOPENGLES):
-	cd $(RUSTOPENGLES) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS)" DIRECTX_SDK_INCLUDES=$(realpath $(DIRECTX_SDK_INCLUDES))
+	cd $(RUSTOPENGLES) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS) -C extra-filename=_rust --crate-type rlib" DIRECTX_SDK_INCLUDES=$(realpath $(DIRECTX_SDK_INCLUDES))
 
 $(LIBENCODING):
-	cd $(RUSTENCODING) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS)"
+	cd $(RUSTENCODING) && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS)"
 
 $(LIBSQLITE3): $(RUSTSQLITE)/src/sqlite3/lib.rs $(SQLITE3)/libsqlite3.a
-	$(RUSTC) $(RUSTPKGFLAGS) -L $(SQLITE3) $< --out-dir $(dir $@) && touch $@
+	$(RUSTC) $(RUSTPKGFLAGS) -L $(SQLITE3) $< -C extra-filename=_rust -o $@
 
 $(SQLITE3)/libsqlite3.a:
 	cd $(SQLITE3) && $(MAKE) all

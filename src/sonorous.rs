@@ -15,7 +15,7 @@
  * [Github page](https://github.com/snrs/sonorous) for now.
  */
 
-#![crate_id = "sonorous#0.1.0"]
+#![crate_name = "sonorous"]
 #![crate_type = "bin"]
 
 #![no_start]
