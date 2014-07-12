@@ -8,24 +8,17 @@
         {"$rect": "logo", "at": [["100%-558","100%-125"], ["100%","100%"]], "opacity": 0.4},
         {"$$": "entries", "$then": [
             {"$$": "entry.inverted", "$then": [
-                {"$rect": null, "at": [[0,0], ["100%",20]], "color": "white"},
-                {"$$": "entry.meta", "$then": [
-                    {"$text": {"$$": "meta.level",
-                               "$then": {"$": "meta.level", "format": "00"}, "$else": "--"},
-                     "at": [2,2], "size": 16, "color": "gray"},
-                    {"$text": {"$": "meta.title"}, "at": [26,2], "size": 16, "color": "black"}
-                 ], "$else": [
-                    {"$text": {"$": "entry.path"}, "at": [2,2], "size": 16, "color": "#444"}
-                 ]}
+                {"$rect": null, "at": [[0,0], ["100%",20]], "color": "white"}
+            ]},
+            {"$$": "entry.meta", "$then": [
+                {"$text": {"$$": "meta.level",
+                           "$then": {"$": "meta.level", "format": "00"}, "$else": "--"},
+                 "at": [2,2], "size": 16, "color": "gray"},
+                {"$text": {"$": "meta.title"}, "at": [26,2], "size": 16,
+                 "color": {"$$": "entry.inverted", "$then": "black", "$else": "white"}}
             ], "$else": [
-                {"$$": "entry.meta", "$then": [
-                    {"$text": {"$$": "meta.level",
-                               "$then": {"$": "meta.level", "format": "00"}, "$else": "--"},
-                     "at": [2,2], "size": 16, "color": "gray"},
-                    {"$text": {"$": "meta.title"}, "at": [26,2], "size": 16, "color": "white"}
-                 ], "$else": [
-                    {"$text": {"$": "entry.path"}, "at": [2,2], "size": 16, "color": "#ccc"}
-                 ]}
+                {"$text": {"$": "entry.path"}, "at": [2,2], "size": 16,
+                 "color": {"$$": "entry.inverted", "$then": "#444", "$else": "#ccc"}}
             ]},
             {"$$": "entry.hash", "$then": [
                 {"$text": {"$": "entry.hash"},
@@ -118,22 +111,14 @@
             ]},
 
             {"$$": "messages", "$then": [
-                {"$$": "msg.severity",
-                 "fatal": [
-                    {"$text": ["* Fatal: ", {"$": "msg.text"},
-                               {"$$": "msg.line", "$then": [" (line ", {"$": "msg.line"}, ")"]}],
-                     "at": [4,4], "size": 16, "color": "#ff4040"}
-                 ],
-                 "warning": [
-                    {"$text": ["* Warning: ", {"$": "msg.text"},
-                               {"$$": "msg.line", "$then": [" (line ", {"$": "msg.line"}, ")"]}],
-                     "at": [4,4], "size": 16, "color": "#ffff40"}
-                 ],
-                 "note": [
-                    {"$text": ["* Note: ", {"$": "msg.text"},
-                               {"$$": "msg.line", "$then": [" (line ", {"$": "msg.line"}, ")"]}],
-                     "at": [4,4], "size": 16, "color": "#40ffff"}
-                 ]},
+                {"$text": [{"$$": "msg.severity", "fatal":   "* Fatal: ",
+                                                  "warning": "* Warning: ",
+                                                  "note":    "* Note: "}, {"$": "msg.text"},
+                           {"$$": "msg.line", "$then": [" (line ", {"$": "msg.line"}, ")"]}],
+                 "at": [4,4], "size": 16,
+                 "color": {"$$": "msg.severity", "fatal":   "#ff4040",
+                                                 "warning": "#ffff40",
+                                                 "note":    "#40ffff"}},
                 {"$cliptop": 18},
                 {"$$": "msg",
                  "legacy-encoding": [
