@@ -153,7 +153,7 @@ impl<'a> Hook for AddText<'a> {
 }
 
 macro_rules! define_hooks(
-    ($(for $ty:ty {
+    ($(for $ty:ty |$slf:ident, $id:ident, $parent:ident, $body:ident| {
         $(delegate $delegate:expr;)*
         $(scalar $scalarname:pat => $scalarvalue:expr;)*
         $(block $blockname:pat => $blockvalue:expr;)*
@@ -162,11 +162,14 @@ macro_rules! define_hooks(
             #[allow(unused_variable)]
             fn scalar_hook<'a>(&'a self, id: &str) -> Option<::gfx::skin::scalar::Scalar<'a>> {
                 #[allow(unused_imports)] use gfx::skin::scalar::{AsScalar, IntoScalar};
+                type Scalar<'a> = ::gfx::skin::scalar::Scalar<'a>;
 
                 match id {
-                    $($scalarname => Some::<::gfx::skin::scalar::Scalar<'a>>($scalarvalue),)*
+                    $($scalarname => {
+                        (|$slf: &'a $ty, $id: &str| Some::<Scalar<'a>>($scalarvalue))(self, id)
+                    })*
                     _ => {
-                        $(match $delegate.scalar_hook(id) {
+                        $(match (|$slf: &'a $ty, $id: &str| $delegate.scalar_hook(id))(self, id) {
                             Some(v) => { return Some(v); }
                             None => {}
                         })*
@@ -179,11 +182,21 @@ macro_rules! define_hooks(
             fn block_hook(&self, id: &str, parent: &::gfx::skin::hook::Hook,
                           mut body: |&::gfx::skin::hook::Hook, &str| -> bool) -> bool {
                 #[allow(unused_imports)] use gfx::skin::scalar::{AsScalar, IntoScalar};
+                type HookRef<'a> = &'a ::gfx::skin::hook::Hook;
+                type Body<'a> = |&::gfx::skin::hook::Hook, &str|: 'a -> bool;
 
                 match id {
-                    $($blockname => { $blockvalue; true })*
+                    $($blockname => {
+                        (|$slf: &$ty, $id: &str, $parent: HookRef, $body: Body|
+                         $blockvalue)(self, id, parent, |hook,alt| body(hook,alt));
+                        true
+                    })*
                     _ => {
-                        $(if $delegate.run_block_hook(id, parent, &mut body) { return true; })*
+                        $(if (|$slf: &$ty, $id: &str, $parent: HookRef, mut $body: Body|
+                              $delegate.run_block_hook($id, $parent, &mut $body))
+                                (self, id, parent, |hook,alt| body(hook,alt)) {
+                            return true;
+                        })*
                         false
                     }
                 }

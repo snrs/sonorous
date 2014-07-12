@@ -854,7 +854,7 @@ impl FromJson for Skin {
 pub fn load_skin(f: &mut Reader) -> Result<Skin,String> {
     let json = match from_reader(f) {
         Ok(json) => json,
-        Err(err) => { return Err(err.to_str()); }
+        Err(err) => { return Err(err.to_string()); }
     };
     from_json(json)
 }

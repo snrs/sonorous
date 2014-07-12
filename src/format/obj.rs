@@ -563,9 +563,9 @@ impl<T:Clone+PartialOrd> PartialOrd for ObjLoc<T> {
 }
 
 impl<T:Clone> Index<ObjAxis,T> for ObjLoc<T> {
-    fn index(&self, axis: &ObjAxis) -> T {
-        match *axis { VirtualPos  => self.vpos.clone(),  ActualPos  => self.pos.clone(),
-                      VirtualTime => self.vtime.clone(), ActualTime => self.time.clone() }
+    fn index<'a>(&'a self, axis: &ObjAxis) -> &'a T {
+        match *axis { VirtualPos  => &self.vpos,  ActualPos  => &self.pos,
+                      VirtualTime => &self.vtime, ActualTime => &self.time }
     }
 }
 

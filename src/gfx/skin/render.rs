@@ -227,7 +227,7 @@ impl<'a> State<'a> {
                 Some(scalar) => {
                     let text = scalar.into_maybe_owned();
                     if !text.is_empty() {
-                        body(hook, text.as_slice().char_len().to_str().as_slice());
+                        body(hook, text.as_slice().char_len().to_string().as_slice());
                     }
                     true
                 },

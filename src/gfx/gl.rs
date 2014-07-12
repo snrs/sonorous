@@ -153,9 +153,9 @@ impl Shader {
 
     /// Creates a shader from given file path.
     pub fn from_file(shader_type: ShaderType, path: &Path) -> Result<Shader,String> {
-        match io::File::open(path).and_then(|mut f| f.read_to_str()) {
+        match io::File::open(path).and_then(|mut f| f.read_to_string()) {
             Ok(s) => Shader::from_str(shader_type, s.as_slice()),
-            Err(err) => Err(err.to_str()),
+            Err(err) => Err(err.to_string()),
         }
     }
 }

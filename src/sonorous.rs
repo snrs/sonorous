@@ -145,7 +145,7 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
     fn print_command<'r>(parsed: Parsed<'r>, callback: |Option<uint>, BmsMessage| -> bool) {
         match parsed {
             Command(_lineno, BmsUnknown(..)) => {}
-            Command(_lineno, cmd) => { util::console::printoutln(cmd.to_str().as_slice()); }
+            Command(_lineno, cmd) => { util::console::printoutln(cmd.to_string().as_slice()); }
             Message(lineno, msg) => { callback(lineno, msg); }
             Encoding(..) => {}
         }
@@ -199,7 +199,7 @@ pub fn play(bmspath: &Path, opts: ui::options::Options) {
         let preproc = match std::io::File::open(bmspath) {
             Ok(mut f) => preprocess_bms(bmspath, &mut f, &opts,
                                         &mut r, &opts.loader_options(), print_diag),
-            Err(err) => Err(err.to_str()),
+            Err(err) => Err(err.to_string()),
         };
         let PreprocessedBms { bms, infos, keyspec } = match preproc {
             Ok(preproc) => preproc,

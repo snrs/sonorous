@@ -12,11 +12,11 @@ use gfx::skin::scalar::{Scalar, IntoScalar};
 use gfx::skin::hook::Hook;
 
 define_hooks! {
-    for options::Options {
-        scalar "opts.playspeed" => self.playspeed.into_scalar();
+    for options::Options |opts, id, parent, body| {
+        scalar "opts.playspeed" => opts.playspeed.into_scalar();
 
-        block "opts.autoplay" => self.is_autoplay() && body(parent, "");
-        block "opts.modifier" => match self.modf {
+        block "opts.autoplay" => opts.is_autoplay() && body(parent, "");
+        block "opts.modifier" => match opts.modf {
             Some(options::MirrorModf)    => { body(parent, "mirror"); }
             Some(options::ShuffleModf)   => { body(parent, "shuffle"); }
             Some(options::ShuffleExModf) => { body(parent, "shuffle-ex"); }
@@ -24,10 +24,10 @@ define_hooks! {
             Some(options::RandomExModf)  => { body(parent, "random-ex"); }
             None => {}
         };
-        block "opts.hasbga" => self.has_bga() && body(parent, "");
-        block "opts.hasmovie" => self.has_movie() && body(parent, "");
-        block "opts.showinfo" => self.showinfo && body(parent, "");
-        block "opts.fullscreen" => self.fullscreen && body(parent, "");
+        block "opts.hasbga" => opts.has_bga() && body(parent, "");
+        block "opts.hasmovie" => opts.has_movie() && body(parent, "");
+        block "opts.showinfo" => opts.showinfo && body(parent, "");
+        block "opts.fullscreen" => opts.fullscreen && body(parent, "");
     }
 }
 
@@ -41,42 +41,42 @@ impl<S,I> Hook for timeline::Timeline<S,I> {
 }
 
 define_hooks! {
-    for timeline::TimelineInfo {
-        scalar "timeline.nnotes" => self.nnotes.into_scalar();
-        scalar "timeline.maxscore" => self.maxscore.into_scalar();
+    for timeline::TimelineInfo |infos, id, parent, body| {
+        scalar "timeline.nnotes" => infos.nnotes.into_scalar();
+        scalar "timeline.maxscore" => infos.maxscore.into_scalar();
 
-        block "timeline.bpmchange" => self.hasbpmchange && body(parent, "");
-        block "timeline.longnote" => self.haslongnote && body(parent, "");
+        block "timeline.bpmchange" => infos.hasbpmchange && body(parent, "");
+        block "timeline.longnote" => infos.haslongnote && body(parent, "");
     }
 }
 
 define_hooks! {
-    for metadata::Meta {
-        scalar "meta.title" => return self.title.as_ref().map(|s| s.as_scalar());
-        scalar "meta.genre" => return self.genre.as_ref().map(|s| s.as_scalar());
-        scalar "meta.artist" => return self.artist.as_ref().map(|s| s.as_scalar());
-        scalar "meta.level" => return self.level.as_ref().map(|lv| lv.value.into_scalar());
+    for metadata::Meta |meta, id, parent, body| {
+        scalar "meta.title" => return meta.title.as_ref().map(|s| s.as_scalar());
+        scalar "meta.genre" => return meta.genre.as_ref().map(|s| s.as_scalar());
+        scalar "meta.artist" => return meta.artist.as_ref().map(|s| s.as_scalar());
+        scalar "meta.level" => return meta.level.as_ref().map(|lv| lv.value.into_scalar());
         scalar "meta.difficulty" =>
-            return self.difficulty.map(|metadata::Difficulty(diff)| diff.into_scalar());
+            return meta.difficulty.map(|metadata::Difficulty(diff)| diff.into_scalar());
 
-        block "meta.title" => self.title.is_some() && body(parent, "");
+        block "meta.title" => meta.title.is_some() && body(parent, "");
         block "meta.subtitle" =>
-            self.subtitles.iter().advance(|s|
+            meta.subtitles.iter().all(|s|
                 body(&parent.add_text("meta.subtitle", s.as_slice()), ""));
-        block "meta.genre" => self.genre.is_some() && body(parent, "");
-        block "meta.artist" => self.artist.is_some() && body(parent, "");
+        block "meta.genre" => meta.genre.is_some() && body(parent, "");
+        block "meta.artist" => meta.artist.is_some() && body(parent, "");
         block "meta.subartist" =>
-            self.subartists.iter().advance(|s|
+            meta.subartists.iter().all(|s|
                 body(&parent.add_text("meta.subartist", s.as_slice()), ""));
         block "meta.comment" =>
-            self.comments.iter().advance(|s|
+            meta.comments.iter().all(|s|
                 body(&parent.add_text("meta.comment", s.as_slice()), ""));
-        block "meta.level" => self.level.is_some() && body(parent, "");
-        block "meta.levelsystem" => match self.level.as_ref().map(|lv| lv.system) {
+        block "meta.level" => meta.level.is_some() && body(parent, "");
+        block "meta.levelsystem" => match meta.level.as_ref().map(|lv| lv.system) {
             Some(metadata::LevelSystemBms) => { body(parent, "bms"); }
             None => {}
         };
-        block "meta.difficulty" => match self.difficulty {
+        block "meta.difficulty" => match meta.difficulty {
             Some(metadata::Difficulty(1)) => { body(parent, "beginner"); }
             Some(metadata::Difficulty(2)) => { body(parent, "normal"); }
             Some(metadata::Difficulty(3)) => { body(parent, "hard"); }
@@ -87,17 +87,17 @@ define_hooks! {
         };
     }
 
-    for bms::BmsMeta {
-        delegate self.common;
+    for bms::BmsMeta |meta, id, parent, body| {
+        delegate meta.common;
 
-        scalar "meta.encoding" => self.encoding.val0().into_scalar();
+        scalar "meta.encoding" => meta.encoding.val0().into_scalar();
         scalar "meta.encoding.confidence" => {
-            let mut confidence = self.encoding.val1();
+            let mut confidence = meta.encoding.val1();
             if confidence > 1.0 { confidence = 1.0; }
             confidence.into_scalar()
         };
 
-        block "meta.playmode" => match self.mode {
+        block "meta.playmode" => match meta.mode {
             bms::SinglePlay => { body(parent, "single"); }
             bms::CouplePlay => { body(parent, "couple"); }
             bms::DoublePlay => { body(parent, "double"); }
@@ -105,13 +105,13 @@ define_hooks! {
         };
     }
 
-    for bms::Bms {
-        delegate self.meta;
-        delegate self.timeline;
+    for bms::Bms |bms, id, parent, body| {
+        delegate bms.meta;
+        delegate bms.timeline;
     }
 
-    for keyspec::KeySpec {
-        scalar "meta.nkeys" => self.nkeys().into_scalar();
+    for keyspec::KeySpec |keyspec, id, parent, body| {
+        scalar "meta.nkeys" => keyspec.nkeys().into_scalar();
     }
 }
 
@@ -121,37 +121,39 @@ struct GradeInfo {
 }
 
 define_hooks! {
-    for GradeInfo {
-        scalar "grade.name" => self.name.into_scalar();
-        scalar "grade.count" => self.count.into_scalar();
+    for GradeInfo |grade, id, parent, body| {
+        scalar "grade.name" => grade.name.into_scalar();
+        scalar "grade.count" => grade.count.into_scalar();
     }
 
-    for player::Player {
-        delegate self.opts;
-        delegate self.meta;
-        delegate self.timeline;
-        delegate self.infos;
-        delegate self.keyspec;
+    for player::Player |player, id, parent, body| {
+        delegate player.opts;
+        delegate player.meta;
+        delegate player.timeline;
+        delegate player.infos;
+        delegate player.keyspec;
 
-        scalar "meta.duration" => self.duration.into_scalar();
-        scalar "player.playspeed" => self.nominal_playspeed().into_scalar();
-        scalar "player.bpm" => self.bpm.into_scalar();
-        scalar "player.now.time" => self.now.into_scalar();
-        scalar "player.now.vpos" => self.cur.loc.vpos.into_scalar();
+        scalar "meta.duration" => player.duration.into_scalar();
+        scalar "player.playspeed" => player.nominal_playspeed().into_scalar();
+        scalar "player.bpm" => player.bpm.into_scalar();
+        scalar "player.now.time" => player.now.into_scalar();
+        scalar "player.now.vpos" => player.cur.loc.vpos.into_scalar();
         scalar "player.ratio" => {
-            let starttime = (self.now - self.origintime) as f64;
-            let duration = self.duration * 1000.0;
+            let starttime = (player.now - player.origintime) as f64;
+            let duration = player.duration * 1000.0;
             (starttime / duration).into_scalar()
         };
-        scalar "player.score" => self.score.into_scalar();
-        scalar "player.lastcombo" => self.lastcombo.into_scalar();
-        scalar "player.bestcombo" => self.bestcombo.into_scalar();
-        scalar "player.gauge" => (self.gauge as f64 / player::MAXGAUGE as f64).into_scalar();
-        scalar "player.survival" => (self.survival as f64 / player::MAXGAUGE as f64).into_scalar();
-        block "player.survival" => self.gauge >= self.survival && body(parent, "");
+        scalar "player.score" => player.score.into_scalar();
+        scalar "player.lastcombo" => player.lastcombo.into_scalar();
+        scalar "player.bestcombo" => player.bestcombo.into_scalar();
+        scalar "player.gauge" =>
+            (player.gauge as f64 / player::MAXGAUGE as f64).into_scalar();
+        scalar "player.survival" =>
+            (player.survival as f64 / player::MAXGAUGE as f64).into_scalar();
+        block "player.survival" => player.gauge >= player.survival && body(parent, "");
         block "player.grades" => {
             static GRADENAMES: [&'static str, ..5] = ["cool", "great", "good", "bad", "miss"];
-            GRADENAMES.iter().zip(self.gradecounts.iter().rev()).advance(|(&name, &count)|
+            GRADENAMES.iter().zip(player.gradecounts.iter().rev()).all(|(&name, &count)|
                 body(&parent.delegate(&GradeInfo { name: name, count: count }), name));
         };
     }

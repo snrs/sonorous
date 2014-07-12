@@ -125,7 +125,7 @@ impl Options {
     pub fn load_skin(&self, name: &str) -> Result<Skin,String> {
         match io::File::open(&self.skinroot.join(name)) {
             Ok(mut f) => load_skin(&mut f).map(|skin| skin.make_absolute(&self.skinroot)),
-            Err(err) => Err(err.to_str()),
+            Err(err) => Err(err.to_string()),
         }
     }
 }

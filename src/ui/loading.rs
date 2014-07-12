@@ -120,7 +120,7 @@ impl LoadingContext {
         });
         match tex_or_err {
             Ok(tex) => { self.stagefile = Some(Rc::new(tex)); }
-            Err(_err) => { warn!("failed to load image #STAGEFILE ({})", path.to_str()); }
+            Err(_err) => { warn!("failed to load image #STAGEFILE ({})", path); }
         }
     }
 
@@ -135,7 +135,7 @@ impl LoadingContext {
                 self.sndres.as_mut_slice()[i] = res.wrap();
             }
             Err(_) => {
-                warn!("failed to load sound #WAV{} ({})", Key(i as int).to_str(), path);
+                warn!("failed to load sound #WAV{} ({})", Key(i as int), path);
             }
         }
     }
@@ -152,7 +152,7 @@ impl LoadingContext {
                 self.imgres.as_mut_slice()[i] = res.wrap();
             }
             Err(_) => {
-                warn!("failed to load image #BMP{} ({})", Key(i as int).to_str(), path);
+                warn!("failed to load image #BMP{} ({})", Key(i as int), path);
             }
         }
     }
@@ -353,18 +353,18 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
 }
 
 define_hooks! {
-    for LoadingContext {
-        delegate self.opts;
-        delegate self.bms;
-        delegate self.infos;
-        delegate self.keyspec;
+    for LoadingContext |ctx, id, parent, body| {
+        delegate ctx.opts;
+        delegate ctx.bms;
+        delegate ctx.infos;
+        delegate ctx.keyspec;
 
-        scalar "loading.path" => return self.lastpath.as_ref().map(|s| s.as_scalar());
-        scalar "loading.ratio" => self.processed_jobs_ratio().into_scalar();
-        scalar "meta.stagefile" => return self.stagefile.as_ref().map(|s| s.as_scalar());
+        scalar "loading.path" => return ctx.lastpath.as_ref().map(|s| s.as_scalar());
+        scalar "loading.ratio" => ctx.processed_jobs_ratio().into_scalar();
+        scalar "meta.stagefile" => return ctx.stagefile.as_ref().map(|s| s.as_scalar());
 
-        block "loading" => self.lastpath.is_some() && body(parent, "");
-        block "meta.stagefile" => self.stagefile.is_some() && body(parent, "");
+        block "loading" => ctx.lastpath.is_some() && body(parent, "");
+        block "meta.stagefile" => ctx.stagefile.is_some() && body(parent, "");
     }
 }
 

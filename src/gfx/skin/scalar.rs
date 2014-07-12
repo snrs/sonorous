@@ -208,7 +208,7 @@ impl<'a> IntoMaybeOwned<'a> for Scalar<'a> {
         match self {
             OwnedStrScalar(s) => s.into_maybe_owned(),
             BorrowedStrScalar(s) => s.into_maybe_owned(),
-            scalar => scalar.to_str().into_maybe_owned(),
+            scalar => scalar.to_string().into_maybe_owned(),
         }
     }
 }

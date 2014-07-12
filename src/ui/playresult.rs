@@ -67,8 +67,8 @@ impl Scene for PlayResultScene {
 }
 
 define_hooks! {
-    for PlayResultScene {
-        delegate self.player;
+    for PlayResultScene |scene, id, parent, body| {
+        delegate scene.player;
     }
 }
 

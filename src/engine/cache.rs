@@ -306,7 +306,7 @@ impl MetadataCache {
                         // this *can* fail; the transaction would get rolled back then.
                         let entries: Vec<Path> = try!(readdir(path));
                         debug!("get_entries: entries = {}",
-                               entries.iter().map(|p| p.display().to_str())
+                               entries.iter().map(|p| p.display().to_string())
                                              .collect::<Vec<String>>());
                         let entrystats: Vec<FileStat> =
                             try!(result::collect(entries.iter().map(|p| p.stat())));
@@ -365,9 +365,9 @@ impl MetadataCache {
         }
 
         debug!("get_entries: dirs = {}",
-               dirs.iter().map(|p| p.display().to_str()).collect::<Vec<String>>());
+               dirs.iter().map(|p| p.display().to_string()).collect::<Vec<String>>());
         debug!("get_entries: files = {}",
-               files.iter().map(|p| p.display().to_str()).collect::<Vec<String>>());
+               files.iter().map(|p| p.display().to_string()).collect::<Vec<String>>());
 
         Ok((dirs, files))
     }

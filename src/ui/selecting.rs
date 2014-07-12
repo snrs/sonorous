@@ -329,7 +329,7 @@ impl SelectingScene {
                     load_with_reader(io::MemReader::new(buf));
                 }
                 Err(err) => {
-                    sender.send(BmsFailed(bmspath.clone(), err.to_str()));
+                    sender.send(BmsFailed(bmspath.clone(), err.to_string()));
                 }
             }
         }, proc() {
@@ -518,8 +518,9 @@ impl Scene for SelectingScene {
                             let prepared = prepared.unwrap();
                             match Texture2D::from_prepared_surface(&prepared, false, false) {
                                 Ok(tex) => { data.banner = Some(Rc::new(tex)); }
-                                Err(_err) => { warn!("failed to load image \\#BANNER ({})",
-                                                     imgpath.to_str()); }
+                                Err(_err) => {
+                                    warn!("failed to load image #BANNER ({})", imgpath);
+                                }
                             }
                         }
                         _ => {}
@@ -562,70 +563,70 @@ impl Scene for SelectingScene {
 }
 
 define_hooks! {
-    for PreprocessedBms {
-        delegate self.bms;
-        delegate self.infos;
-        delegate self.keyspec;
+    for PreprocessedBms |preproc, id, parent, body| {
+        delegate preproc.bms;
+        delegate preproc.infos;
+        delegate preproc.keyspec;
     }
 
-    for (Option<uint>, bms::diag::BmsMessage) {
-        scalar "msg.line" => return self.val0().map(|v| v.into_scalar());
-        scalar "msg.text" => self.ref1().message.into_scalar();
+    for (Option<uint>, bms::diag::BmsMessage) |msg, id, parent, body| {
+        scalar "msg.line" => return msg.val0().map(|v| v.into_scalar());
+        scalar "msg.text" => msg.ref1().message.into_scalar();
 
-        block "msg" => body(parent, self.ref1().id);
-        block "msg.line" => self.val0().is_some() && body(parent, "");
-        block "msg.severity" => match self.ref1().severity {
+        block "msg" => body(parent, msg.ref1().id);
+        block "msg.line" => msg.val0().is_some() && body(parent, "");
+        block "msg.severity" => match msg.ref1().severity {
             bms::diag::Note    => { body(parent, "note"); }
             bms::diag::Warning => { body(parent, "warning"); }
             bms::diag::Fatal   => { body(parent, "fatal"); }
         };
     }
 
-    for PreloadedData {
-        delegate self.preproc;
+    for PreloadedData |data, id, parent, body| {
+        delegate data.preproc;
 
-        scalar "meta.duration" => self.duration.into_scalar();
-        scalar "meta.banner" => return self.banner.as_ref().map(|tex| tex.as_scalar());
+        scalar "meta.duration" => data.duration.into_scalar();
+        scalar "meta.banner" => return data.banner.as_ref().map(|tex| tex.as_scalar());
 
-        block "messages" => self.messages.iter().advance(|msg| body(&parent.delegate(msg), ""));
-        block "meta.banner" => self.banner.is_some() && body(parent, "");
+        block "messages" => data.messages.iter().all(|msg| body(&parent.delegate(msg), ""));
+        block "meta.banner" => data.banner.is_some() && body(parent, "");
     }
 
-    for SelectingScene {
-        delegate self.opts;
+    for SelectingScene |scene, id, parent, body| {
+        delegate scene.opts;
 
         scalar "entries.scrollstart" => {
-            if self.files.is_empty() {
+            if scene.files.is_empty() {
                 0.0f32.into_scalar()
             } else {
-                let top = cmp::min(self.scrolloffset, self.files.len());
-                (top as f32 / self.files.len() as f32).into_scalar()
+                let top = cmp::min(scene.scrolloffset, scene.files.len());
+                (top as f32 / scene.files.len() as f32).into_scalar()
             }
         };
         scalar "entries.scrollend" => {
-            if self.files.is_empty() {
+            if scene.files.is_empty() {
                 1.0f32.into_scalar()
             } else {
-                let bottom = cmp::min(self.scrolloffset + NUMENTRIES, self.files.len());
-                (bottom as f32 / self.files.len() as f32).into_scalar()
+                let bottom = cmp::min(scene.scrolloffset + NUMENTRIES, scene.files.len());
+                (bottom as f32 / scene.files.len() as f32).into_scalar()
             }
         };
 
-        block "scanning" => self.filesdone || body(parent, "");
+        block "scanning" => scene.filesdone || body(parent, "");
         block "entries" => {
-            let top = cmp::min(self.scrolloffset, self.files.len());
-            self.files.slice_from(top).iter().enumerate().advance(|(i, entry)| {
-                let inverted = self.scrolloffset + i == self.offset;
-                body(&(self, inverted, entry), "")
+            let top = cmp::min(scene.scrolloffset, scene.files.len());
+            scene.files.slice_from(top).iter().enumerate().all(|(i, entry)| {
+                let inverted = scene.scrolloffset + i == scene.offset;
+                body(&(scene, inverted, entry), "")
             });
         };
         block "entries.before" => {
-            let top = cmp::min(self.scrolloffset, self.files.len());
-            self.files.slice_to(top).iter().rev().advance(|entry| {
-                body(&(self, false, entry), "")
+            let top = cmp::min(scene.scrolloffset, scene.files.len());
+            scene.files.slice_to(top).iter().rev().all(|entry| {
+                body(&(scene, false, entry), "")
             });
         };
-        block "preload" => match self.preloaded {
+        block "preload" => match scene.preloaded {
             NothingToPreload | PreloadAfter(..) => {}
             Preloading => { body(parent, "loading"); }
             Preloaded(ref data) => { body(&parent.delegate(data), "loaded"); }
@@ -643,7 +644,7 @@ impl<'a> Hook for (&'a SelectingScene, bool, &'a Entry) {
             "entry.path" => {
                 let path = entry.path.path_relative_from(&scene.root)
                                      .unwrap_or_else(|| entry.path.clone());
-                Some(path.display().to_str().into_scalar())
+                Some(path.display().to_string().into_scalar())
             },
             "entry.hash" => entry.hash.map(|h| h.to_hex().into_scalar()),
             _ => entry.meta.as_ref().and_then(|meta| meta.scalar_hook(id))
