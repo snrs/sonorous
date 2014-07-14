@@ -9,7 +9,8 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::comm::{Sender, Receiver};
 use std::rand::{task_rng, Rng};
-use sync::{Arc, RWLock};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, RWLock};
 
 use sdl::{event, get_ticks};
 use format::timeline::TimelineInfo;
@@ -18,7 +19,7 @@ use format::bms;
 use format::bms::Bms;
 use util::filesearch::SearchContext;
 use util::envelope::Envelope;
-use util::md5::{MD5, ToHex};
+use util::md5::MD5Hash;
 use gfx::gl::{PreparedSurface, Texture2D};
 use gfx::screen::Screen;
 use gfx::skin::scalar::{Scalar, IntoScalar};
@@ -62,14 +63,14 @@ pub fn preprocess_bms<'r,R:Rng>(
 
 /// Internal message from the worker task to the main task.
 enum Message {
-    /// The worker has scanned more files.
-    PushFiles(Vec<Path>),
+    /// The worker has scanned more files, some of them with their MD5 hashes.
+    PushFiles(Vec<(Path, Option<MD5Hash>)>),
     /// The worker has finished scanning files.
     NoMoreFiles,
     /// The worker has failed to read and/or load the BMS file. Error message follows.
     BmsFailed(Path,String),
     /// The worker has read the BMS file and calculated its MD5 hash.
-    BmsHashRead(Path,[u8, ..16]),
+    BmsHashRead(Path,MD5Hash),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
     BmsLoaded(Path,PreprocessedBms,Vec<(Option<uint>,bms::diag::BmsMessage)>),
@@ -122,7 +123,7 @@ pub struct Entry {
     /// A path to loaded file.
     pub path: Path,
     /// MD5 hash. Only present when it has been read.
-    pub hash: Option<[u8, ..16]>,
+    pub hash: Option<MD5Hash>,
     /// Loaded metadata if any.
     pub meta: Option<Meta>,
 }
@@ -135,11 +136,18 @@ pub struct SelectingScene {
     pub opts: Rc<Options>,
     /// Skin renderer.
     pub skin: RefCell<Renderer>,
+    /// Shared metadata cache.
+    ///
+    /// This has to be shared, otherwise each task would try to write to the same database file
+    /// simultaneously and SQLite would give up for most cases.
+    cache: Arc<Mutex<MetadataCache>>,
 
     /// The root path of the scanner.
     pub root: Path,
     /// A list of scanned entries.
     pub files: Vec<Entry>,
+    /// A mapping from the path to scanned entries.
+    fileindices: HashMap<Path, uint>,
     /// Set to true when the scanner finished scanning.
     pub filesdone: bool,
     /// The index of the topmost entry visible on the screen.
@@ -201,11 +209,16 @@ impl SelectingScene {
             Ok(skin) => skin,
             Err(err) => die!("{}", err),
         };
+        let cache = match opts.open_metadata_cache() {
+            Ok(cache) => cache,
+            Err(err) => die!("can't open metadata cache: {}", err),
+        };
         let root = os::make_absolute(root);
         let (sender, receiver) = comm::channel();
         box SelectingScene {
             screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)),
-            root: root, files: Vec::new(), filesdone: false,
+            cache: Arc::new(Mutex::new(cache)),
+            root: root, files: Vec::new(), fileindices: HashMap::new(), filesdone: false,
             scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
             receiver: receiver, sender: sender, keepgoing: Arc::new(RWLock::new(true)),
         }
@@ -217,15 +230,17 @@ impl SelectingScene {
         let sender = self.sender.clone();
         let sender_ = self.sender.clone();
         let keepgoing = self.keepgoing.clone();
-        let dataroot = self.opts.dataroot.clone();
-        let metadatacache = self.opts.metadatacache.clone();
+        let cache = self.cache.clone();
         spawn_worker_task("scanner", proc() {
-            fn recur(cache: &MetadataCache, root: Path,
+            fn recur(cache: &Mutex<MetadataCache>, root: Path,
                      sender: &Sender<Message>, keepgoing: &Arc<RWLock<bool>>) -> bool {
                 if !*keepgoing.read() { return false; }
 
-                let (dirs, files) = match cache.get_entries(&root) {
-                    Ok((dirs, files)) => (dirs, files.move_iter().filter(is_bms_file).collect()),
+                let ret = cache.lock().get_entries(&root);
+                let (dirs, files) = match ret {
+                    Ok((dirs, files)) => {
+                        (dirs, files.move_iter().filter(|&(ref p, _)| is_bms_file(p)).collect())
+                    }
                     Err(err) => {
                         warn!("scanner failed to read {}: {}", root.display(), err);
                         (Vec::new(), Vec::new())
@@ -237,11 +252,8 @@ impl SelectingScene {
                 }
                 true
             }
-            let cache = match metadatacache {
-                Some(ref cache) => MetadataCache::open(dataroot, cache),
-                None => MetadataCache::open_in_memory(dataroot),
-            };
-            if recur(&cache.unwrap(), root.clone(), &sender, &keepgoing) {
+
+            if recur(cache.deref(), root.clone(), &sender, &keepgoing) {
                 sender.send(NoMoreFiles);
             }
         }, proc() {
@@ -274,6 +286,7 @@ impl SelectingScene {
         let opts = self.opts.deref().clone();
         let sender = self.sender.clone();
         let sender_ = self.sender.clone();
+        let cache = self.cache.clone();
         spawn_worker_task("preloader", proc() {
             let opts = Rc::new(opts);
 
@@ -319,18 +332,19 @@ impl SelectingScene {
                 }
             };
 
-            match io::File::open(&bmspath) {
-                Ok(mut f) => {
-                    let buf = f.read_to_end().ok().unwrap_or_else(|| Vec::new());
-                    let hash = MD5::from_buffer(buf.as_slice()).final();
-                    sender.send(BmsHashRead(bmspath.clone(), hash));
-
-                    // since we have read the file we don't want the parser to read it again.
-                    load_with_reader(io::MemReader::new(buf));
-                }
-                Err(err) => {
-                    sender.send(BmsFailed(bmspath.clone(), err.to_string()));
-                }
+            // we have read the file so we don't want the parser to read it again.
+            let f = match cache.lock().get_hash(&bmspath) {
+                Ok((hash, f)) => { sender.send(BmsHashRead(bmspath.clone(), hash)); Ok(f) },
+                Err(err) => Err(err),
+            };
+            let f = match f {
+                Ok(Some(f)) => Ok(f),
+                Ok(None) => io::File::open(&bmspath),
+                Err(err) => Err(err),
+            };
+            match f {
+                Ok(f) => load_with_reader(f),
+                Err(err) => sender.send(BmsFailed(bmspath.clone(), err.to_string())),
             }
         }, proc() {
             // the task failed to send the error message, so the wrapper sends it instead
@@ -490,8 +504,9 @@ impl Scene for SelectingScene {
                     if self.files.is_empty() { // immediately preloads the first entry
                         self.preloaded = PreloadAfter(0);
                     }
-                    for path in paths.move_iter() {
-                        self.files.push(Entry { path: path, hash: None, meta: None });
+                    for (path, hash) in paths.move_iter() {
+                        self.fileindices.insert(path.clone(), self.files.len());
+                        self.files.push(Entry { path: path, hash: hash, meta: None });
                     }
                 }
                 Ok(NoMoreFiles) => {
@@ -502,8 +517,10 @@ impl Scene for SelectingScene {
                     self.preloaded = PreloadFailed(err);
                 }
                 Ok(BmsHashRead(bmspath,hash)) => {
-                    if !self.is_current(&bmspath) { continue; }
-                    self.files.as_mut_slice()[self.offset].hash = Some(hash);
+                    match self.fileindices.find(&bmspath) {
+                        Some(&offset) => { self.files.as_mut_slice()[offset].hash = Some(hash); }
+                        None => {}
+                    }
                 }
                 Ok(BmsLoaded(bmspath,preproc,messages)) => {
                     if !self.is_current(&bmspath) { continue; }
@@ -646,7 +663,7 @@ impl<'a> Hook for (&'a SelectingScene, bool, &'a Entry) {
                                      .unwrap_or_else(|| entry.path.clone());
                 Some(path.display().to_string().into_scalar())
             },
-            "entry.hash" => entry.hash.map(|h| h.to_hex().into_scalar()),
+            "entry.hash" => entry.hash.map(|h| h.to_string().into_scalar()),
             _ => entry.meta.as_ref().and_then(|meta| meta.scalar_hook(id))
                       .or_else(|| scene.scalar_hook(id))
         }

@@ -11,6 +11,7 @@ use encoding::label::encoding_from_whatwg_label;
 use format::bms::load::LoaderOptions;
 use gfx::skin::ast::Skin;
 use gfx::skin::parse::load_skin;
+use engine::cache::MetadataCache;
 
 /// Game play modes.
 #[deriving(PartialEq,Eq,Clone)]
@@ -126,6 +127,15 @@ impl Options {
         match io::File::open(&self.skinroot.join(name)) {
             Ok(mut f) => load_skin(&mut f).map(|skin| skin.make_absolute(&self.skinroot)),
             Err(err) => Err(err.to_string()),
+        }
+    }
+
+    /// Opens a metadata cache. If the path is left unspecified, the cache is backed by RAM.
+    pub fn open_metadata_cache(&self) -> io::IoResult<MetadataCache> {
+        let dataroot = self.dataroot.clone();
+        match self.metadatacache {
+            Some(ref cache) => MetadataCache::open(dataroot, cache),
+            None => MetadataCache::open_in_memory(dataroot),
         }
     }
 }

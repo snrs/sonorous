@@ -5,8 +5,9 @@
 //! Caches backed by the external database.
 
 use std::{io, result, path};
-use std::io::{IoError, OtherIoError, IoResult, FileStat};
-use std::io::fs::readdir;
+use std::io::{IoError, OtherIoError, IoResult, FileStat, SeekSet};
+use std::io::fs::{File, readdir};
+use util::md5::{MD5, MD5Hash};
 
 use sqlite3;
 
@@ -151,6 +152,27 @@ fn size_from_filestat(st: &FileStat) -> i64 {
     }
 }
 
+/// Makes an MD5 hash from given byte slice. The slice should be 16 bytes long.
+fn md5_hash_from_slice(h: &[u8]) -> Option<MD5Hash> {
+    if h.len() == 16 {
+        Some(MD5Hash([h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7],
+                      h[8], h[9], h[10], h[11], h[12], h[13], h[14], h[15]]))
+    } else {
+        None
+    }
+}
+
+/// The cache result from the database.
+#[deriving(Show)]
+enum CacheResult<T> {
+    /// The cached entry is present and valid with given row ID and (partial) value.
+    CacheValid(i64, T),
+    /// The cached entry is present but invalid.
+    CacheInvalid(i64),
+    /// There is no cached entry.
+    NotCached,
+}
+
 impl MetadataCache {
     /// Opens a metadata cache.
     pub fn open(root: Path, dbpath: &Path) -> IoResult<MetadataCache> {
@@ -222,8 +244,33 @@ impl MetadataCache {
         Ok(())
     }
 
+    /// Checks the status of a cached list of entries in the directory.
+    /// It may also return the current `stat` result, in order to avoid duplicate calls to `stat`.
+    /// The caller is free to call this method during a transaction.
+    fn check_cached_entries(&self, path: &Path, encoded: &[u8])
+                            -> IoResult<(CacheResult<()>, Option<IoResult<FileStat>>)> {
+        let c = try!(self.prepare("
+            SELECT id, mtime FROM directories WHERE path = ?;
+        "));
+        c.bind_param(1, &sqlite3::Blob(encoded.to_owned()));
+        if try!(step_cursor(&self.db, &c)) {
+            // check if the directory has the same mtime
+            let dirid = c.get_i64(0);
+            let dirmtime = c.get_i64(1);
+            match path.stat() {
+                Ok(st) if st.kind == io::TypeDirectory && st.modified as i64 == dirmtime =>
+                    Ok((CacheValid(dirid, ()), Some(Ok(st)))),
+
+                // DO NOT skip the error, this may indicate the required eviction
+                st => Ok((CacheInvalid(dirid), Some(st))),
+            }
+        } else {
+            Ok((NotCached, None))
+        }
+    }
+
     /// Retrieves a list of directories and non-directories in the directory if any.
-    pub fn get_entries(&self, path: &Path) -> IoResult<(Vec<Path>, Vec<Path>)> {
+    pub fn get_entries(&self, path: &Path) -> IoResult<(Vec<Path>, Vec<(Path, Option<MD5Hash>)>)> {
         debug!("get_entries: path = {}", path.display());
 
         let encoded = encode_path(&self.root, path);
@@ -232,50 +279,25 @@ impl MetadataCache {
 
         let tr = try!(Transaction::new(&self.db));
 
-        #[deriving(Show)]
-        enum CacheResult {
-            CacheValid(i64 /* dirid */),
-            CacheInvalid(i64 /* dirid */),
-            NotCached,
-        }
-
-        let c = try!(self.prepare("
-            SELECT id, mtime FROM directories WHERE path = ?;
-        "));
-        c.bind_param(1, &sqlite3::Blob(encoded.clone()));
-        let mut res = NotCached;
-        let mut dirstat = None;
-        if try!(step_cursor(&self.db, &c)) {
-            // check if the directory has the same mtime
-            let dirid = c.get_i64(0);
-            let dirmtime = c.get_i64(1);
-            let st = path.stat(); // DO NOT skip the error, this may indicate the required eviction
-            match st {
-                Ok(ref st) if st.kind == io::TypeDirectory && st.modified as i64 == dirmtime => {
-                    res = CacheValid(dirid);
-                }
-                _ => {
-                    res = CacheInvalid(dirid);
-                }
-            };
-            dirstat = Some(st);
-        }
-        drop(c);
-
+        let (res, dirstat) = try!(self.check_cached_entries(path, encoded.as_slice()));
         debug!("get_entries: cache result = {}", res);
 
         match res {
-            CacheValid(dirid) => {
+            CacheValid(dirid, ()) => {
                 // retrieve entries from the cache
                 let c = try!(self.prepare("
-                    SELECT name, size FROM files WHERE dir = ?;
+                    SELECT name, size, hash FROM files WHERE dir = ?;
                 "));
                 c.bind_param(1, &sqlite3::Integer64(dirid));
                 while try!(step_cursor(&self.db, &c)) {
                     let name = c.get_blob(0);
                     let size = c.get_i64(1);
+                    let hash = match c.get_column_type(2) {
+                        sqlite3::SQLITE_NULL => None,
+                        _ => md5_hash_from_slice(c.get_blob(2).as_slice()),
+                    };
                     if size >= 0 {
-                        files.push(path.join(name));
+                        files.push((path.join(name), hash));
                     } else if size == SIZE_FOR_DIRECTORY {
                         dirs.push(path.join(name));
                     }
@@ -336,7 +358,7 @@ impl MetadataCache {
                             c.bind_param(4, &sqlite3::Integer64(st.modified as i64));
                             try!(step_cursor(&self.db, &c));
                             match st.kind {
-                                io::TypeFile => files.push(path),
+                                io::TypeFile => files.push((path, None)),
                                 io::TypeDirectory => dirs.push(path),
                                 _ => {}
                             }
@@ -367,9 +389,92 @@ impl MetadataCache {
         debug!("get_entries: dirs = {}",
                dirs.iter().map(|p| p.display().to_string()).collect::<Vec<String>>());
         debug!("get_entries: files = {}",
-               files.iter().map(|p| p.display().to_string()).collect::<Vec<String>>());
+               files.iter().map(|&(ref p,h)| (p.display(),h).to_string()).collect::<Vec<String>>());
 
         Ok((dirs, files))
+    }
+
+    /// Checks the status of a cached hash value of given file.
+    /// `encoded_dir` should have been encoded with `encode_path`.
+    /// It may also return the current `stat` result, in order to avoid duplicate calls to `stat`.
+    /// The caller is free to call this method during a transaction.
+    fn check_cached_hash(&self, path: &Path, encoded_dir: &[u8], name: &[u8])
+                            -> IoResult<(CacheResult<MD5Hash>, Option<IoResult<FileStat>>)> {
+        let c = try!(self.prepare("
+            SELECT f.id, f.size, f.mtime, f.hash
+            FROM directories d INNER JOIN files f ON d.id = f.dir
+            WHERE d.path = ? AND f.name = ?;
+        "));
+        c.bind_param(1, &sqlite3::Blob(encoded_dir.to_owned()));
+        c.bind_param(2, &sqlite3::Blob(name.to_owned()));
+        if try!(step_cursor(&self.db, &c)) {
+            // check if the file has the same mtime and size
+            let fileid = c.get_i64(0);
+            let filesize = c.get_i64(1);
+            let filemtime = c.get_i64(2);
+            let filehash = match c.get_column_type(3) {
+                sqlite3::SQLITE_NULL => None,
+                _ => md5_hash_from_slice(c.get_blob(3).as_slice()),
+            };
+
+            match filehash {
+                None => Ok((CacheInvalid(fileid), None)),
+                Some(filehash) => match path.stat() {
+                    Ok(st) if st.size as i64 == filesize && st.modified as i64 == filemtime =>
+                        Ok((CacheValid(fileid, filehash), Some(Ok(st)))),
+                    st => Ok((CacheInvalid(fileid), Some(st))),
+                }
+            }
+        } else {
+            Ok((NotCached, None))
+        }
+    }
+
+    /// Retrieves a hash value of given file if any.
+    /// It can also return a reference to the open file (rewound to the beginning) if possible.
+    pub fn get_hash(&self, path: &Path) -> IoResult<(MD5Hash, Option<File>)> {
+        debug!("get_hash: path = {}", path.display());
+
+        let encoded = encode_path(&self.root, &path.dir_path());
+        let filename = path.filename().unwrap_or("".as_bytes());
+
+        let tr = try!(Transaction::new(&self.db));
+
+        let (res, filestat) = try!(self.check_cached_hash(path, encoded.as_slice(), filename));
+        debug!("get_hash: cache result = {}", res);
+
+        match res {
+            CacheValid(_fileid, filehash) => Ok((filehash, None)),
+
+            CacheInvalid(..) | NotCached => {
+                let filestat: IoResult<FileStat> = filestat.unwrap_or_else(|| path.stat());
+                debug!("get_hash: filestat.size = {}, filestat.modified = {}",
+                       filestat.as_ref().ok().map(|st| st.size),
+                       filestat.as_ref().ok().map(|st| st.modified));
+
+                let mut f = try!(File::open(path));
+                let hash = try!(MD5::from_reader(&mut f)).final();
+
+                match res {
+                    CacheInvalid(fileid) => {
+                        let c = try!(self.prepare("
+                            UPDATE files SET hash = ? WHERE id = ?;
+                        "));
+                        c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_owned()));
+                        c.bind_param(2, &sqlite3::Integer64(fileid));
+                        try!(step_cursor(&self.db, &c));
+                        drop(c);
+                    }
+                    _ => {}
+                }
+
+                tr.commit();
+                try!(filestat); // if stat failed we should return an IoError.
+
+                try!(f.seek(0, SeekSet));
+                Ok((hash, Some(f)))
+            }
+        }
     }
 }
 

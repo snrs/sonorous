@@ -43,6 +43,8 @@
 
 use std::slice::bytes;
 use std::slice::bytes::MutableByteVector;
+use std::io::{IoResult, EndOfFile};
+use std::fmt;
 
 /// A fast integer type which is at least 32 bits long.
 #[allow(non_camel_case_types)] pub type u32plus = u32;
@@ -259,6 +261,27 @@ pub struct MD5 {
     buffer: [u8, ..64],
 }
 
+/// The calculated 128-bit MD5 hash.
+pub struct MD5Hash(pub [u8, ..16]);
+
+impl Vector<u8> for MD5Hash {
+    fn as_slice<'a>(&'a self) -> &'a [u8] {
+        let MD5Hash(ref hash) = *self;
+        hash.as_slice()
+    }
+}
+
+impl fmt::Show for MD5Hash {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        static HEXDIGITS: &'static [u8] = b"0123456789abcdef";
+        for &c in self.as_slice().iter() {
+            try!((HEXDIGITS[(c >> 4) as uint] as char).fmt(f));
+            try!((HEXDIGITS[(c & 15) as uint] as char).fmt(f));
+        }
+        Ok(())
+    }
+}
+
 impl MD5 {
     /// Creates a new MD5 state.
     pub fn new() -> MD5 {
@@ -271,6 +294,24 @@ impl MD5 {
         let mut md5 = MD5::new();
         md5.update(buf);
         md5
+    }
+
+    /// Creates a new MD5 state and immediately updates it with given reader.
+    pub fn from_reader(rdr: &mut Reader) -> IoResult<MD5> {
+        let mut md5 = MD5::new();
+
+        static BUFSIZE: uint = 4096;
+        let mut buf = Vec::with_capacity(BUFSIZE);
+        loop {
+            let read = match rdr.push(BUFSIZE, &mut buf) {
+                Ok(read) => read,
+                Err(ref err) if err.kind == EndOfFile => break,
+                Err(err) => return Err(err),
+            };
+            md5.update(buf.slice_to(read));
+            buf.clear();
+        }
+        Ok(md5)
     }
 
     /// Feeds the state with a stream of bytes.
@@ -306,7 +347,7 @@ impl MD5 {
     }
 
     /// Returns a finished 16-byte digest.
-    pub fn final(self) -> [u8, ..16] {
+    pub fn final(self) -> MD5Hash {
         let mut ctx = self;
 
         let mut used = (ctx.lo & 0x3f) as uint;
@@ -334,22 +375,22 @@ impl MD5 {
 
         ctx.state.body(ctx.buffer);
 
-        [ctx.state.a as u8,
-         (ctx.state.a >> 8) as u8,
-         (ctx.state.a >> 16) as u8,
-         (ctx.state.a >> 24) as u8,
-         ctx.state.b as u8,
-         (ctx.state.b >> 8) as u8,
-         (ctx.state.b >> 16) as u8,
-         (ctx.state.b >> 24) as u8,
-         ctx.state.c as u8,
-         (ctx.state.c >> 8) as u8,
-         (ctx.state.c >> 16) as u8,
-         (ctx.state.c >> 24) as u8,
-         ctx.state.d as u8,
-         (ctx.state.d >> 8) as u8,
-         (ctx.state.d >> 16) as u8,
-         (ctx.state.d >> 24) as u8]
+        MD5Hash([ctx.state.a as u8,
+                 (ctx.state.a >> 8) as u8,
+                 (ctx.state.a >> 16) as u8,
+                 (ctx.state.a >> 24) as u8,
+                 ctx.state.b as u8,
+                 (ctx.state.b >> 8) as u8,
+                 (ctx.state.b >> 16) as u8,
+                 (ctx.state.b >> 24) as u8,
+                 ctx.state.c as u8,
+                 (ctx.state.c >> 8) as u8,
+                 (ctx.state.c >> 16) as u8,
+                 (ctx.state.c >> 24) as u8,
+                 ctx.state.d as u8,
+                 (ctx.state.d >> 8) as u8,
+                 (ctx.state.d >> 16) as u8,
+                 (ctx.state.d >> 24) as u8])
     }
 }
 
@@ -366,39 +407,19 @@ impl Drop for MD5 {
     }
 }
 
-/// A trait for `to_hex` method.
-pub trait ToHex {
-    /// Converts itself to the hexadecimal representation, e.g. `48656c6c6f`.
-    /// Mostly useful for hash digests.
-    fn to_hex(&self) -> String;
-}
-
-impl<'r> ToHex for &'r [u8] {
-    fn to_hex(&self) -> String {
-        // XXX not quite fast.
-        let mut ret = String::new();
-        static HEXDIGITS: &'static [u8] = b"0123456789abcdef";
-        for &c in self.iter() {
-            ret.push_char(HEXDIGITS[(c >> 4) as uint] as char);
-            ret.push_char(HEXDIGITS[(c & 15) as uint] as char);
-        }
-        ret.into_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     extern crate test;
     use super::{MD5, ToHex};
 
     #[test]
-    fn test_to_hex() {
-        assert_eq!([].to_hex().as_slice(), "");
-        assert_eq!([0x00].to_hex().as_slice(), "00");
-        assert_eq!([0x0f].to_hex().as_slice(), "0f");
-        assert_eq!([0xf0].to_hex().as_slice(), "f0");
-        assert_eq!([0xff].to_hex().as_slice(), "ff");
-        assert_eq!([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef].to_hex().as_slice(),
+    fn test_to_string() {
+        assert_eq!([].to_string().as_slice(), "");
+        assert_eq!([0x00].to_string().as_slice(), "00");
+        assert_eq!([0x0f].to_string().as_slice(), "0f");
+        assert_eq!([0xf0].to_string().as_slice(), "f0");
+        assert_eq!([0xff].to_string().as_slice(), "ff");
+        assert_eq!([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef].to_string().as_slice(),
                    "0123456789abcdef");
     }
 
@@ -407,7 +428,7 @@ mod tests {
         fn md5(s: &str) -> String {
             let mut md5 = MD5::new();
             md5.update(s.as_bytes());
-            md5.final().to_hex()
+            md5.final().to_string()
         }
 
         assert_eq!(md5("").as_slice(), "d41d8cd98f00b204e9800998ecf8427e");

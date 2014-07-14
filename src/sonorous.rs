@@ -27,7 +27,6 @@
 #[phase(plugin, link)] extern crate log;
 extern crate libc;
 extern crate serialize;
-extern crate sync;
 extern crate native;
 
 extern crate sdl;
