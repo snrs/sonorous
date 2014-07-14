@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use std::comm::{Sender, Receiver};
 use std::rand::{task_rng, Rng};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RWLock};
+use std::sync::{Arc, Mutex, RWLock, TaskPool};
 
 use sdl::{event, get_ticks};
 use format::timeline::TimelineInfo;
@@ -156,6 +156,9 @@ pub struct SelectingScene {
     pub offset: uint,
     /// Preloaded game data or preloading state if any.
     pub preloaded: PreloadingState,
+
+    /// A task pool for various purposes.
+    pool: TaskPool<()>,
     /// A receiver for receiving worker messages.
     receiver: Receiver<Message>,
     /// A shared sender to which workers send messages.
@@ -215,12 +218,14 @@ impl SelectingScene {
         };
         let root = os::make_absolute(root);
         let (sender, receiver) = comm::channel();
+        let pool = TaskPool::new(os::num_cpus(), || proc(_) ());
         box SelectingScene {
             screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)),
             cache: Arc::new(Mutex::new(cache)),
-            root: root, files: Vec::new(), fileindices: HashMap::new(), filesdone: false,
-            scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
-            receiver: receiver, sender: sender, keepgoing: Arc::new(RWLock::new(true)),
+            root: root, files: Vec::new(), fileindices: HashMap::new(),
+            filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
+            pool: pool, receiver: receiver, sender: sender,
+            keepgoing: Arc::new(RWLock::new(true)),
         }
     }
 
@@ -261,33 +266,13 @@ impl SelectingScene {
         });
     }
 
-    /// Clears the current scanned files and restarts the scanning task.
-    pub fn refresh(&mut self) {
-        // terminates prior tasks
-        assert!(*self.keepgoing.read());
-        *self.keepgoing.write() = false;
-        self.keepgoing = Arc::new(RWLock::new(true));
-        let (sender, receiver) = comm::channel();
-        self.receiver = receiver;
-        self.sender = sender;
-
-        self.files.clear();
-        self.filesdone = false;
-        self.scrolloffset = 0;
-        self.offset = 0;
-        self.preloaded = NothingToPreload;
-        self.spawn_scanning_task();
-    }
-
-    /// Spawns a new preloading task.
-    pub fn spawn_preloading_task(&self, path: &Path) {
+    /// Makes a new preloading task. This can run on a separate task or a task pool.
+    fn make_preloading_task(&self, path: &Path) -> proc(): Send {
         let bmspath = path.clone();
-        let bmspath_ = path.clone();
         let opts = self.opts.deref().clone();
         let sender = self.sender.clone();
-        let sender_ = self.sender.clone();
         let cache = self.cache.clone();
-        spawn_worker_task("preloader", proc() {
+        proc() {
             let opts = Rc::new(opts);
 
             let load_banner = |bannerpath: String, basepath: Option<Path>| {
@@ -346,10 +331,35 @@ impl SelectingScene {
                 Ok(f) => load_with_reader(f),
                 Err(err) => sender.send(BmsFailed(bmspath.clone(), err.to_string())),
             }
-        }, proc() {
+        }
+    }
+
+    /// Spawns a new preloading task.
+    pub fn spawn_preloading_task(&self, path: &Path) {
+        let bmspath = path.clone();
+        let sender = self.sender.clone();
+        spawn_worker_task("preloader", self.make_preloading_task(path), proc() {
             // the task failed to send the error message, so the wrapper sends it instead
-            sender_.send(BmsFailed(bmspath_, format!("unexpected error")));
+            sender.send(BmsFailed(bmspath, format!("unexpected error")));
         });
+    }
+
+    /// Clears the current scanned files and restarts the scanning task.
+    pub fn refresh(&mut self) {
+        // terminates prior tasks
+        assert!(*self.keepgoing.read());
+        *self.keepgoing.write() = false;
+        self.keepgoing = Arc::new(RWLock::new(true));
+        let (sender, receiver) = comm::channel();
+        self.receiver = receiver;
+        self.sender = sender;
+
+        self.files.clear();
+        self.filesdone = false;
+        self.scrolloffset = 0;
+        self.offset = 0;
+        self.preloaded = NothingToPreload;
+        self.spawn_scanning_task();
     }
 
     /// Returns a `Path` to the currently selected entry if any.
@@ -505,8 +515,11 @@ impl Scene for SelectingScene {
                         self.preloaded = PreloadAfter(0);
                     }
                     for (path, hash) in paths.move_iter() {
-                        self.fileindices.insert(path.clone(), self.files.len());
+                        let index = self.files.len();
+                        self.fileindices.insert(path.clone(), index);
+                        let job = self.make_preloading_task(&path);
                         self.files.push(Entry { path: path, hash: hash, meta: None });
+                        if hash.is_none() { self.pool.execute(proc(_) job()); }
                     }
                 }
                 Ok(NoMoreFiles) => {
