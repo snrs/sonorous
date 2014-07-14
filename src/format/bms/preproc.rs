@@ -187,7 +187,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
 
 #[cfg(test)]
 mod tests {
-    use rand::task_rng;
+    use std::rand::task_rng;
     use super::Preprocessor;
 
     macro_rules! with_pp(
@@ -203,9 +203,9 @@ mod tests {
         with_pp!(|pp| {
             let mut messages = Vec::new();
             let mut out = Vec::new();
-            pp.feed_other(42, &mut messages, &mut out);
+            pp.feed_other(42u, &mut messages, &mut out);
             assert!(messages.as_slice() == []);
-            assert!(out.as_slice() == [42]);
+            assert!(out.as_slice() == [42u]);
             messages.clear();
             out.clear();
             pp.finish(&mut messages, &mut out);

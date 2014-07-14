@@ -410,17 +410,13 @@ impl Drop for MD5 {
 #[cfg(test)]
 mod tests {
     extern crate test;
-    use super::{MD5, ToHex};
+    use super::{MD5, MD5Hash};
 
     #[test]
-    fn test_to_string() {
-        assert_eq!([].to_string().as_slice(), "");
-        assert_eq!([0x00].to_string().as_slice(), "00");
-        assert_eq!([0x0f].to_string().as_slice(), "0f");
-        assert_eq!([0xf0].to_string().as_slice(), "f0");
-        assert_eq!([0xff].to_string().as_slice(), "ff");
-        assert_eq!([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef].to_string().as_slice(),
-                   "0123456789abcdef");
+    fn test_md5_hash_to_string() {
+        assert_eq!(MD5Hash([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+                            0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10]).to_string().as_slice(),
+                   "0123456789abcdeffedcba9876543210");
     }
 
     #[test]
