@@ -12,7 +12,8 @@ use encoding::EncodingRef;
 use util::lex::FromStrPrefix;
 use format::obj::{BPM, Duration, Seconds, Measures, ImageSlice};
 use format::bms::types::{Key, PartialKey};
-use format::bms::diag::*;
+use format::bms::diag;
+use format::bms::diag::BmsMessage;
 use format::bms::preproc::{BmsFlowCommand, Preprocessor};
 pub use format::bms::preproc::{BmsRandom, BmsSetRandom, BmsEndRandom};
 pub use format::bms::preproc::{BmsIf, BmsElseIf, BmsElse, BmsEndIf};
@@ -412,7 +413,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 ($e:expr) => ({
                     let key: PartialKey = $e;
                     if key.is_partial() {
-                        diag!(BmsHasOneDigitAlphanumericKey);
+                        diag!(diag::BmsHasOneDigitAlphanumericKey);
                     }
                     key.into_key()
                 })
@@ -423,7 +424,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             if line.is_empty() { continue; }
             let (ch, line) = line.slice_shift_char();
             if ch == Some('\uff03') {
-                diag!(BmsHasFullWidthSharp);
+                diag!(diag::BmsHasFullWidthSharp);
             } else if ch != Some('#') {
                 continue;
             }
@@ -549,7 +550,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             if_prefix!("SUBTITLE"  string -> BmsSubtitle)
             if_prefix!("GENRE"     string -> BmsGenre)
             if self.opts.autofix_commands {
-                if_prefix!("GENLE" string -> BmsGenre; BmsHasGENLE)
+                if_prefix!("GENLE" string -> BmsGenre; diag::BmsHasGENLE)
             }
             if_prefix!("ARTIST"    string -> BmsArtist)
             if_prefix!("SUBARTIST" string -> BmsSubartist)
@@ -573,7 +574,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             if_prefix!("EXBPM" |key, line| { // #EXBPMxx <float>
                 let mut bpm = 0.0;
                 if lex!(line; f64 -> bpm) {
-                    diag!(BmsHasEXBPM);
+                    diag!(diag::BmsHasEXBPM);
                     emit!(BmsExBPM(key, BPM(bpm)));
                 }
             })
@@ -775,7 +776,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             })
 
             if_prefix!("TEXT"         key string -> BmsText)
-            if_prefix!("SONG"         key string -> BmsText; BmsHasSONG)
+            if_prefix!("SONG"         key string -> BmsText; diag::BmsHasSONG)
             if_prefix!("OPTION"           string -> BmsOption)
             if_prefix!("CHANGEOPTION" key string -> BmsChangeOption)
 
@@ -790,15 +791,15 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             if_prefix!("DEF"             -> BmsFlow(BmsDef))
 
             if_prefix!("RANDOM" (ws) value -> makeBmsFlow!(BmsRandom);
-                                              BmsHasRANDOMWithoutWhitespace)
+                                              diag::BmsHasRANDOMWithoutWhitespace)
             if self.opts.autofix_commands {
-                if_prefix!("RONDAM"  value -> makeBmsFlow!(BmsRandom); BmsHasRONDAM)
+                if_prefix!("RONDAM"  value -> makeBmsFlow!(BmsRandom); diag::BmsHasRONDAM)
             }
             if_prefix!("SETRANDOM"   value -> makeBmsFlow!(BmsSetRandom))
             if_prefix!("ENDRANDOM"         -> BmsFlow(BmsEndRandom))
             if self.opts.autofix_commands {
-                if_prefix!("IFEND"         -> BmsFlow(BmsEndIf); BmsHasIFEND)
-                if_prefix!("IF" (ws) value -> makeBmsFlow!(BmsIf); BmsHasIFWithoutWhitespace)
+                if_prefix!("IFEND"         -> BmsFlow(BmsEndIf); diag::BmsHasIFEND)
+                if_prefix!("IF" (ws) value -> makeBmsFlow!(BmsIf); diag::BmsHasIFWithoutWhitespace)
             } else {
                 if_prefix!("IF"      value -> makeBmsFlow!(BmsIf))
             }
@@ -806,7 +807,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             if_prefix!("ELSE"              -> BmsFlow(BmsElse))
             if_prefix!("ENDIF"             -> BmsFlow(BmsEndIf))
             if self.opts.autofix_commands {
-                if_prefix!("END"           -> BmsFlow(BmsEndIf); BmsHasENDNotFollowedByIF)
+                if_prefix!("END"           -> BmsFlow(BmsEndIf); diag::BmsHasENDNotFollowedByIF)
             }
 
             let mut measure = Measure(0);

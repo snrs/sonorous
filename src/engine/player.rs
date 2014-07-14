@@ -11,17 +11,22 @@ use libc;
 
 use sdl::{get_ticks, event};
 use sdl_mixer;
-use format::obj::*;
+use format::obj::{NLANES, NLAYERS, Lane, BPM, Damage, GaugeDamage, InstantDeath};
+use format::obj::{BGARef, BlankBGA, ImageBGA};
+use format::obj::{ObjQueryOps, Visible, LNStart, LNDone, Bomb, BGM, SetBGA, SetBPM};
+use format::obj::{VirtualPos, VirtualTime, ActualPos, ActualTime};
 use format::timeline::TimelineInfo;
-use format::pointer::*;
-use format::bms::*;
-use engine::keyspec::*;
+use format::pointer::TimelinePointerUtil;
+use format::bms::{Key, ImageRef, SoundRef};
+use format::bms::{BmsTimeline, BmsPointer, BmsMeta, Bms};
+use engine::keyspec::KeySpec;
 use engine::input::{Input, KeyInput, JoyAxisInput, JoyButtonInput, QuitInput};
 use engine::input::{LaneInput, SpeedUpInput, SpeedDownInput};
 use engine::input::{InputState, Positive, Neutral, Negative};
 use engine::input::{KeyMap};
 use engine::resource::SoundResource;
-use ui::options::*;
+use ui::options::Options;
+use ui::options::{Modf, MirrorModf, RandomModf, RandomExModf, ShuffleModf, ShuffleExModf};
 
 /// Applies given modifier to given group of lanes in the game data. `begin` and `end` should be
 /// a valid range from 0 to `keyspec.order.len()`, where `end` is exclusive.

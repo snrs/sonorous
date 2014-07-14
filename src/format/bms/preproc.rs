@@ -7,7 +7,8 @@
 use std::fmt;
 use std::rand::Rng;
 
-use format::bms::diag::*;
+use format::bms::diag;
+use format::bms::diag::BmsMessage;
 
 /// Represents one line of BMS command that may affect the control flow.
 #[deriving(PartialEq,Clone)]
@@ -173,7 +174,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
                 self.blocks.mut_last().unwrap().state = Outside;
             }
             BmsSwitch(..) | BmsSetSwitch(..) | BmsEndSw | BmsCase(..) | BmsSkip | BmsDef => {
-                messages.push(BmsHasUnimplementedFlow);
+                messages.push(diag::BmsHasUnimplementedFlow);
             }
         }
     }

@@ -35,7 +35,7 @@ pub struct GLState {
 impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
     pub fn new() -> Result<GLState,String> {
-        use ext::win32::ll::*;
+        use win32 = ext::win32::ll;
 
         macro_rules! return_on_err(
             ($e:expr) => {
@@ -49,14 +49,14 @@ impl GLState {
         // we need to preload this before initializing EGL
         unsafe {
             let dllname = "d3dcompiler_43.dll".to_c_str();
-            LoadLibraryA(dllname.as_ptr());
+            win32::LoadLibraryA(dllname.as_ptr());
         }
 
         let hwnd = match syswm::get_wm_info() {
             Some(wminfo) => wminfo.window,
             None => { return Err(format!("SDL_GetWMInfo failed")); }
         };
-        let hdc = unsafe { GetDC(hwnd) };
+        let hdc = unsafe { win32::GetDC(hwnd) };
         let display = return_on_err!(egl::get_display(hdc));
         return_on_err!(egl::initialize(display));
 

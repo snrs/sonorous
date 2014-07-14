@@ -5,7 +5,7 @@
 //! Timeline interface.
 
 use std::{fmt, io};
-use format::obj::*;
+use format::obj::{Obj, ObjLoc, ObjQueryOps, BPM, Visible, LNStart, BGM, SetBPM};
 
 /// A portion of game data which is not associated to resources and other metadata. Timelines are
 /// immutable by design (except for `modf` module), and should be built by `TimelineBuilder`
@@ -107,7 +107,11 @@ impl<S:fmt::Show,I:fmt::Show> Timeline<S,I> {
 /// A timeline builder.
 pub mod builder {
     use std::{f64, cmp};
-    use format::obj::*;
+    use format::obj::{Lane, NLANES, Obj, ObjLoc, BPM};
+    use format::obj::{Layer1, Layer2, Layer3, PoorBGA};
+    use format::obj::{ObjData, Deleted, Visible, Invisible, LNStart, LNDone, Bomb};
+    use format::obj::{BGM, SetBGA, SetBPM, Stop, StopEnd, SetMeasureFactor, End, MeasureBar};
+    use format::obj::{ObjQueryOps, ObjConvOps};
     use super::Timeline;
 
     /// An object data with virtual position. Easier than a tuple to deal with.
@@ -411,7 +415,7 @@ pub mod builder {
 pub mod modf {
     use std::f64;
     use std::rand::Rng;
-    use format::obj::*;
+    use format::obj::{Lane, NLANES, Obj, ObjQueryOps, ObjConvOps};
     use super::Timeline;
 
     /// Removes objects not in given lanes by replacing them to BGMs.

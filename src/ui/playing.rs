@@ -8,14 +8,17 @@ use std::{cmp, num, iter};
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use format::obj::*;
+use format::obj::{Lane, Visible, LNStart, LNDone, Bomb, MeasureBar};
+use format::obj::{BGALayer, Layer1, Layer2, Layer3, PoorBGA};
+use format::obj::{ObjLoc, ActualPos, ObjQueryOps};
 use gfx::color::{Color, Gradient, RGB, RGBA, Blend};
 use gfx::surface::{Surface, SurfaceAreaUtil, SurfacePixelsUtil};
 use gfx::gl::{Texture2D, PreparedSurface};
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
 use gfx::bmfont::{FontDrawingUtils, LeftAligned, Centered};
 use gfx::screen::Screen;
-use engine::keyspec::*;
+use engine::keyspec;
+use engine::keyspec::{KeyKind, KeySpec};
 use engine::resource::{BGAW, BGAH};
 use engine::resource::ImageResource;
 use engine::player::{MISS, MAXGAUGE, Player};
@@ -42,16 +45,16 @@ impl LaneStyle {
     /// Constructs a new `LaneStyle` object from given key kind and the left or right position.
     pub fn from_kind(kind: KeyKind, pos: uint, right: bool) -> LaneStyle {
         let (spriteleft, spritebombleft, width, color) = match kind {
-            WhiteKey    => ( 25,   0, 25, RGB(0x80,0x80,0x80)),
-            WhiteKeyAlt => ( 50,   0, 25, RGB(0xf0,0xe0,0x80)),
-            BlackKey    => ( 75,   0, 25, RGB(0x80,0x80,0xff)),
-            Button1     => (130, 100, 30, RGB(0xe0,0xe0,0xe0)),
-            Button2     => (160, 100, 30, RGB(0xff,0xff,0x40)),
-            Button3     => (190, 100, 30, RGB(0x80,0xff,0x80)),
-            Button4     => (220, 100, 30, RGB(0x80,0x80,0xff)),
-            Button5     => (250, 100, 30, RGB(0xff,0x40,0x40)),
-            Scratch     => (320, 280, 40, RGB(0xff,0x80,0x80)),
-            FootPedal   => (360, 280, 40, RGB(0x80,0xff,0x80)),
+            keyspec::WhiteKey    => ( 25,   0, 25, RGB(0x80,0x80,0x80)),
+            keyspec::WhiteKeyAlt => ( 50,   0, 25, RGB(0xf0,0xe0,0x80)),
+            keyspec::BlackKey    => ( 75,   0, 25, RGB(0x80,0x80,0xff)),
+            keyspec::Button1     => (130, 100, 30, RGB(0xe0,0xe0,0xe0)),
+            keyspec::Button2     => (160, 100, 30, RGB(0xff,0xff,0x40)),
+            keyspec::Button3     => (190, 100, 30, RGB(0x80,0xff,0x80)),
+            keyspec::Button4     => (220, 100, 30, RGB(0x80,0x80,0xff)),
+            keyspec::Button5     => (250, 100, 30, RGB(0xff,0x40,0x40)),
+            keyspec::Scratch     => (320, 280, 40, RGB(0xff,0x80,0x80)),
+            keyspec::FootPedal   => (360, 280, 40, RGB(0x80,0xff,0x80)),
         };
         let left = if right {pos - width} else {pos};
         LaneStyle { left: left, spriteleft: spriteleft, spritebombleft: spritebombleft,

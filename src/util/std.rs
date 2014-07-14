@@ -10,8 +10,6 @@
 
 /// String utilities for Rust. Parallels to `std::str`.
 pub mod str {
-    use std::str::*;
-
     /// Extensions to `str`.
     pub trait StrUtil<'r> {
         /// Returns a slice of the given string starting from `begin` and up to the byte

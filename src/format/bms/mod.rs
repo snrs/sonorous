@@ -33,7 +33,7 @@
 
 use std::fmt;
 
-use format::obj::*;
+use format::obj::BPM;
 use format::metadata::Meta;
 use format::timeline::Timeline;
 use format::pointer::Pointer;

@@ -19,7 +19,7 @@
 #![crate_type = "bin"]
 
 #![no_start]
-#![feature(macro_rules, phase, struct_variant, globs, link_args, unsafe_destructor)]
+#![feature(macro_rules, phase, struct_variant, link_args, unsafe_destructor)]
 
 #![comment = "Sonorous"]
 #![license = "GPLv2+"]
@@ -334,17 +334,18 @@ pub fn subprogram(_args: &[String]) -> ! {
 
 /// The entry point. Parses the command line options and delegates other things to `play`.
 pub fn main() {
-    use ui::options::*;
+    use ui::options;
+
     let args = std::os::args();
     let args = args.slice(1, args.len());
     if !args.is_empty() && "--subprogram".equiv(&args[0]) {
         subprogram(args.slice(1, args.len()));
     }
-    match parse_opts(args, ui::common::get_path_from_dialog) {
-        ShowVersion => { println!("{}", version()); }
-        ShowUsage => { usage(); }
-        PathAndOptions(bmspath, opts) => { play(&bmspath, opts); }
-        Error(err) => { die!("{}", err); }
+    match options::parse_opts(args, ui::common::get_path_from_dialog) {
+        options::ShowVersion => { println!("{}", version()); }
+        options::ShowUsage => { usage(); }
+        options::PathAndOptions(bmspath, opts) => { play(&bmspath, opts); }
+        options::Error(err) => { die!("{}", err); }
     }
 }
 

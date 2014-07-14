@@ -7,11 +7,15 @@
 use std::{iter, cmp};
 use std::rand::Rng;
 
-use format::obj::*;
+use format::obj::{NLANES, Lane, BPM, Seconds, GaugeDamage, InstantDeath};
+use format::obj::{BGARef, ImageBGA, SlicedImageBGA, Layer1, Layer2, Layer3, PoorBGA};
+use format::obj::{ObjQueryOps, ObjConvOps};
+use format::obj::{Visible, Invisible, LNStart, LNDone, Bomb};
+use format::obj::{BGM, SetBGA, SetBPM, Stop, SetMeasureFactor, MeasureBar};
 use format::metadata::{Level, LevelSystemBms, Difficulty, Meta};
-use format::bms::parse;
+use format::bms::{parse, diag};
 use format::bms::types::{Key, MAXKEY};
-use format::bms::diag::*;
+use format::bms::diag::BmsMessage;
 use format::bms::{ImageRef, SoundRef, DefaultBPM, BmsMeta, Bms};
 use format::bms::{SinglePlay, CouplePlay, DoublePlay, BattlePlay};
 
@@ -108,7 +112,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             parse::Encoding(encname, confidence) => {
                 encoding = (encname, confidence);
                 if confidence <= 1.0 && !("ascii".equiv(&encname) || "utf-8".equiv(&encname)) {
-                    diag!(BmsUsesLegacyEncoding);
+                    diag!(diag::BmsUsesLegacyEncoding);
                 }
                 continue;
             }
@@ -117,8 +121,8 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
         match cmd {
             parse::BmsTitle(s) => {
                 let s = s.into_string();
-                if s.is_empty() { diag!(BmsHasEmptyTITLE at lineno); }
-                if title.is_some() { diag!(BmsHasMultipleTITLEs at lineno); }
+                if s.is_empty() { diag!(diag::BmsHasEmptyTITLE at lineno); }
+                if title.is_some() { diag!(diag::BmsHasMultipleTITLEs at lineno); }
                 title = Some(s);
             }
             parse::BmsSubtitle(s) => {
@@ -126,14 +130,14 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             }
             parse::BmsGenre(s) => {
                 let s = s.into_string();
-                if s.is_empty() { diag!(BmsHasEmptyGENRE at lineno); }
-                if genre.is_some() { diag!(BmsHasMultipleGENREs at lineno); }
+                if s.is_empty() { diag!(diag::BmsHasEmptyGENRE at lineno); }
+                if genre.is_some() { diag!(diag::BmsHasMultipleGENREs at lineno); }
                 genre = Some(s);
             }
             parse::BmsArtist(s) => {
                 let s = s.into_string();
-                if s.is_empty() { diag!(BmsHasEmptyARTIST at lineno); }
-                if artist.is_some() { diag!(BmsHasMultipleARTISTs at lineno); }
+                if s.is_empty() { diag!(diag::BmsHasEmptyARTIST at lineno); }
+                if artist.is_some() { diag!(diag::BmsHasMultipleARTISTs at lineno); }
                 artist = Some(s);
             }
             parse::BmsSubartist(s) => {
@@ -156,32 +160,32 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
             parse::BmsBPM(bpm) => {
                 if *bpm < 0.0 {
-                    diag!(BmsHasNegativeInitBPM at lineno);
+                    diag!(diag::BmsHasNegativeInitBPM at lineno);
                 } else if *bpm == 0.0 {
-                    diag!(BmsHasZeroInitBPM at lineno);
+                    diag!(diag::BmsHasZeroInitBPM at lineno);
                 } else {
                     builder.set_initbpm(bpm);
                 }
             }
             parse::BmsExBPM(Key(i), bpm) => {
                 if *bpm <= 0.0 {
-                    diag!(BmsHasNonpositiveBPM at lineno);
+                    diag!(diag::BmsHasNonpositiveBPM at lineno);
                 }
                 bpmtab.as_mut_slice()[i as uint] = bpm;
             }
 
             parse::BmsPlayer(1) => { mode = SinglePlay; }
-            parse::BmsPlayer(2) => { mode = CouplePlay; diag!(BmsUsesCouplePlay at lineno); }
+            parse::BmsPlayer(2) => { mode = CouplePlay; diag!(diag::BmsUsesCouplePlay at lineno); }
             parse::BmsPlayer(3) => { mode = DoublePlay; }
-            parse::BmsPlayer(4) => { mode = BattlePlay; diag!(BmsUsesBattlePlay at lineno); }
-            parse::BmsPlayer(_) => { diag!(BmsHasInvalidPLAYER at lineno); }
+            parse::BmsPlayer(4) => { mode = BattlePlay; diag!(diag::BmsUsesBattlePlay at lineno); }
+            parse::BmsPlayer(_) => { diag!(diag::BmsHasInvalidPLAYER at lineno); }
 
             parse::BmsPlayLevel(v) => {
-                if v < 0 { diag!(BmsHasNegativePLAYLEVEL at lineno); }
+                if v < 0 { diag!(diag::BmsHasNegativePLAYLEVEL at lineno); }
                 level = Some(Level { value: v, system: LevelSystemBms });
             }
             parse::BmsDifficulty(v) => {
-                if v < 1 || v > 5 { diag!(BmsHasDIFFICULTYOutOfRange at lineno); }
+                if v < 1 || v > 5 { diag!(diag::BmsHasDIFFICULTYOutOfRange at lineno); }
                 difficulty = Some(Difficulty(v));
             }
             parse::BmsRank(v) => {
@@ -189,13 +193,13 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             }
 
             parse::BmsLNType(1) => { consecutiveln = false; }
-            parse::BmsLNType(2) => { consecutiveln = true; diag!(BmsUsesLNTYPE2 at lineno); }
-            parse::BmsLNType(_) => { diag!(BmsHasInvalidLNTYPE at lineno); }
+            parse::BmsLNType(2) => { consecutiveln = true; diag!(diag::BmsUsesLNTYPE2 at lineno); }
+            parse::BmsLNType(_) => { diag!(diag::BmsHasInvalidLNTYPE at lineno); }
 
             parse::BmsLNObj(key) => {
-                if lnobj.is_some() { diag!(BmsHasMultipleLNOBJs at lineno); }
+                if lnobj.is_some() { diag!(diag::BmsHasMultipleLNOBJs at lineno); }
                 if key == Key(0) {
-                    diag!(BmsHasZeroLNOBJ at lineno);
+                    diag!(diag::BmsHasZeroLNOBJ at lineno);
                 } else {
                     lnobj = Some(key);
                 }
@@ -213,14 +217,14 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
             parse::BmsStop(Key(i), dur) => {
                 if dur.sign() < 0 {
-                    diag!(BmsHasNegativeSTOPDuration at lineno);
+                    diag!(diag::BmsHasNegativeSTOPDuration at lineno);
                 } else {
                     stoptab.as_mut_slice()[i as uint] = dur;
                 }
             }
             parse::BmsStp(pos, dur) => {
                 if dur.sign() < 0 {
-                    diag!(BmsHasNegativeSTPDuration at lineno);
+                    diag!(diag::BmsHasNegativeSTPDuration at lineno);
                 } else {
                     builder.add(pos, Stop(dur));
                 }
@@ -248,9 +252,9 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
         }
     }
 
-    if title.is_none() { diag!(BmsHasNoTITLE); }
-    if artist.is_none() { diag!(BmsHasNoARTIST); }
-    if genre.is_none() { diag!(BmsHasNoGENRE); }
+    if title.is_none() { diag!(diag::BmsHasNoTITLE); }
+    if artist.is_none() { diag!(diag::BmsHasNoARTIST); }
+    if genre.is_none() { diag!(diag::BmsHasNoGENRE); }
 
     // clip the image slices if needed.
     for slice in imgslices.mut_iter() {

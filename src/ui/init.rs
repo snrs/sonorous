@@ -4,7 +4,7 @@
 
 //! Initialization.
 
-use sdl::*;
+use sdl;
 use sdl_image;
 use sdl_mixer;
 use engine::resource::{BGAW, BGAH, SAMPLERATE};
@@ -19,8 +19,8 @@ pub static SCREENH: uint = 600;
 /// if `exclusive` is set, or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise.
 /// `fullscreen` is ignored when `exclusive` is set.
 pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
-    if !init([InitVideo]) {
-        die!("SDL Initialization Failure: {}", get_error());
+    if !sdl::init([sdl::InitVideo]) {
+        die!("SDL Initialization Failure: {}", sdl::get_error());
     }
     sdl_image::init([sdl_image::InitJPG, sdl_image::InitPNG]);
 
@@ -34,33 +34,34 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
         Err(err) => die!("Failed to initialize screen: {}", err)
     };
     if !exclusive {
-        mouse::set_cursor_visible(false);
+        sdl::mouse::set_cursor_visible(false);
     }
 
-    wm::set_caption(::version().as_slice(), "");
+    sdl::wm::set_caption(::version().as_slice(), "");
     screen
 }
 
 /// Initializes SDL audio subsystem and SDL_mixer.
 pub fn init_audio() {
-    if !init([InitAudio]) {
-        die!("SDL Initialization Failure: {}", get_error());
+    if !sdl::init([sdl::InitAudio]) {
+        die!("SDL Initialization Failure: {}", sdl::get_error());
     }
     //sdl_mixer::init([sdl_mixer::InitOGG, sdl_mixer::InitMP3]); // TODO
-    if sdl_mixer::open(SAMPLERATE, audio::S16_AUDIO_FORMAT, audio::Stereo, 2048).is_err() {
+    if sdl_mixer::open(SAMPLERATE, sdl::audio::S16_AUDIO_FORMAT,
+                       sdl::audio::Stereo, 2048).is_err() {
         die!("SDL Mixer Initialization Failure");
     }
 }
 
 /// Initializes a joystick with given index.
-pub fn init_joystick(joyidx: uint) -> joy::Joystick {
-    if !init([InitJoystick]) {
-        die!("SDL Initialization Failure: {}", get_error());
+pub fn init_joystick(joyidx: uint) -> sdl::joy::Joystick {
+    if !sdl::init([sdl::InitJoystick]) {
+        die!("SDL Initialization Failure: {}", sdl::get_error());
     }
     unsafe {
-        joy::ll::SDL_JoystickEventState(1); // TODO rust-sdl patch
+        sdl::joy::ll::SDL_JoystickEventState(1); // TODO rust-sdl patch
     }
-    match joy::Joystick::open(joyidx as int) {
+    match sdl::joy::Joystick::open(joyidx as int) {
         Ok(joy) => joy,
         Err(err) => die!("SDL Joystick Initialization Failure: {}", err)
     }
