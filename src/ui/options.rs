@@ -4,7 +4,7 @@
 
 //! Global game options.
 
-use std::{char, str, io, os};
+use std::{char, io, os};
 use std::collections::HashMap;
 use encoding::label::encoding_from_whatwg_label;
 
@@ -208,7 +208,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
             let shortargs =
                 if arg.starts_with("--") {
                     match longargs.find(&arg) {
-                        Some(&c) => str::from_char(c),
+                        Some(&c) => c.to_string(),
                         None => { return Error(format!("Invalid option: {}", arg)); }
                     }
                 } else {

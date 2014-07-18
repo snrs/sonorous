@@ -167,7 +167,7 @@ impl<'a> State<'a> {
             ColorBlock(ref block) => {
                 let mut ret = None;
                 self.block(hook, block, |hook_, color_| {
-                    ret = self.color_source(hook_, *color_);
+                    ret = self.color_source(hook_, &**color_);
                     false
                 });
                 ret
@@ -193,7 +193,7 @@ impl<'a> State<'a> {
             GradientBlock(ref block) => {
                 let mut ret = None;
                 self.block(hook, block, |hook_, gradient_| {
-                    ret = self.gradient_source(hook_, *gradient_);
+                    ret = self.gradient_source(hook_, &**gradient_);
                     false
                 });
                 ret
@@ -375,7 +375,7 @@ impl<'a> State<'a> {
             TextBlock(ref block) => {
                 let mut ret = Ok(());
                 self.block(hook, block, |hook_, text_| {
-                    match self.text_source(hook_, *text_, out) {
+                    match self.text_source(hook_, &**text_, out) {
                         Ok(()) => true,
                         Err(err) => { ret = Err(err); false }
                     }

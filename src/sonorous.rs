@@ -305,7 +305,7 @@ Available debugging options:
 }
 
 /// The entry point for subprograms. Only enabled with `--cfg subprogram`.
-#[cfg(subprogram)]
+#[cfg(not(no_subprogram))]
 pub fn subprogram(args: &[String]) -> ! {
     let ret: int = match args.head().map(|s| s.as_slice()) {
         None => {
@@ -326,7 +326,7 @@ The list of available subprograms:
 }
 
 /// The entry point for subprograms. Only enabled with `--cfg subprogram`.
-#[cfg(not(subprogram))]
+#[cfg(no_subprogram)]
 pub fn subprogram(_args: &[String]) -> ! {
     let _ = write!(&mut std::io::stderr(), "Subprograms are not supported in this build.\n");
     ui::common::exit(1);

@@ -303,7 +303,7 @@ impl<CC:CharClass> Classifier<CC> {
  * It's because many artists tried to use as many characters available as possible;
  * for example, there are instances of Cyrillic characters in both encodings.
  */
-#[cfg(subprogram)]
+#[cfg(not(no_subprogram))]
 pub fn chardet_train(args: &[String]) -> int {
     use std::io::{stdin, stderr, BufferedReader};
     use encoding::{Encoding, EncodeStrict, DecodeReplace};
