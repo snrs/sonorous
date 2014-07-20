@@ -252,7 +252,7 @@ impl MetadataCache {
         let c = try!(self.prepare("
             SELECT id, mtime FROM directories WHERE path = ?;
         "));
-        c.bind_param(1, &sqlite3::Blob(encoded.to_owned()));
+        c.bind_param(1, &sqlite3::Blob(encoded.to_vec()));
         if try!(step_cursor(&self.db, &c)) {
             // check if the directory has the same mtime
             let dirid = c.get_i64(0);
@@ -405,8 +405,8 @@ impl MetadataCache {
             FROM directories d INNER JOIN files f ON d.id = f.dir
             WHERE d.path = ? AND f.name = ?;
         "));
-        c.bind_param(1, &sqlite3::Blob(encoded_dir.to_owned()));
-        c.bind_param(2, &sqlite3::Blob(name.to_owned()));
+        c.bind_param(1, &sqlite3::Blob(encoded_dir.to_vec()));
+        c.bind_param(2, &sqlite3::Blob(name.to_vec()));
         if try!(step_cursor(&self.db, &c)) {
             // check if the file has the same mtime and size
             let fileid = c.get_i64(0);
@@ -460,7 +460,7 @@ impl MetadataCache {
                         let c = try!(self.prepare("
                             UPDATE files SET hash = ? WHERE id = ?;
                         "));
-                        c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_owned()));
+                        c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_vec()));
                         c.bind_param(2, &sqlite3::Integer64(fileid));
                         try!(step_cursor(&self.db, &c));
                         drop(c);
