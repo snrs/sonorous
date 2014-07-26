@@ -290,12 +290,9 @@ impl MetadataCache {
                 "));
                 c.bind_param(1, &sqlite3::Integer64(dirid));
                 while try!(step_cursor(&self.db, &c)) {
-                    let name = c.get_blob(0);
+                    let name = c.get_blob(0).unwrap_or("".as_bytes());
                     let size = c.get_i64(1);
-                    let hash = match c.get_column_type(2) {
-                        sqlite3::SQLITE_NULL => None,
-                        _ => md5_hash_from_slice(c.get_blob(2).as_slice()),
-                    };
+                    let hash = c.get_blob(2).and_then(md5_hash_from_slice);
                     if size >= 0 {
                         files.push((path.join(name), hash));
                     } else if size == SIZE_FOR_DIRECTORY {
@@ -412,10 +409,7 @@ impl MetadataCache {
             let fileid = c.get_i64(0);
             let filesize = c.get_i64(1);
             let filemtime = c.get_i64(2);
-            let filehash = match c.get_column_type(3) {
-                sqlite3::SQLITE_NULL => None,
-                _ => md5_hash_from_slice(c.get_blob(3).as_slice()),
-            };
+            let filehash = c.get_blob(3).and_then(md5_hash_from_slice);
 
             match filehash {
                 None => Ok((CacheInvalid(fileid), None)),

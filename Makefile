@@ -50,7 +50,7 @@ $(LIBOPENGLES):
 $(LIBENCODING):
 	cd $(RUSTENCODING) && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS)"
 
-$(LIBSQLITE3): $(RUSTSQLITE)/src/sqlite3/lib.rs $(SQLITE3)/libsqlite3.a
+$(LIBSQLITE3): $(RUSTSQLITE)/src/sqlite3.rs $(SQLITE3)/libsqlite3.a
 	$(RUSTC) $(RUSTPKGFLAGS) -L $(SQLITE3) $< -C extra-filename=_rust --out-dir $(dir $@)
 
 $(SQLITE3)/libsqlite3.a:

@@ -75,7 +75,7 @@ pub fn update_line(s: &str) {
 /// refused to do so or the platform is unsupported.
 #[cfg(target_os = "win32")]
 pub fn get_path_from_dialog() -> Option<Path> {
-    use std::{str, mem};
+    use std::mem;
     use std::ptr::{null, mut_null};
     use util::std::str::StrUtil;
     use ext::win32;
@@ -95,7 +95,7 @@ pub fn get_path_from_dialog() -> Option<Path> {
                 lStructSize: ofnsz as libc::DWORD,
                 lpstrFilter: filter,
                 lpstrFile: buf.as_mut_ptr(),
-                nMaxFile: (buf.len() * mem::size_of::<u16>()) as libc::DWORD,
+                nMaxFile: buf.len() as libc::DWORD,
                 lpstrTitle: title,
                 Flags: win32::ll::OFN_HIDEREADONLY,
 
@@ -115,7 +115,7 @@ pub fn get_path_from_dialog() -> Option<Path> {
                     None => buf.as_slice()
                 };
                 // path may result in an invaild UTF-16 path (but valid UCS-2 one)
-                str::from_utf16(path).map(|s| Path::new(s.as_slice()))
+                String::from_utf16(path).map(|s| Path::new(s.as_slice()))
             } else {
                 None
             }
