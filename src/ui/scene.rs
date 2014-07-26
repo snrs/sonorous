@@ -77,7 +77,7 @@ pub trait Scene {
 
     /// Called when the scene is to be replaced by a new `Scene` due to the `ReplaceScene` command.
     /// When called due to the `tick` call, this is called after `deactivate` call.
-    fn consume(~self) -> Box<Scene>;
+    fn consume(self) -> Box<Scene>;
 }
 
 /// Runs given scene and other additionally spawned scenes.

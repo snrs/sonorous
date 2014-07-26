@@ -391,7 +391,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
         use std::ascii::StrAsciiExt;
 
         // return the queued items first
-        match self.queued.shift() {
+        match self.queued.remove(0) {
             Some(parsed) => { return Some(parsed); }
             None => {}
         }
@@ -435,7 +435,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             macro_rules! emit(
                 ($e:expr) => ({
                     self.queued.push(Command(Some(self.lineno), $e));
-                    return self.queued.shift();
+                    return self.queued.remove(0);
                 })
             )
 
@@ -877,7 +877,7 @@ impl<'r,R:Rng> Iterator<Parsed<'static>> for PreprocessingParsingIterator<'r,R> 
     fn next(&mut self) -> Option<Parsed<'static>> {
         loop {
             // return the queued items first
-            match self.queued.shift() {
+            match self.queued.remove(0) {
                 Some(parsed) => {
                     return Some(parsed);
                 }

@@ -77,14 +77,14 @@ impl LoadingContext {
 
         let mut jobs = DList::new();
         if opts.has_bga() { // should go first
-            jobs.push_back(LoadStageFile);
+            jobs.push(LoadStageFile);
         }
         for (i, path) in bms.meta.sndpath.iter().enumerate() {
-            if path.is_some() { jobs.push_back(LoadSound(i)); }
+            if path.is_some() { jobs.push(LoadSound(i)); }
         }
         if opts.has_bga() {
             for (i, path) in bms.meta.imgpath.iter().enumerate() {
-                if path.is_some() { jobs.push_back(LoadImage(i)); }
+                if path.is_some() { jobs.push(LoadImage(i)); }
             }
         }
         let njobs = jobs.len();
@@ -240,8 +240,8 @@ impl Scene for LoadingScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(~self) -> Box<Scene> {
-        let LoadingScene { context, screen, .. } = *self;
+    fn consume(self) -> Box<Scene> {
+        let LoadingScene { context, screen, .. } = self;
         let (player, imgres) = context.to_player();
         match PlayingScene::new(player, screen, imgres) {
             Ok(scene) => scene as Box<Scene>,
@@ -342,8 +342,8 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
         }
     }
 
-    fn consume(~self) -> Box<Scene> {
-        let TextualLoadingScene { context, screen } = *self;
+    fn consume(self) -> Box<Scene> {
+        let TextualLoadingScene { context, screen } = self;
         let (player, imgres) = context.to_player();
         match screen {
             Some(screen) => ViewingScene::new(screen, imgres, player) as Box<Scene>,

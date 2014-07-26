@@ -589,7 +589,7 @@ impl Scene for SelectingScene {
         *self.keepgoing.write() = false;
     }
 
-    fn consume(~self) -> Box<Scene> { fail!("unreachable"); }
+    fn consume(self) -> Box<Scene> { fail!("unreachable"); }
 }
 
 define_hooks! {
