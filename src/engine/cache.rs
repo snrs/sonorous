@@ -8,6 +8,7 @@ use std::{io, result, path};
 use std::io::{IoError, OtherIoError, IoResult, FileStat, SeekSet};
 use std::io::fs::{File, readdir};
 use util::md5::{MD5, MD5Hash};
+use format::metadata::{Level, Difficulty, Meta};
 
 use sqlite3;
 
@@ -122,7 +123,7 @@ impl<'a> Drop for Transaction<'a> {
 /// The metadata cache backed by SQLite database.
 ///
 /// The cache is used for either retrieving the directory contents (`get_entries`)
-/// or retrieving the cached timeline based on the file's MD5 hash if any (`get_metadata`, TODO).
+/// or retrieving the cached timeline based on the file's MD5 hash if any (`get_metadata`).
 /// The former touches two tables `directories` (for the cached directory)
 /// and `files` (for the cached directory contents);
 /// the latter touches `files` (for the cached file hash if any) and `timelines` (for metadata).
@@ -233,7 +234,9 @@ impl MetadataCache {
             );
             CREATE TABLE IF NOT EXISTS timelines(
                 hash BLOB PRIMARY KEY NOT NULL,
+                random_metadata INTEGER NOT NULL, -- nonzero when randomness affects metadata
                 title TEXT,
+                genre TEXT,
                 artist TEXT,
                 level INTEGER,
                 levelsystem INTEGER,
@@ -469,6 +472,70 @@ impl MetadataCache {
                 Ok((hash, Some(f)))
             }
         }
+    }
+
+    /// Retrieves a cached metadata for given hash if any.
+    pub fn get_metadata(&self, hash: &MD5Hash) -> IoResult<Option<Meta>> {
+        debug!("get_metadata: hash = {}", *hash);
+
+        let c = try!(self.prepare("
+            SELECT random_metadata, title, artist, genre, level, levelsystem, difficulty
+            FROM timelines WHERE hash = ?;
+        "));
+        c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_vec()));
+        if try!(step_cursor(&self.db, &c)) {
+            let random = c.get_i64(0) != 0;
+            let title = c.get_text(1).map(|s| s.to_string());
+            let artist = c.get_text(2).map(|s| s.to_string());
+            let genre = c.get_text(3).map(|s| s.to_string());
+            let level = match (c.get_column_type(4), FromPrimitive::from_i64(c.get_i64(5))) {
+                (sqlite3::SQLITE_INTEGER, Some(system)) =>
+                    c.get_i64(4).to_int().map(|value| Level { value: value, system: system }),
+                (_, _) => None
+            };
+            let difficulty = c.get_i64(6).to_int().map(Difficulty);
+            Ok(Some(Meta {
+                random: random,
+                title: title, subtitles: Vec::new(), genre: genre, artist: artist,
+                subartists: Vec::new(), comments: Vec::new(),
+                level: level, difficulty: difficulty,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Stores a cached metadata for given hash.
+    ///
+    /// Unlike other methods, this does not go through a transition
+    /// since parsing metadata is not a small task and it can harm the performance.
+    pub fn put_metadata(&self, hash: &MD5Hash, meta: Meta) -> IoResult<()> {
+        debug!("put_metadata: hash = {}", *hash);
+
+        let (level, levelsystem) = match meta.level {
+            Some(l) => (l.value.to_i64(), Some(l.system as i64)),
+            None => (None, None)
+        };
+
+        let c = try!(self.prepare("
+            INSERT OR REPLACE
+            INTO timelines(hash, random_metadata, title, artist, genre,
+                           level, levelsystem, difficulty)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?);
+        "));
+        c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_vec()));
+        c.bind_param(2, &sqlite3::Integer64(if meta.random {1} else {0}));
+        c.bind_param(3, &meta.title.map_or(sqlite3::Null, sqlite3::Text));
+        c.bind_param(4, &meta.artist.map_or(sqlite3::Null, sqlite3::Text));
+        c.bind_param(5, &meta.genre.map_or(sqlite3::Null, sqlite3::Text));
+        c.bind_param(6, &level.map_or(sqlite3::Null, sqlite3::Integer64));
+        c.bind_param(7, &levelsystem.map_or(sqlite3::Null, sqlite3::Integer64));
+        c.bind_param(8, &meta.difficulty.map_or(sqlite3::Null,
+                                                |Difficulty(v)| sqlite3::Integer64(v as i64)));
+        try!(step_cursor(&self.db, &c));
+        drop(c);
+
+        Ok(())
     }
 }
 

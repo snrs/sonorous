@@ -68,16 +68,18 @@ enum Message {
     /// The worker has finished scanning files.
     NoMoreFiles,
     /// The worker has failed to read and/or load the BMS file. Error message follows.
-    BmsFailed(Path,String),
+    BmsFailed(Path, String),
     /// The worker has read the BMS file and calculated its MD5 hash.
-    BmsHashRead(Path,MD5Hash),
+    BmsHashRead(Path, MD5Hash),
+    /// The worker has read the cached metadata.
+    BmsCacheLoaded(Path, Meta),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
-    BmsLoaded(Path,PreprocessedBms,Vec<(Option<uint>,bms::diag::BmsMessage)>),
+    BmsLoaded(Path, PreprocessedBms, Vec<(Option<uint>,bms::diag::BmsMessage)>),
     /// The worker has loaded the banner image (the second `String`) for the BMS file (the first
     /// `Path`). This may be sent after `BmsLoaded` message. Due to the same reason as above
     /// the main task should ignore the message with non-current paths.
-    BmsBannerLoaded(Path,String,Envelope<PreparedSurface>),
+    BmsBannerLoaded(Path, String, Envelope<PreparedSurface>),
 }
 
 /// Preloaded game data.
@@ -237,6 +239,8 @@ impl SelectingScene {
         let keepgoing = self.keepgoing.clone();
         let cache = self.cache.clone();
         spawn_worker_task("scanner", proc() {
+            debug!("scanner: start");
+
             fn recur(cache: &Mutex<MetadataCache>, root: Path,
                      sender: &Sender<Message>, keepgoing: &Arc<RWLock<bool>>) -> bool {
                 if !*keepgoing.read() { return false; }
@@ -261,6 +265,8 @@ impl SelectingScene {
             if recur(cache.deref(), root.clone(), &sender, &keepgoing) {
                 sender.send(NoMoreFiles);
             }
+
+            debug!("scanner: done");
         }, proc() {
             sender_.send(NoMoreFiles);
         });
@@ -273,6 +279,8 @@ impl SelectingScene {
         let sender = self.sender.clone();
         let cache = self.cache.clone();
         proc() {
+            debug!("preloader for {}: start", bmspath.display());
+
             let opts = Rc::new(opts);
 
             let load_banner = |bannerpath: String, basepath: Option<Path>| {
@@ -290,7 +298,7 @@ impl SelectingScene {
                 }
             };
 
-            let load_with_reader = |mut f| {
+            let load_with_reader = |(hash, mut f): (MD5Hash, io::File)| -> Result<(), String> {
                 let mut r = task_rng();
                 let mut diags = Vec::new();
                 let loaderopts = opts.loader_options();
@@ -300,36 +308,63 @@ impl SelectingScene {
                         diags.push((line, msg));
                         true
                     };
-                    preprocess_bms(&bmspath, &mut f, opts.deref(), &mut r, &loaderopts, callback)
+                    try!(preprocess_bms(&bmspath, &mut f, opts.deref(),
+                                        &mut r, &loaderopts, callback))
                 };
-                match preproc {
-                    Ok(preproc) => {
-                        let banner = preproc.bms.meta.banner.clone();
-                        let basepath = preproc.bms.meta.basepath.clone();
-                        sender.send(BmsLoaded(bmspath.clone(), preproc, diags));
-                        if banner.is_some() {
-                            load_banner(banner.unwrap(), basepath);
-                        }
-                    }
-                    Err(err) => {
-                        sender.send(BmsFailed(bmspath.clone(), err));
-                    }
+
+                let banner = preproc.bms.meta.banner.clone();
+                let basepath = preproc.bms.meta.basepath.clone();
+                let meta = preproc.bms.meta.common.clone();
+                sender.send(BmsCacheLoaded(bmspath.clone(), meta.clone()));
+                sender.send(BmsLoaded(bmspath.clone(), preproc, diags));
+
+                let _ = cache.lock().put_metadata(&hash, meta);
+                if banner.is_some() {
+                    load_banner(banner.unwrap(), basepath);
                 }
+                Ok(())
             };
 
-            // we have read the file so we don't want the parser to read it again.
-            let f = match cache.lock().get_hash(&bmspath) {
-                Ok((hash, f)) => { sender.send(BmsHashRead(bmspath.clone(), hash)); Ok(f) },
-                Err(err) => Err(err),
+            let get_hash_and_reader = || -> Result<(MD5Hash, io::File), String> {
+                // we have read the file so we don't want the parser to read it again.
+                let (hash, f) = try!(cache.lock().get_hash(&bmspath).map_err(|e| e.to_string()));
+                sender.send(BmsHashRead(bmspath.clone(), hash));
+                let f = match f {
+                    Some(f) => f,
+                    None => try!(io::File::open(&bmspath).map_err(|e| e.to_string())),
+                };
+                Ok((hash, f))
             };
-            let f = match f {
-                Ok(Some(f)) => Ok(f),
-                Ok(None) => io::File::open(&bmspath),
-                Err(err) => Err(err),
-            };
-            match f {
-                Ok(f) => load_with_reader(f),
-                Err(err) => sender.send(BmsFailed(bmspath.clone(), err.to_string())),
+
+            match get_hash_and_reader().and_then(load_with_reader) {
+                Ok(()) => {}
+                Err(err) => { sender.send(BmsFailed(bmspath, err)); }
+            }
+
+            debug!("preloader: done");
+        }
+    }
+
+    /// Makes a new cached preloading task.
+    /// This task tries to read the cache first, and falls back to the preloading task if needed.
+    fn make_cached_preloading_task(&self, hash: &MD5Hash, path: &Path) -> proc(): Send {
+        let hash = *hash;
+        let bmspath = path.clone();
+        let cache = self.cache.clone();
+        let sender = self.sender.clone();
+        let job = self.make_preloading_task(path);
+        proc() {
+            debug!("cached preloader for {} ({}): start", bmspath.display(), hash);
+            let meta = cache.lock().get_metadata(&hash);
+            match meta {
+                Ok(Some(meta)) => {
+                    sender.send(BmsCacheLoaded(bmspath, meta.clone()));
+                    let _ = cache.lock().put_metadata(&hash, meta);
+                    debug!("cached preloader: done");
+                }
+                Ok(None) | Err(..) => {
+                    job();
+                }
             }
         }
     }
@@ -342,6 +377,14 @@ impl SelectingScene {
             // the task failed to send the error message, so the wrapper sends it instead
             sender.send(BmsFailed(bmspath, format!("unexpected error")));
         });
+    }
+
+    /// Reads a cached metadata if possible.
+    pub fn get_cached_metadata(&self, hash: &MD5Hash) -> Option<Meta> {
+        match self.cache.lock().get_metadata(hash) {
+            Ok(Some(meta)) => Some(meta),
+            Ok(None) | Err(..) => None,
+        }
     }
 
     /// Clears the current scanned files and restarts the scanning task.
@@ -515,33 +558,41 @@ impl Scene for SelectingScene {
                         self.preloaded = PreloadAfter(0);
                     }
                     for (path, hash) in paths.move_iter() {
+                        let job = match hash {
+                            Some(hash) => self.make_cached_preloading_task(&hash, &path),
+                            None => self.make_preloading_task(&path),
+                        };
+
                         let index = self.files.len();
                         self.fileindices.insert(path.clone(), index);
-                        let job = self.make_preloading_task(&path);
                         self.files.push(Entry { path: path, hash: hash, meta: None });
-                        if hash.is_none() { self.pool.execute(proc(_) job()); }
+                        self.pool.execute(proc(_) job());
                     }
                 }
                 Ok(NoMoreFiles) => {
                     self.filesdone = true;
                 }
-                Ok(BmsFailed(bmspath,err)) => {
+                Ok(BmsFailed(bmspath, err)) => {
                     if !self.is_current(&bmspath) { continue; }
                     self.preloaded = PreloadFailed(err);
                 }
-                Ok(BmsHashRead(bmspath,hash)) => {
+                Ok(BmsHashRead(bmspath, hash)) => {
                     match self.fileindices.find(&bmspath) {
                         Some(&offset) => { self.files.as_mut_slice()[offset].hash = Some(hash); }
                         None => {}
                     }
                 }
-                Ok(BmsLoaded(bmspath,preproc,messages)) => {
+                Ok(BmsCacheLoaded(bmspath, meta)) => {
+                    match self.fileindices.find(&bmspath) {
+                        Some(&offset) => { self.files.as_mut_slice()[offset].meta = Some(meta); }
+                        None => {}
+                    }
+                }
+                Ok(BmsLoaded(bmspath, preproc, messages)) => {
                     if !self.is_current(&bmspath) { continue; }
-                    self.files.as_mut_slice()[self.offset].meta =
-                        Some(preproc.bms.meta.common.clone());
                     self.preloaded = Preloaded(PreloadedData::new(preproc, messages));
                 }
-                Ok(BmsBannerLoaded(bmspath,imgpath,prepared)) => {
+                Ok(BmsBannerLoaded(bmspath, imgpath, prepared)) => {
                     if !self.is_current(&bmspath) { continue; }
                     match self.preloaded {
                         Preloaded(ref mut data) if data.banner.is_none() => {

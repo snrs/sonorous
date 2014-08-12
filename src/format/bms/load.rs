@@ -483,7 +483,8 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
     let timeline = builder.build();
     let meta = BmsMeta {
-        common: Meta { title: title, subtitles: subtitles, genre: genre,
+        common: Meta { random: false, // XXX
+                       title: title, subtitles: subtitles, genre: genre,
                        artist: artist, subartists: subartists, comments: comments,
                        level: level, difficulty: difficulty },
         encoding: encoding, stagefile: stagefile, banner: banner, basepath: basepath,

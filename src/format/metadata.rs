@@ -50,6 +50,11 @@ impl Difficulty {
 /// Common metadata for music data formats.
 #[deriving(Clone)]
 pub struct Meta {
+    /// True when the metadata is subject to the randomness.
+    /// This distinction is important since this would mean that we can't easily cache
+    /// the metadata for listing purpose.
+    pub random: bool,
+
     /// Title.
     pub title: Option<String>,
     /// Subtitle(s). Intended to be rendered in small print or only in certain cases.
