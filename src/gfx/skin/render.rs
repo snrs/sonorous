@@ -346,7 +346,8 @@ impl<'a> State<'a> {
                 let v = v * multiplier as f64;
                 let (min, sec) = num::div_rem(v, 60.0);
                 try!(fill_and_clip(out, sign, minwidth, maxwidth, 0, min));
-                write!(out, ":{:02.*}", precision as uint, sec.abs())
+                let (sec10, sec1) = num::div_rem(sec.abs(), 10.0);
+                write!(out, ":{:01.0}{:.*}", sec10, precision as uint, sec1)
             },
             HmsFormat { sign, minwidth, maxwidth, precision, multiplier } => {
                 let v = match to_f64(scalar) { Some(v) => v, None => return Ok(()) };
@@ -354,7 +355,8 @@ impl<'a> State<'a> {
                 let (min, sec) = num::div_rem(v, 60.0);
                 let (hour, min) = num::div_rem(min, 60.0);
                 try!(fill_and_clip(out, sign, minwidth, maxwidth, 0, hour));
-                write!(out, ":{:02}:{:02.*}", min.abs(), precision as uint, sec.abs())
+                let (sec10, sec1) = num::div_rem(sec.abs(), 10.0);
+                write!(out, ":{:02}:{:01.0}{:.*}", min.abs(), sec10, precision as uint, sec1)
             },
         }
     }
