@@ -197,7 +197,7 @@ impl LoadingScene {
     /// Creates a scene context required for rendering the graphical loading screen.
     pub fn new(screen: Rc<RefCell<Screen>>, bms: Bms, infos: TimelineInfo,
                keyspec: KeySpec, keymap: KeyMap, opts: Rc<Options>) -> Box<LoadingScene> {
-        let skin = match opts.load_skin("loading.json") {
+        let skin = match opts.load_skin("loading.cson") {
             Ok(skin) => skin,
             Err(err) => die!("{}", err),
         };

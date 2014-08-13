@@ -125,7 +125,10 @@ impl Options {
     /// Parses and returns the skin data.
     pub fn load_skin(&self, name: &str) -> Result<Skin,String> {
         match io::File::open(&self.skinroot.join(name)) {
-            Ok(mut f) => load_skin(&mut f).map(|skin| skin.make_absolute(&self.skinroot)),
+            Ok(f) => {
+                let mut buffered = io::BufferedReader::new(f);
+                load_skin(&mut buffered).map(|skin| skin.make_absolute(&self.skinroot))
+            },
             Err(err) => Err(err.to_string()),
         }
     }

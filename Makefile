@@ -12,6 +12,7 @@ RUSTSDL ?= libs/rust-sdl
 RUSTOPENGLES ?= libs/rust-opengles
 RUSTENCODING ?= libs/rust-encoding
 RUSTSQLITE ?= libs/rustsqlite
+CSONRUST ?= libs/cson-rust
 DIRECTX_SDK_INCLUDES ?= libs/w32api-directx-standalone/include
 SQLITE3 ?= libs/sqlite3
 RUSTFLAGS ?= -O
@@ -25,10 +26,11 @@ LIBSDL_MIXER = $(RUSTSDL)/libsdl_mixer_rust.rlib
 LIBOPENGLES = $(RUSTOPENGLES)/libopengles_rust.rlib
 LIBENCODING = $(RUSTENCODING)/libencoding.rlib
 LIBSQLITE3 = $(RUSTSQLITE)/libsqlite3_rust.rlib
-LIBS = $(LIBSDL) $(LIBSDL_IMAGE) $(LIBSDL_MIXER) $(LIBOPENGLES) $(LIBENCODING) $(LIBSQLITE3)
+LIBCSON = $(CSONRUST)/libcson.rlib
+LIBS = $(LIBSDL) $(LIBSDL_IMAGE) $(LIBSDL_MIXER) $(LIBOPENGLES) $(LIBENCODING) $(LIBSQLITE3) $(LIBCSON)
 
 
-.PHONY: all check doc clean clean-sdl clean-opengles clean-encoding clean-sqlite
+.PHONY: all check doc clean clean-sdl clean-opengles clean-encoding clean-sqlite clean-cson
 
 all: $(BIN)
 
@@ -56,6 +58,9 @@ $(LIBSQLITE3): $(RUSTSQLITE)/src/sqlite3.rs $(SQLITE3)/libsqlite3.a
 $(SQLITE3)/libsqlite3.a:
 	cd $(SQLITE3) && $(MAKE) all
 
+$(LIBCSON): $(CSONRUST)/src/lib.rs
+	$(RUSTC) $(RUSTPKGFLAGS) $< --out-dir $(dir $@)
+
 #$(TESTBIN): $(SRC) $(LIBS)
 #	$(RUSTC) $(RUSTFLAGS) $(patsubst %,-L %,$(dir $(LIBS))) -L $(SQLITE3) --test $(CRATE) -o $(TESTBIN)
 #
@@ -80,4 +85,7 @@ clean-encoding:
 clean-sqlite:
 	cd $(SQLITE3) && $(MAKE) clean
 	cd $(RUSTSQLITE) && rm -f *.so *.dylib *.dll *.rlib *.dummy
+
+clean-cson:
+	cd $(CSONRUST) && rm -f *.so *.dylib *.dll *.rlib *.dummy
 

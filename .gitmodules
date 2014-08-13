@@ -13,3 +13,6 @@
 [submodule "libs/rustsqlite"]
 	path = libs/rustsqlite
 	url = https://github.com/lifthrasiir/rustsqlite.git
+[submodule "libs/cson-rust"]
+	path = libs/cson-rust
+	url = https://github.com/lifthrasiir/cson-rust.git

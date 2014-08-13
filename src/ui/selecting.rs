@@ -210,7 +210,7 @@ static PRELOAD_DELAY: uint = 300;
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.
     pub fn new(screen: Rc<RefCell<Screen>>, root: &Path, opts: Rc<Options>) -> Box<SelectingScene> {
-        let skin = match opts.load_skin("selecting.json") {
+        let skin = match opts.load_skin("selecting.cson") {
             Ok(skin) => skin,
             Err(err) => die!("{}", err),
         };

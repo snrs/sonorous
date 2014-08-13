@@ -10,8 +10,8 @@
 
 use std::{num, result, mem};
 use std::collections::{TreeMap, HashMap};
-use serialize::json::{Json, Null, Boolean, Number, String, List, Object};
-use serialize::json::from_reader;
+use cson;
+use serialize::json::{Json, ToJson, Null, Boolean, Number, String, List, Object};
 
 use gfx::color::{Color, RGB, RGBA};
 use gfx::ratio_num::RatioNum;
@@ -851,9 +851,9 @@ impl FromJson for Skin {
 }
 
 /// Parses and returns the skin data.
-pub fn load_skin(f: &mut Reader) -> Result<Skin,String> {
-    let json = match from_reader(f) {
-        Ok(json) => json,
+pub fn load_skin(f: &mut Buffer) -> Result<Skin,String> {
+    let json = match cson::reader::Reader::new(f).parse_document() {
+        Ok(cson) => cson.to_json(),
         Err(err) => { return Err(err.to_string()); }
     };
     from_json(json)

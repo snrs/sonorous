@@ -35,6 +35,7 @@ extern crate sdl_mixer;
 extern crate opengles;
 extern crate encoding;
 extern crate sqlite3;
+extern crate cson;
 
 #[doc(hidden)] mod _linkhacks {
     // this forces `-lc` to be appended to the end of linker arguments.

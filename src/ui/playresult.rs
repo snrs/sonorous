@@ -26,7 +26,7 @@ pub struct PlayResultScene {
 impl PlayResultScene {
     /// Creates a new play result scene from the game play state after `PlayingScene`.
     pub fn new(screen: Rc<RefCell<Screen>>, player: Player) -> Box<PlayResultScene> {
-        let skin = match player.opts.load_skin("playresult.json") {
+        let skin = match player.opts.load_skin("playresult.cson") {
             Ok(skin) => skin,
             Err(err) => die!("{}", err),
         };
