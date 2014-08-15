@@ -75,7 +75,7 @@ fn fail_from_sqlite(db: &sqlite3::Database, code: sqlite3::ResultCode) -> ! {
 }
 
 /// `try!`-friendly version of `Cursor::step`.
-fn step_cursor(db: &sqlite3::Database, c: &sqlite3::Cursor) -> IoResult<bool> {
+fn step_cursor(db: &sqlite3::Database, c: &mut sqlite3::Cursor) -> IoResult<bool> {
     match c.step() {
         sqlite3::SQLITE_ROW => Ok(true),
         sqlite3::SQLITE_DONE => Ok(false),
@@ -91,7 +91,7 @@ struct Transaction<'a> {
 impl<'a> Transaction<'a> {
     /// Starts the transaction.
     fn new(db: &'a sqlite3::Database) -> IoResult<Transaction<'a>> {
-        match db.exec("BEGIN;") {
+        match db.prepare("BEGIN;", &None).map(|mut c| step_cursor(db, &mut c)) {
             Ok(..) => Ok(Transaction { db: Some(db) }),
             Err(err) => Err(io_error_from_sqlite(Some(db), err)),
         }
@@ -100,7 +100,7 @@ impl<'a> Transaction<'a> {
     /// Consumes the transaction while commiting it.
     fn commit(mut self) {
         let db = self.db.take_unwrap();
-        match db.exec("COMMIT;") {
+        match db.prepare("COMMIT;", &None).map(|mut c| step_cursor(db, &mut c)) {
             Ok(..) => {},
             Err(err) => fail_from_sqlite(db, err),
         }
@@ -111,7 +111,7 @@ impl<'a> Transaction<'a> {
 impl<'a> Drop for Transaction<'a> {
     fn drop(&mut self) {
         match self.db {
-            Some(db) => match db.exec("ROLLBACK;") {
+            Some(db) => match db.prepare("ROLLBACK;", &None).map(|mut c| step_cursor(db, &mut c)) {
                 Ok(..) => {},
                 Err(err) => fail_from_sqlite(db, err),
             },
@@ -187,7 +187,7 @@ impl MetadataCache {
             Ok(db) => db,
             Err(err) => { return Err(io_error_from_sqlite(None, err)); }
         };
-        let db = MetadataCache { root: root, db: db };
+        let mut db = MetadataCache { root: root, db: db };
         try!(db.create_schema());
         Ok(db)
     }
@@ -198,7 +198,7 @@ impl MetadataCache {
             Ok(db) => db,
             Err(err) => { return Err(io_error_from_sqlite(None, err)); }
         };
-        let db = MetadataCache { root: root, db: db };
+        let mut db = MetadataCache { root: root, db: db };
         try!(db.create_schema());
         Ok(db)
     }
@@ -209,12 +209,12 @@ impl MetadataCache {
     }
 
     /// `try!`-friendly version of `Database::exec`.
-    fn exec(&self, sql: &str) -> IoResult<bool> {
+    fn exec(&mut self, sql: &str) -> IoResult<bool> {
         self.db.exec(sql).map_err(|err| io_error_from_sqlite(Some(&self.db), err))
     }
 
     /// Creates a required database schema.
-    pub fn create_schema(&self) -> IoResult<()> {
+    pub fn create_schema(&mut self) -> IoResult<()> {
         // TODO schema upgrade
         try!(self.exec("
             BEGIN;
@@ -252,11 +252,11 @@ impl MetadataCache {
     /// The caller is free to call this method during a transaction.
     fn check_cached_entries(&self, path: &Path, encoded: &[u8])
                             -> IoResult<(CacheResult<()>, Option<IoResult<FileStat>>)> {
-        let c = try!(self.prepare("
+        let mut c = try!(self.prepare("
             SELECT id, mtime FROM directories WHERE path = ?;
         "));
         c.bind_param(1, &sqlite3::Blob(encoded.to_vec()));
-        if try!(step_cursor(&self.db, &c)) {
+        if try!(step_cursor(&self.db, &mut c)) {
             // check if the directory has the same mtime
             let dirid = c.get_i64(0);
             let dirmtime = c.get_i64(1);
@@ -288,18 +288,18 @@ impl MetadataCache {
         match res {
             CacheValid(dirid, ()) => {
                 // retrieve entries from the cache
-                let c = try!(self.prepare("
+                let mut c = try!(self.prepare("
                     SELECT name, size, hash FROM files WHERE dir = ?;
                 "));
                 c.bind_param(1, &sqlite3::Integer64(dirid));
-                while try!(step_cursor(&self.db, &c)) {
-                    let name = c.get_blob(0).unwrap_or("".as_bytes());
+                while try!(step_cursor(&self.db, &mut c)) {
+                    let path = path.join(c.get_blob(0).unwrap_or("".as_bytes()));
                     let size = c.get_i64(1);
                     let hash = c.get_blob(2).and_then(md5_hash_from_slice);
                     if size >= 0 {
-                        files.push((path.join(name), hash));
+                        files.push((path, hash));
                     } else if size == SIZE_FOR_DIRECTORY {
-                        dirs.push(path.join(name));
+                        dirs.push(path);
                     }
                 }
                 drop(c);
@@ -313,11 +313,11 @@ impl MetadataCache {
                 // entries for the cached directory, if any, are now invalid.
                 match res {
                     CacheInvalid(dirid) => {
-                        let c = try!(self.prepare("
+                        let mut c = try!(self.prepare("
                             DELETE FROM files WHERE dir = ?;
                         "));
                         c.bind_param(1, &sqlite3::Integer64(dirid));
-                        try!(step_cursor(&self.db, &c));
+                        try!(step_cursor(&self.db, &mut c));
                         drop(c);
                     }
                     _ => {}
@@ -336,17 +336,17 @@ impl MetadataCache {
                                entrystats.iter().map(|p| p.modified).collect::<Vec<u64>>());
 
                         // insert or replace the directory entry
-                        let c = try!(self.prepare("
+                        let mut c = try!(self.prepare("
                             INSERT OR REPLACE INTO directories(path, mtime) VALUES(?, ?);
                         "));
                         c.bind_param(1, &sqlite3::Blob(encoded));
                         c.bind_param(2, &sqlite3::Integer64(dirst.modified as i64));
-                        try!(step_cursor(&self.db, &c));
+                        try!(step_cursor(&self.db, &mut c));
                         drop(c);
                         let dirid = self.db.get_last_insert_rowid();
 
                         // insert file entries
-                        let c = try!(self.prepare("
+                        let mut c = try!(self.prepare("
                             INSERT INTO files(dir, name, size, mtime) VALUES(?, ?, ?, ?);
                         "));
                         c.bind_param(1, &sqlite3::Integer64(dirid));
@@ -356,7 +356,7 @@ impl MetadataCache {
                             c.bind_param(2, &sqlite3::Blob(filename));
                             c.bind_param(3, &sqlite3::Integer64(size_from_filestat(st)));
                             c.bind_param(4, &sqlite3::Integer64(st.modified as i64));
-                            try!(step_cursor(&self.db, &c));
+                            try!(step_cursor(&self.db, &mut c));
                             match st.kind {
                                 io::TypeFile => files.push((path, None)),
                                 io::TypeDirectory => dirs.push(path),
@@ -368,11 +368,11 @@ impl MetadataCache {
 
                     (&Err(..), CacheInvalid(dirid)) => {
                         // remove the directory entry if any
-                        let c = try!(self.prepare("
+                        let mut c = try!(self.prepare("
                             DELETE FROM directories WHERE id = ?;
                         "));
                         c.bind_param(1, &sqlite3::Integer64(dirid));
-                        try!(step_cursor(&self.db, &c));
+                        try!(step_cursor(&self.db, &mut c));
                         drop(c);
                     }
 
@@ -400,14 +400,14 @@ impl MetadataCache {
     /// The caller is free to call this method during a transaction.
     fn check_cached_hash(&self, path: &Path, encoded_dir: &[u8], name: &[u8])
                             -> IoResult<(CacheResult<MD5Hash>, Option<IoResult<FileStat>>)> {
-        let c = try!(self.prepare("
+        let mut c = try!(self.prepare("
             SELECT f.id, f.size, f.mtime, f.hash
             FROM directories d INNER JOIN files f ON d.id = f.dir
             WHERE d.path = ? AND f.name = ?;
         "));
         c.bind_param(1, &sqlite3::Blob(encoded_dir.to_vec()));
         c.bind_param(2, &sqlite3::Blob(name.to_vec()));
-        if try!(step_cursor(&self.db, &c)) {
+        if try!(step_cursor(&self.db, &mut c)) {
             // check if the file has the same mtime and size
             let fileid = c.get_i64(0);
             let filesize = c.get_i64(1);
@@ -454,12 +454,12 @@ impl MetadataCache {
 
                 match res {
                     CacheInvalid(fileid) => {
-                        let c = try!(self.prepare("
+                        let mut c = try!(self.prepare("
                             UPDATE files SET hash = ? WHERE id = ?;
                         "));
                         c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_vec()));
                         c.bind_param(2, &sqlite3::Integer64(fileid));
-                        try!(step_cursor(&self.db, &c));
+                        try!(step_cursor(&self.db, &mut c));
                         drop(c);
                     }
                     _ => {}
@@ -478,12 +478,12 @@ impl MetadataCache {
     pub fn get_metadata(&self, hash: &MD5Hash) -> IoResult<Option<Meta>> {
         debug!("get_metadata: hash = {}", *hash);
 
-        let c = try!(self.prepare("
+        let mut c = try!(self.prepare("
             SELECT random_metadata, title, artist, genre, level, levelsystem, difficulty
             FROM timelines WHERE hash = ?;
         "));
         c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_vec()));
-        if try!(step_cursor(&self.db, &c)) {
+        if try!(step_cursor(&self.db, &mut c)) {
             let random = c.get_i64(0) != 0;
             let title = c.get_text(1).map(|s| s.to_string());
             let artist = c.get_text(2).map(|s| s.to_string());
@@ -517,7 +517,7 @@ impl MetadataCache {
             None => (None, None)
         };
 
-        let c = try!(self.prepare("
+        let mut c = try!(self.prepare("
             INSERT OR REPLACE
             INTO timelines(hash, random_metadata, title, artist, genre,
                            level, levelsystem, difficulty)
@@ -532,7 +532,7 @@ impl MetadataCache {
         c.bind_param(7, &levelsystem.map_or(sqlite3::Null, sqlite3::Integer64));
         c.bind_param(8, &meta.difficulty.map_or(sqlite3::Null,
                                                 |Difficulty(v)| sqlite3::Integer64(v as i64)));
-        try!(step_cursor(&self.db, &c));
+        try!(step_cursor(&self.db, &mut c));
         drop(c);
 
         Ok(())
