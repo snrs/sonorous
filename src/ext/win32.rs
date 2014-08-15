@@ -8,7 +8,7 @@
 
 //! Win32 API wrappers.
 
-#![cfg(target_os = "win32")]
+#![cfg(target_os = "windows")]
 
 pub mod ll {
     #![allow(non_camel_case_types, uppercase_variables)]

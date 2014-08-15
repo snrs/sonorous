@@ -70,7 +70,7 @@ $(LIBCSON): $(CSONRUST)/src/lib.rs
 doc:
 	$(RUSTDOC) $(patsubst %,-L %,$(dir $(LIBS))) $(CRATE)
 
-clean: clean-sdl clean-opengles clean-encoding clean-sqlite
+clean: clean-sdl clean-opengles clean-encoding clean-sqlite clean-cson
 	rm -rf $(BIN) $(BIN).exe $(TESTBIN) $(TESTBIN).exe
 
 clean-sdl:

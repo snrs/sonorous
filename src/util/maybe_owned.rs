@@ -14,7 +14,6 @@ use std::cmp::{PartialEq, Eq, PartialOrd, Ord, Equiv};
 use std::cmp::Ordering;
 use std::collections::Collection;
 use std::default::Default;
-use std::slice::Vector;
 
 /// A vector that can hold either `&'r [T]` or `Vec<T>`.
 pub enum MaybeOwnedVec<'r,T> {
@@ -58,7 +57,7 @@ impl<'r,T> IntoMaybeOwnedVec<'r,T> for &'r [T] {
     fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'r,T> { VecSlice(self) }
 }
 
-impl<'r,T> Vector<T> for MaybeOwnedVec<'r,T> {
+impl<'r,T> Slice<T> for MaybeOwnedVec<'r,T> {
     #[inline]
     fn as_slice<'r>(&'r self) -> &'r [T] {
         match *self {
@@ -82,7 +81,7 @@ impl<'r,T:PartialEq> PartialEq for MaybeOwnedVec<'r,T> {
 
 impl<'r,T:Eq> Eq for MaybeOwnedVec<'r,T> {}
 
-impl<'r,T:PartialEq,V:Vector<T>> Equiv<V> for MaybeOwnedVec<'r,T> {
+impl<'r,T:PartialEq,V:Slice<T>> Equiv<V> for MaybeOwnedVec<'r,T> {
     #[inline]
     fn equiv(&self, other: &V) -> bool {
         self.as_slice().eq(&other.as_slice())

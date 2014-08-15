@@ -8,7 +8,7 @@
 
 //! Extensions to rust-sdl.
 
-#[cfg(target_os = "win32")]
+#[cfg(target_os = "windows")]
 pub mod syswm {
     use libc::{HANDLE, INVALID_HANDLE_VALUE};
 

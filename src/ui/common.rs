@@ -17,7 +17,7 @@ pub fn exit(exitcode: int) -> ! {
 }
 
 /// Exits with an error message. Internally used in the `die!` macro below.
-#[cfg(target_os = "win32")]
+#[cfg(target_os = "windows")]
 pub fn die(s: String) -> ! {
     use util::std::str::StrUtil;
     ::exename().as_slice().as_utf16_c_str(|caption| {
@@ -29,7 +29,7 @@ pub fn die(s: String) -> ! {
 }
 
 /// Exits with an error message. Internally used in the `die!` macro below.
-#[cfg(not(target_os = "win32"))]
+#[cfg(not(target_os = "windows"))]
 pub fn die(s: String) -> ! {
     printerrln(format!("{}: {}", ::exename(), s).as_slice());
     exit(1)
@@ -73,7 +73,7 @@ pub fn update_line(s: &str) {
 
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
 /// refused to do so or the platform is unsupported.
-#[cfg(target_os = "win32")]
+#[cfg(target_os = "windows")]
 pub fn get_path_from_dialog() -> Option<Path> {
     use std::mem;
     use std::ptr::{null, mut_null};
@@ -125,7 +125,7 @@ pub fn get_path_from_dialog() -> Option<Path> {
 
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
 /// refused to do so or the platform is unsupported.
-#[cfg(not(target_os = "win32"))]
+#[cfg(not(target_os = "windows"))]
 pub fn get_path_from_dialog() -> Option<Path> {
     None
 }

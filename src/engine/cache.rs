@@ -40,7 +40,7 @@ fn test_encode_path() {
     assert_eq!(encode_path(&root, &path([".", "a", "e"])).as_slice(), b".\0..\0e");
     assert_eq!(encode_path(&root, &path([".", "a", "b", "f"])).as_slice(), b".\0f");
 
-    if cfg!(target_os = "win32") {
+    if cfg!(target_os = "windows") {
         assert_eq!(encode_path(&root, &path(["\\", "x", "y", "z"])).as_slice(), b"\\\0x\0y\0z");
         assert_eq!(encode_path(&root, &path(["C:\\", "x", "y", "z"])).as_slice(), b"C:\\\0x\0y\0z");
         assert_eq!(encode_path(&root, &path(["c:\\", "x", "y", "z"])).as_slice(), b"C:\\\0x\0y\0z");

@@ -5,6 +5,7 @@
 //! Scene management.
 
 use std::io::timer::sleep;
+use std::time::Duration;
 use sdl::get_ticks;
 use ui::common::Ticker;
 
@@ -100,7 +101,7 @@ pub fn run_scene(scene: Box<Scene>) {
                         _ => { break; }
                     }
                     let now = get_ticks();
-                    if now < ticklimit { sleep((ticklimit - now) as u64); }
+                    if now < ticklimit { sleep(Duration::milliseconds((ticklimit - now) as i32)); }
                 }
                 current.deactivate();
             }

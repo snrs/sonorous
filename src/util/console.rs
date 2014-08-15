@@ -14,7 +14,7 @@ use encoding::{Encoding, EncodingRef, Encoder, EncoderTrap, ByteWriter};
 local_data_key!(console_encoding_key: EncodingRef)
 
 /// Returns an encoding usable for console I/O.
-#[cfg(target_os = "win32")]
+#[cfg(target_os = "windows")]
 #[allow(experimental)]
 fn get_console_encoding() -> EncodingRef {
     use ext::win32::ll::GetACP;
@@ -25,7 +25,7 @@ fn get_console_encoding() -> EncodingRef {
 }
 
 /// Returns an encoding usable for console I/O.
-#[cfg(not(target_os = "win32"))]
+#[cfg(not(target_os = "windows"))]
 fn get_console_encoding() -> EncodingRef {
     use encoding::all::UTF_8;
     UTF_8 as EncodingRef // TODO

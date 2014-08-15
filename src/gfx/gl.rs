@@ -503,8 +503,8 @@ impl Drop for RenderBuffer {
 // XXX should have been `gl::gen_renderbuffers`
 fn gen_renderbuffers(n: GLsizei) -> Vec<GLuint> {
     unsafe {
-        let result = Vec::from_elem(n as uint, 0 as GLuint);
-        gl::glGenRenderbuffers(n, result.as_ptr());
+        let mut result = Vec::from_elem(n as uint, 0 as GLuint);
+        gl::glGenRenderbuffers(n, result.as_mut_ptr());
         result
     }
 }

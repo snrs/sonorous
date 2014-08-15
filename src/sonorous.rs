@@ -41,7 +41,7 @@ extern crate cson;
     // this forces `-lc` to be appended to the end of linker arguments.
     // it is important since `-lc` is no longer implied by recent rustc due to `-nodefaultlibs`,
     // thus `-lsqlite3` should be before `-lc` in order to use libc's symbols.
-    #[cfg(not(target_os = "win32"))] #[link_args="-lc"] extern {}
+    #[cfg(not(target_os = "windows"))] #[link_args="-lc"] extern {}
 }
 
 #[macro_escape] pub mod util {

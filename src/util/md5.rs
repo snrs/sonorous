@@ -264,7 +264,7 @@ pub struct MD5 {
 /// The calculated 128-bit MD5 hash.
 pub struct MD5Hash(pub [u8, ..16]);
 
-impl Vector<u8> for MD5Hash {
+impl Slice<u8> for MD5Hash {
     fn as_slice<'a>(&'a self) -> &'a [u8] {
         let MD5Hash(ref hash) = *self;
         hash.as_slice()

@@ -9,7 +9,6 @@
 //! Abstracted graphical screen.
 
 use std::rc::Rc;
-use std::slice::MutableCloneableVector;
 use sdl::video;
 use gl = opengles::gl2;
 
@@ -19,19 +18,19 @@ use gfx::draw::{ProgramForShades, ShadedDrawing, ShadedDrawingTraits};
 use gfx::draw::{ProgramForTextures, TexturedDrawing, TexturedDrawingTraits};
 use gfx::bmfont::{Font, FontDrawingUtils, Alignment};
 
-#[cfg(target_os="win32")] use opengles::egl;
-#[cfg(target_os="win32")] use ext::sdl::syswm;
+#[cfg(target_os="windows")] use opengles::egl;
+#[cfg(target_os="windows")] use ext::sdl::syswm;
 
 /// OpenGL state. This corresponds to EGL context in Windows; in the other platforms the global SDL
 /// context handles this so there is no additional state.
-#[cfg(target_os="win32")]
+#[cfg(target_os="windows")]
 pub struct GLState {
     egl_display: egl::Display,
     egl_surface: egl::Surface,
     egl_context: egl::Context,
 }
 
-#[cfg(target_os="win32")]
+#[cfg(target_os="windows")]
 impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
     pub fn new() -> Result<GLState,String> {
@@ -99,7 +98,7 @@ impl GLState {
     }
 }
 
-#[cfg(target_os="win32")]
+#[cfg(target_os="windows")]
 impl Drop for GLState {
     fn drop(&mut self) {
         match egl::terminate(self.egl_display) {
@@ -111,10 +110,10 @@ impl Drop for GLState {
 
 /// OpenGL state. This corresponds to EGL context in Windows; in the other platforms the global SDL
 /// context handles this so there is no additional state.
-#[cfg(not(target_os="win32"))]
+#[cfg(not(target_os="windows"))]
 pub struct GLState;
 
-#[cfg(not(target_os="win32"))]
+#[cfg(not(target_os="windows"))]
 impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
     pub fn new() -> Result<GLState,String> { Ok(GLState) }
@@ -203,7 +202,7 @@ impl Screen {
         self.program_for_shades.local_transform.set_matrix_3f(false, matrix);
         self.program_for_textures.bind();
         self.program_for_textures.local_transform.set_matrix_3f(false, matrix);
-        self.last_local_transform.mut_slice(0, 9).copy_from(matrix);
+        self.last_local_transform.mut_slice(0, 9).clone_from_slice(matrix);
     }
 
     /// Sets the viewport, which translates [-1,1]x[-1,1] coordinates into the window coordinates.
@@ -220,7 +219,7 @@ impl Screen {
         self.program_for_shades.projection.set_matrix_4f(false, matrix);
         self.program_for_textures.bind();
         self.program_for_textures.projection.set_matrix_4f(false, matrix);
-        self.last_projection.mut_slice(0, 16).copy_from(matrix);
+        self.last_projection.mut_slice(0, 16).clone_from_slice(matrix);
     }
 
     /// Sets the orthographic projection matrix with given 2D bounds.
