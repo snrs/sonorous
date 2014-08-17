@@ -138,8 +138,13 @@ pub mod builder {
     /// Sorts the objects with the position and internal ordering as per `classify`.
     fn sort_objs<S,I>(objs: &mut [ObjDataWithVpos<S,I>]) {
         objs.sort_by(|a, b| {
-            let posord = if a.vpos < b.vpos {Less} else if a.vpos > b.vpos {Greater} else {Equal};
-            posord.cmp(&classify(&a.data).cmp(&classify(&b.data)))
+            if a.vpos < b.vpos {
+                Less
+            } else if a.vpos > b.vpos {
+                Greater
+            } else {
+                classify(&a.data).cmp(&classify(&b.data))
+            }
         });
     }
 
