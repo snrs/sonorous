@@ -11,7 +11,7 @@
 use std::iter;
 use gfx::color::{Blend, to_rgba};
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits};
-use gl = opengles::gl2;
+use opengles::gl2 as gl;
 
 /// Intrinsic width of the bitmap font.
 pub static NCOLUMNS: uint = 8;

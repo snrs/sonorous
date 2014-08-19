@@ -14,7 +14,7 @@ use gfx::color::{Color, to_rgba};
 use gfx::gl::{Texture2D, VertexBuffer};
 use gfx::gl::{Shader, VertexShader, FragmentShader};
 use gfx::gl::{Program, UniformLoc, AttribLoc};
-use gl = opengles::gl2;
+use opengles::gl2 as gl;
 use opengles::gl2::{GLenum, GLint, GLuint, GLsizei};
 
 /// OpenGL program for shaded triangles. See also `ShadedDrawing`.

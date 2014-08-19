@@ -11,7 +11,7 @@
 use std::{io, mem};
 
 use sdl::video;
-use gl = opengles::gl2;
+use opengles::gl2 as gl;
 use opengles::gl2::{GLenum, GLint, GLuint, GLsizei, GLfloat};
 
 /// OpenGL shader types. This closely follows OpenGL ES API, which means that geometry shaders are

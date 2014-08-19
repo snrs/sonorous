@@ -10,7 +10,7 @@
 
 use std::rc::Rc;
 use sdl::video;
-use gl = opengles::gl2;
+use opengles::gl2 as gl;
 
 use gfx::color::Blend;
 use gfx::gl::{VertexBuffer, Texture2D, FrameBuffer};
@@ -34,7 +34,7 @@ pub struct GLState {
 impl GLState {
     /// Creates a new OpenGL state from the current SDL window.
     pub fn new() -> Result<GLState,String> {
-        use win32 = ext::win32::ll;
+        use ext::win32::ll as win32;
 
         macro_rules! return_on_err(
             ($e:expr) => {

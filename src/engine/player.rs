@@ -32,7 +32,7 @@ use ui::options::{Modf, MirrorModf, RandomModf, RandomExModf, ShuffleModf, Shuff
 /// a valid range from 0 to `keyspec.order.len()`, where `end` is exclusive.
 pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modf, r: &mut R,
                                   keyspec: &KeySpec, begin: uint, end: uint) {
-    use timeline_modf = format::timeline::modf;
+    use format::timeline::modf as timeline_modf;
 
     let mut lanes = Vec::new();
     for i in range(begin, end) {

@@ -14,7 +14,7 @@ use std::rc::Rc;
 use std::io::{IoResult, MemWriter};
 use std::collections::HashMap;
 
-use gl = opengles::gl2;
+use opengles::gl2 as gl;
 use sdl_image;
 
 use gfx::color::{Color, Gradient, RGB, to_rgba};

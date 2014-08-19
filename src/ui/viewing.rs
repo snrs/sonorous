@@ -7,7 +7,7 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
-use gl = opengles::gl2;
+use opengles::gl2 as gl;
 use ext::smpeg::SMPEG_PLAYING;
 use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
 use format::obj::{BGARef, BlankBGA, ImageBGA, SlicedImageBGA};
