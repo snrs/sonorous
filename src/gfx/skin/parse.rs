@@ -11,7 +11,7 @@
 use std::{num, result, mem};
 use std::collections::{TreeMap, HashMap};
 use cson;
-use serialize::json::{Json, ToJson, Null, Boolean, Number, String, List, Object};
+use serialize::json::{Json, ToJson, Null, Boolean, I64, U64, F64, String, List, Object};
 
 use gfx::color::{Color, RGB, RGBA};
 use gfx::ratio_num::RatioNum;
@@ -66,6 +66,16 @@ fn from_0_255(x: f64) -> u8 {
     if x < 0.0 {0} else if x > 255.0 {255} else {x as u8}
 }
 
+/// Extracts a number from `json` if possible.
+fn num(json: &Json) -> Option<f64> {
+    match *json {
+        I64(v) => Some(v as f64),
+        U64(v) => Some(v as f64),
+        F64(v) => Some(v),
+        _ => None,
+    }
+}
+
 /// Returns a string representation of remaining keys in the tree map.
 fn treemap_keys(map: &TreeMap<String,Json>) -> String {
     map.iter().map(|(k,_)| k.as_slice()).collect::<Vec<&str>>().connect(", ")
@@ -88,7 +98,7 @@ macro_rules! fail_with_json(
             Null => "null",
             Boolean(true) => "true",
             Boolean(false) => "false",
-            Number(..) => "a number",
+            I64(..) | U64(..) | F64(..) => "a number",
             String(..) => "a string",
             List(..) => "a list",
             Object(..) => "an object",
@@ -109,7 +119,9 @@ macro_rules! pop(
 impl FromJson for Scalar<'static> {
     fn from_json(json: Json) -> Result<Scalar<'static>,String> {
         match json {
-            Number(v) => Ok(v.into_scalar()),
+            I64(v) => Ok(v.into_scalar()),
+            U64(v) => Ok(v.into_scalar()),
+            F64(v) => Ok(v.into_scalar()),
             String(s) => Ok(s.into_scalar()),
 
             Object(mut map) => {
@@ -199,21 +211,35 @@ impl FromJson for Color {
             List(l) => match l.as_slice() {
                 [List(ref l)] => match l.as_slice() {
                     // [[r/255, g/255, b/255]]
+                    [ref r, ref g, ref b] => match (num(r), num(g), num(b)) {
+                        (Some(r), Some(g), Some(b)) =>
+                            Ok(RGB(from_0_1(r), from_0_1(g), from_0_1(b))),
+                        _ => Err(format!("expected a color triple/quadruple in the list"))
+                    },
+
                     // [[r/255, g/255, b/255, a/255]]
-                    [Number(r), Number(g), Number(b)] =>
-                        Ok(RGB(from_0_1(r), from_0_1(g), from_0_1(b))),
-                    [Number(r), Number(g), Number(b), Number(a)] =>
-                        Ok(RGBA(from_0_1(r), from_0_1(g), from_0_1(b), from_0_1(a))),
+                    [ref r, ref g, ref b, ref a] => match (num(r), num(g), num(b), num(a)) {
+                        (Some(r), Some(g), Some(b), Some(a)) =>
+                            Ok(RGBA(from_0_1(r), from_0_1(g), from_0_1(b), from_0_1(a))),
+                        _ => Err(format!("expected a color triple/quadruple in the list"))
+                    },
 
                     _ => Err(format!("expected a color triple/quadruple in the list"))
                 },
 
                 // [r, g, b]
+                [ref r, ref g, ref b] => match (num(r), num(g), num(b)) {
+                    (Some(r), Some(g), Some(b)) =>
+                        Ok(RGB(from_0_255(r), from_0_255(g), from_0_255(b))),
+                    _ => Err(format!("expected a color triple/quadruple"))
+                },
+
                 // [r, g, b, a]
-                [Number(r), Number(g), Number(b)] =>
-                    Ok(RGB(from_0_255(r), from_0_255(g), from_0_255(b))),
-                [Number(r), Number(g), Number(b), Number(a)] =>
-                    Ok(RGBA(from_0_255(r), from_0_255(g), from_0_255(b), from_0_255(a))),
+                [ref r, ref g, ref b, ref a] => match (num(r), num(g), num(b), num(a)) {
+                    (Some(r), Some(g), Some(b), Some(a)) =>
+                        Ok(RGBA(from_0_255(r), from_0_255(g), from_0_255(b), from_0_255(a))),
+                    _ => Err(format!("expected a color triple/quadruple"))
+                },
 
                 _ => Err(format!("expected a color triple/quadruple"))
             },
@@ -418,7 +444,9 @@ impl FromJson for Expr {
 
         match json {
             String(s) => expr(s.as_slice()),
-            Number(v) => Ok(ENum(RatioNum::from_num(v as f32))),
+            I64(v) => Ok(ENum(RatioNum::from_num(v as f32))),
+            U64(v) => Ok(ENum(RatioNum::from_num(v as f32))),
+            F64(v) => Ok(ENum(RatioNum::from_num(v as f32))),
             _ => fail_with_json!(json, "an expression"),
         }
     }
@@ -693,8 +721,10 @@ impl FromJson for Node {
                     let to = try!(from_json(pop!(map, "to", "the line")));
                     let color = try!(from_json(pop!(map, "color", "the line")));
                     let opacity = match map.pop(&"opacity".to_string()) {
-                        Some(Number(a)) => a as f32,
-                        Some(opacity) => fail_with_json!(opacity, "a number in the line opacity"),
+                        Some(opacity) => match num(&opacity) {
+                            Some(a) => a as f32,
+                            None => fail_with_json!(opacity, "a number in the line opacity"),
+                        },
                         None => 1.0,
                     };
                     ensure_empty!(map, "the line");
@@ -715,9 +745,10 @@ impl FromJson for Node {
                         None => None,
                     };
                     let opacity = match map.pop(&"opacity".to_string()) {
-                        Some(Number(a)) => a as f32,
-                        Some(opacity) =>
-                            fail_with_json!(opacity, "a number in the rectangle opacity"),
+                        Some(opacity) => match num(&opacity) {
+                            Some(a) => a as f32,
+                            None => fail_with_json!(opacity, "a number in the rectangle opacity"),
+                        },
                         None => 1.0,
                     };
                     let clip = match map.pop(&"clip".to_string()) {
@@ -747,11 +778,11 @@ impl FromJson for Node {
                     let text = try!(from_json(text.unwrap()));
                     let at = try!(from_json(pop!(map, "at", "the text")));
                     let size = match map.pop(&"size".to_string()) {
-                        Some(Number(size)) if size > 0.0 => size as f32,
-                        Some(Number(_)) => {
-                            return Err(format!("nonpositive `size` in the text"));
-                        }
-                        Some(size) => fail_with_json!(size, "a text size"),
+                        Some(size) => match num(&size) {
+                            Some(size) if size > 0.0 => size as f32,
+                            Some(_) => return Err(format!("nonpositive `size` in the text")),
+                            None => fail_with_json!(size, "a text size"),
+                        },
                         None => NROWS as f32,
                     };
                     let anchor = match map.pop(&"anchor".to_string()) {
@@ -764,7 +795,10 @@ impl FromJson for Node {
                             }
                         },
                         Some(List(l)) => match l.as_slice() {
-                            [Number(x), Number(y)] => (x as f32, y as f32),
+                            [ref x, ref y] => match (num(x), num(y)) {
+                                (Some(x), Some(y)) => (x as f32, y as f32),
+                                _ => return Err(format!("expected an anchor pair in the list")),
+                            },
                             _ => { return Err(format!("expected an anchor pair in the list")); }
                         },
                         Some(anchor) => fail_with_json!(anchor, "an anchor"),
