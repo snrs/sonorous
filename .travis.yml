@@ -1,19 +1,19 @@
+language: rust
+os:
+  - linux
+  - osx
 env:
   global:
+    - LD_LIBRARY_PATH: /usr/local/lib
     - secure: L3jilKnridj1drhcGqH9g8mp3HwdK6iWGX7BSwxnrdEMJxuxAW2eK06cZw49MHwoDTqXBxfqROsA0GSMTNmuqxC58Zohlz7mCxfeH6ujPhhwW+TQl6E8hEuUKi0R07c9ofGXgEqF0ljFB0pRo88MDDhEsNotRy9VCo1gi82r744=
 before_install:
-#  - yes | sudo add-apt-repository ppa:hansjorg/rust
   - sudo apt-get update
-  - curl -O http://static.rust-lang.org/dist/rust-nightly-x86_64-unknown-linux-gnu.tar.gz
-  - tar xfz rust-nightly-x86_64-unknown-linux-gnu.tar.gz
-  - (cd rust-nightly-x86_64-unknown-linux-gnu/ && sudo ./install.sh)
-#  - sudo apt-get install rust-nightly
   - sudo apt-get install libsdl1.2-dev libsdl-mixer1.2-dev libsdl-image1.2-dev libsmpeg-dev libsqlite3-dev
+before_script:
+  - rustc -v
+  - cargo -V
 script:
-  - make RUSTFLAGS='--cfg subprogram' RUSTPKGFLAGS=
+  - make RUSTFLAGS= RUSTPKGFLAGS=
   - make doc
-branches:
-  only:
-    - master
 after_script:
   - curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh
