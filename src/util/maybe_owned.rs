@@ -16,7 +16,7 @@ use std::collections::Collection;
 use std::default::Default;
 
 /// A vector that can hold either `&'r [T]` or `Vec<T>`.
-pub enum MaybeOwnedVec<'r,T> {
+pub enum MaybeOwnedVec<'r, T:'r> {
     OwnedVec(Vec<T>),
     VecSlice(&'r [T]),
 }

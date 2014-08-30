@@ -115,8 +115,8 @@ impl<T:Hook> Hook for Option<T> {
 
 /// A delegated hook with the order.
 pub struct Delegate<'a> {
-    base: &'a Hook,
-    delegated: &'a Hook,
+    base: &'a Hook+'a,
+    delegated: &'a Hook+'a,
 }
 
 impl<'a> Hook for Delegate<'a> {
@@ -133,7 +133,7 @@ impl<'a> Hook for Delegate<'a> {
 
 /// A delegated hook with a single scalar hook added.
 pub struct AddText<'a> {
-    base: &'a Hook,
+    base: &'a Hook+'a,
     id: &'a str,
     value: &'a str,
 }
@@ -182,7 +182,7 @@ macro_rules! define_hooks(
             fn block_hook(&self, id: &str, parent: &::gfx::skin::hook::Hook,
                           mut body: |&::gfx::skin::hook::Hook, &str| -> bool) -> bool {
                 #[allow(unused_imports)] use gfx::skin::scalar::{AsScalar, IntoScalar};
-                type HookRef<'a> = &'a ::gfx::skin::hook::Hook;
+                type HookRef<'a> = &'a ::gfx::skin::hook::Hook+'a;
                 type Body<'a> = |&::gfx::skin::hook::Hook, &str|: 'a -> bool;
 
                 match id {

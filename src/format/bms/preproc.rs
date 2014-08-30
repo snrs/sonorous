@@ -94,7 +94,7 @@ struct Block {
 }
 
 /// A generic BMS preprocessor. `T` is normally a BMS command, but there is no restriction.
-pub struct Preprocessor<'r,T,R> {
+pub struct Preprocessor<'r, T, R:'r> {
     /// The current block informations.
     blocks: Vec<Block>,
     /// Random number generator.

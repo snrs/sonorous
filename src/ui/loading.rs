@@ -126,7 +126,7 @@ impl LoadingContext {
 
     /// Loads the sound and creates a `Chunk` for it.
     pub fn load_sound(&mut self, i: uint) {
-        let path = self.bms.meta.sndpath.as_slice()[i].get_ref().clone();
+        let path = self.bms.meta.sndpath.as_slice()[i].as_ref().unwrap().clone();
         self.lastpath = Some(path.clone());
         let fullpath = self.search.resolve_relative_path_for_sound(path.as_slice(), &self.basedir);
 
@@ -142,7 +142,7 @@ impl LoadingContext {
 
     /// Loads the image or movie and creates an OpenGL texture for it.
     pub fn load_image(&mut self, i: uint) {
-        let path = self.bms.meta.imgpath.as_slice()[i].get_ref().clone();
+        let path = self.bms.meta.imgpath.as_slice()[i].as_ref().unwrap().clone();
         self.lastpath = Some(path.clone());
         let fullpath = self.search.resolve_relative_path_for_image(path.as_slice(), &self.basedir);
 
@@ -240,11 +240,11 @@ impl Scene for LoadingScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(self) -> Box<Scene> {
+    fn consume(self) -> Box<Scene+'static> {
         let LoadingScene { context, screen, .. } = self;
         let (player, imgres) = context.to_player();
         match PlayingScene::new(player, screen, imgres) {
-            Ok(scene) => scene as Box<Scene>,
+            Ok(scene) => scene as Box<Scene+'static>,
             Err(err) => die!("{}", err),
         }
     }
@@ -342,12 +342,12 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
         }
     }
 
-    fn consume(self) -> Box<Scene> {
+    fn consume(self) -> Box<Scene+'static> {
         let TextualLoadingScene { context, screen } = self;
         let (player, imgres) = context.to_player();
         match screen {
-            Some(screen) => ViewingScene::new(screen, imgres, player) as Box<Scene>,
-            None => TextualViewingScene::new(player) as Box<Scene>,
+            Some(screen) => ViewingScene::new(screen, imgres, player) as Box<Scene+'static>,
+            None => TextualViewingScene::new(player) as Box<Scene+'static>,
         }
     }
 }

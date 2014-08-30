@@ -831,7 +831,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
 }
 
 /// The preprocessing parser, which feeds parsed items from the main parser into the preprocessor.
-pub struct PreprocessingParser<'r,R> {
+pub struct PreprocessingParser<'r, R:'r> {
     /// The internal parser.
     parser: Parser<'r>,
     /// The random number generator.
@@ -845,7 +845,7 @@ pub struct PreprocessingParser<'r,R> {
  * One difference is that the preprocessor may return additional commands at the end of file,
  * so we keep the `done` flag to avoid calling the parsing iterator when it already returned None.
  */
-pub struct PreprocessingParsingIterator<'r,R> {
+pub struct PreprocessingParsingIterator<'r, R:'r> {
     /// The preprocessor that returns a pair of the line number (if any) and fully owned command.
     pp: Preprocessor<'r,(Option<uint>,BmsCommand<'static>),R>,
     /// The base parsing iterator.

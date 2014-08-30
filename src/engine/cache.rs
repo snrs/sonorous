@@ -99,7 +99,7 @@ impl<'a> Transaction<'a> {
 
     /// Consumes the transaction while commiting it.
     fn commit(mut self) {
-        let db = self.db.take_unwrap();
+        let db = self.db.take().unwrap();
         match db.prepare("COMMIT;", &None).map(|mut c| step_cursor(db, &mut c)) {
             Ok(..) => {},
             Err(err) => fail_from_sqlite(db, err),

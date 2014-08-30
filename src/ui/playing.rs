@@ -319,11 +319,13 @@ impl Scene for PlayingScene {
                 if grade == MISS {
                     // switches to the normal BGA after 600ms
                     let minlimit = when + 600;
-                    self.poorlimit.mutate_or_set(minlimit, |t| cmp::max(t, minlimit));
+                    self.poorlimit =
+                        Some(self.poorlimit.map_or(minlimit, |t| cmp::max(t, minlimit)));
                 }
                 // grade disappears after 700ms
                 let minlimit = when + 700;
-                self.gradelimit.mutate_or_set(minlimit, |t| cmp::max(t, minlimit));
+                self.gradelimit =
+                    Some(self.gradelimit.map_or(minlimit, |t| cmp::max(t, minlimit)));
             }
             if self.poorlimit < Some(self.player.now) { self.poorlimit = None; }
             if self.gradelimit < Some(self.player.now) { self.gradelimit = None; }
@@ -547,9 +549,9 @@ impl Scene for PlayingScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(self) -> Box<Scene> {
+    fn consume(self) -> Box<Scene+'static> {
         let PlayingScene { screen, player, .. } = self;
-        PlayResultScene::new(screen, player) as Box<Scene>
+        PlayResultScene::new(screen, player) as Box<Scene+'static>
     }
 }
 

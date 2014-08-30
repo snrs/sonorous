@@ -437,7 +437,7 @@ impl SelectingScene {
 
     /// Creates a new `LoadingScene` from the currently selected entry. It will load the BMS file
     /// or use the preloaded data if possible.
-    pub fn create_loading_scene(&mut self) -> Option<Box<Scene>> {
+    pub fn create_loading_scene(&mut self) -> Option<Box<Scene+'static>> {
         use std::mem::replace;
 
         let preloaded = replace(&mut self.preloaded, PreloadAfter(0));
@@ -471,7 +471,7 @@ impl SelectingScene {
             Err(err) => die!("{}", err)
         };
         Some(LoadingScene::new(self.screen.clone(), bms, infos,
-                               keyspec, keymap, self.opts.clone()) as Box<Scene>)
+                               keyspec, keymap, self.opts.clone()) as Box<Scene+'static>)
     }
 }
 
@@ -640,7 +640,7 @@ impl Scene for SelectingScene {
         *self.keepgoing.write() = false;
     }
 
-    fn consume(self) -> Box<Scene> { fail!("unreachable"); }
+    fn consume(self) -> Box<Scene+'static> { fail!("unreachable"); }
 }
 
 define_hooks! {

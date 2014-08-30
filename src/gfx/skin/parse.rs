@@ -8,7 +8,7 @@
 
 //! A (sort of) parser for Scene description language.
 
-use std::{num, result, mem};
+use std::{num, mem};
 use std::collections::{TreeMap, HashMap};
 use cson;
 use serialize::json::{Json, ToJson, Null, Boolean, I64, U64, F64, String, List, Object};
@@ -45,7 +45,7 @@ impl<T:FromJson> FromJson for Box<T> {
 impl<T:FromJson> FromJson for Vec<T> {
     fn from_json(json: Json) -> Result<Vec<T>,String> {
         match json {
-            List(l) => result::collect(l.move_iter().map(from_json::<T>)),
+            List(l) => l.move_iter().map(from_json::<T>).collect(),
             _ => Err(format!("expected a list")),
         }
     }
@@ -571,12 +571,12 @@ impl<T:FromJson> FromJson for Block<T> {
 
             // {"$$": "even?", "alt1": ..., "alt2": ..., "$default": ..., "$else": ...}
             (None, default, else_, false) => {
-                let map = result::collect(map.move_iter().map(|(k,v)|
+                let map: Result<HashMap<String,T>, String> = map.move_iter().map(|(k,v)|
                     match from_json::<T>(v) {
                         Ok(v) => Ok((k.into_string(), v)),
                         Err(err) => Err(err),
                     }
-                ));
+                ).collect();
                 Ok(MultiBlock { gen: gen, map: try!(map), default: default, else_: else_ })
             },
 

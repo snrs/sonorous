@@ -186,7 +186,7 @@ impl<S:fmt::Show,I:fmt::Show> fmt::Show for ObjData<S,I> {
             }
         }
 
-        struct fmt_or_default<'r,T>(&'r Option<T>, &'r str);
+        struct fmt_or_default<'r, T:'r>(&'r Option<T>, &'r str);
         impl<'r,T:fmt::Show> fmt::Show for fmt_or_default<'r,T> {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 match *self {

@@ -43,7 +43,7 @@ pub enum SceneCommand {
     Continue,
     /// Pushes a new `Scene` to the scene stack, making it the active scene. The current scene is
     /// stopped (after calling `deactivate`) until the new scene returns `PopScene` command.
-    PushScene(Box<Scene>),
+    PushScene(Box<Scene+'static>),
     /// Replaces the current scene with a new `Scene` that will be returned by `consume` method.
     /// The command itself does not have a `Scene` argument since new scene may have to be
     /// constructured out of the existing scene. Therefore the scene should be prepared for
@@ -78,11 +78,11 @@ pub trait Scene {
 
     /// Called when the scene is to be replaced by a new `Scene` due to the `ReplaceScene` command.
     /// When called due to the `tick` call, this is called after `deactivate` call.
-    fn consume(self) -> Box<Scene>;
+    fn consume(self) -> Box<Scene+'static>;
 }
 
 /// Runs given scene and other additionally spawned scenes.
-pub fn run_scene(scene: Box<Scene>) {
+pub fn run_scene(scene: Box<Scene+'static>) {
     let mut current = scene;
     let mut stack = Vec::new();
     loop {
@@ -101,7 +101,7 @@ pub fn run_scene(scene: Box<Scene>) {
                         _ => { break; }
                     }
                     let now = get_ticks();
-                    if now < ticklimit { sleep(Duration::milliseconds((ticklimit - now) as i32)); }
+                    if now < ticklimit { sleep(Duration::milliseconds((ticklimit - now) as i64)); }
                 }
                 current.deactivate();
             }

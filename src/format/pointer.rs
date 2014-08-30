@@ -174,7 +174,7 @@ impl<S,I> Iterator<Pointer<S,I>> for UntilIterator<S,I> {
 }
 
 /// An iterator object for `Pointer::mut_upto`.
-pub struct MutUptoIterator<'r,SoundRef,ImageRef> {
+pub struct MutUptoIterator<'r, SoundRef:'r, ImageRef:'r> {
     ptr: &'r mut Pointer<SoundRef,ImageRef>,
     finished: bool,
     lastloc: Option<ObjLoc<f64>>,
@@ -221,7 +221,7 @@ impl<'r,S,I> Drop for MutUptoIterator<'r,S,I> {
 }
 
 /// An iterator object for `Pointer::mut_until`.
-pub struct MutUntilIterator<'r,SoundRef,ImageRef> {
+pub struct MutUntilIterator<'r, SoundRef:'r, ImageRef:'r> {
     ptr: &'r mut Pointer<SoundRef,ImageRef>,
     finished: bool,
     lastloc: Option<ObjLoc<f64>>,

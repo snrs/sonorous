@@ -60,13 +60,13 @@ pub fn decode_stream(f: &mut Reader, encoding: EncodingRef) -> String {
 //
 // Rust: cannot change this to return `EncodingRef`, it seems to "infect" other uses of
 //       `UTF_8.decode(...)` etc. to fail to resolve.
-pub fn guess_decode_stream(f: &mut Reader) -> (String, &'static Encoding, f64) {
+pub fn guess_decode_stream(f: &mut Reader) -> (String, EncodingRef, f64) {
     let s: Vec<u8> = f.read_to_end().ok().unwrap_or_else(|| Vec::new());
 
     // check for BOM (Sonorous proposal #1)
     if s.len() >= 3 && [0xef, 0xbb, 0xbf].equiv(&s.slice_to(3)) {
         return (UTF_8.decode(s.as_slice(), DecodeReplace).unwrap(),
-                UTF_8 as &'static Encoding, 1.0);
+                UTF_8 as EncodingRef, 1.0);
     }
 
     // check for UTF-8 first line (Sonorous proposal #2)
@@ -75,13 +75,13 @@ pub fn guess_decode_stream(f: &mut Reader) -> (String, &'static Encoding, f64) {
     let firstline = first1k.slice_to(first1keol);
     if firstline.iter().any(|&c| c >= 0x80) && UTF_8.decode(firstline, DecodeStrict).is_ok() {
         return (UTF_8.decode(s.as_slice(), DecodeReplace).unwrap(),
-                UTF_8 as &'static Encoding, 1.0);
+                UTF_8 as EncodingRef, 1.0);
     }
 
     // ASCII: do we have to decode at all?
     if s.iter().all(|&c| c < 0x80) {
         return (ASCII.decode(s.as_slice(), DecodeReplace).unwrap(),
-                ASCII as &'static Encoding, 1.0);
+                ASCII as EncodingRef, 1.0);
     }
 
     // Windows-949/31J: guess
@@ -91,9 +91,9 @@ pub fn guess_decode_stream(f: &mut Reader) -> (String, &'static Encoding, f64) {
     let jaconfidence = Classifier::new(CharClassJa, LOG_PROBS_JA).raw_confidence(ja.as_slice());
     let (s, encoding, confidence) =
         if koconfidence < jaconfidence {
-            (ko, WINDOWS_949 as &'static Encoding, koconfidence)
+            (ko, WINDOWS_949 as EncodingRef, koconfidence)
         } else {
-            (ja, WINDOWS_31J as &'static Encoding, jaconfidence)
+            (ja, WINDOWS_31J as EncodingRef, jaconfidence)
         };
     (s, encoding, convert_raw_confidence(confidence))
 }

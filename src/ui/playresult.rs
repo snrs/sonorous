@@ -63,7 +63,7 @@ impl Scene for PlayResultScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(self) -> Box<Scene> { fail!("unreachable"); }
+    fn consume(self) -> Box<Scene+'static> { fail!("unreachable"); }
 }
 
 define_hooks! {

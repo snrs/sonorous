@@ -170,7 +170,7 @@ impl Font {
 
                     if v & (1|8) == (1|8) || v & (2|4) == (2|4) { // completely filled
                         if cur.is_some() {
-                            let mut polygon = cur.take_unwrap();
+                            let mut polygon = cur.take().unwrap();
                             polygon.x12 += 2;
                             polygon.xm2 += 2;
                             polygon.x22 += 2;
@@ -186,7 +186,7 @@ impl Font {
                             let dxm2 = 1;
                             let dx22 = if v & 2 != 0 {2} else {0};
                             if cur.is_some() {
-                                let mut polygon = cur.take_unwrap();
+                                let mut polygon = cur.take().unwrap();
                                 polygon.x12 += dx12;
                                 polygon.xm2 += dxm2;
                                 polygon.x22 += dx22;
@@ -201,9 +201,10 @@ impl Font {
                             v &= !(2|8);
                         }
 
-                        // now we have cleared the left side, any remaining polygon should be flushed.
+                        // now we have cleared the left side,
+                        // any remaining polygon should be flushed.
                         if cur.is_some() {
-                            polygons.push(cur.take_unwrap());
+                            polygons.push(cur.take().unwrap());
                         }
 
                         if v & (1|4) != 0 { // has right-side edge, add a new polygon
