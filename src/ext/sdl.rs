@@ -17,6 +17,7 @@ pub mod syswm {
 
         use libc::{HANDLE, c_int};
 
+        #[repr(C)]
         pub struct SDL_version {
             pub major: u8,
             pub minor: u8,
@@ -29,6 +30,7 @@ pub mod syswm {
             }
         }
 
+        #[repr(C)]
         pub struct SDL_SysWMinfo {
             pub version: SDL_version,
             pub window: HANDLE,

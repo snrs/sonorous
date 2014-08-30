@@ -11,7 +11,7 @@
 #![cfg(target_os = "windows")]
 
 pub mod ll {
-    #![allow(non_camel_case_types, uppercase_variables)]
+    #![allow(non_camel_case_types)]
 
     use libc::{c_int, c_uint, c_void};
     use libc::types::os::arch::extra::{BOOL, CHAR, WORD, DWORD, HANDLE};
@@ -23,6 +23,8 @@ pub mod ll {
 
     pub static OFN_HIDEREADONLY: DWORD = 4;
 
+    #[allow(non_snake_case)]
+    #[repr(C)]
     pub struct OPENFILENAMEW {
         pub lStructSize: DWORD,
         pub hwndOwner: HWND,
@@ -49,11 +51,15 @@ pub mod ll {
         pub FlagsEx: DWORD,
     }
 
+    #[allow(non_snake_case)]
+    #[repr(C)]
     pub struct FILETIME {
         pub dwLowDateTime: DWORD,
         pub dwHighDateTime: DWORD,
     }
 
+    #[allow(non_snake_case)]
+    #[repr(C)]
     pub struct WIN32_FIND_DATAA {
         pub dwFileAttributes: DWORD,
         pub ftCreationTime: FILETIME,
