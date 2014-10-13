@@ -307,7 +307,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                         arg => { return Error(format!("Unknown debugging option: -Z {}", arg)); }
                     },
                     ' ' => {} // for ignored long options
-                    '1'..'9' => { playspeed = char::to_digit(c, 10).unwrap() as f64; }
+                    '1'...'9' => { playspeed = char::to_digit(c, 10).unwrap() as f64; }
                     _ => { return Error(format!("Invalid option: -{}", c)); }
                 }
                 if !inside { break; }

@@ -108,27 +108,27 @@ pub enum Grade {
 }
 
 /// Required time difference in seconds to get at least COOL grade.
-static COOL_CUTOFF: f64 = 0.0144;
+const COOL_CUTOFF: f64 = 0.0144;
 /// Required time difference in seconds to get at least GREAT grade.
-static GREAT_CUTOFF: f64 = 0.048;
+const GREAT_CUTOFF: f64 = 0.048;
 /// Required time difference in seconds to get at least GOOD grade.
-static GOOD_CUTOFF: f64 = 0.084;
+const GOOD_CUTOFF: f64 = 0.084;
 /// Required time difference in seconds to get at least BAD grade.
-static BAD_CUTOFF: f64 = 0.144;
+const BAD_CUTOFF: f64 = 0.144;
 
 /// The number of available grades.
-pub static NGRADES: uint = 5;
+pub const NGRADES: uint = 5;
 
 /// The maximum (internal) value for the gauge.
-pub static MAXGAUGE: int = 512;
+pub const MAXGAUGE: int = 512;
 /// A base score per exact input. Actual score can increase by the combo (up to 2x) or decrease
 /// by the larger time difference.
-pub static SCOREPERNOTE: f64 = 300.0;
+pub const SCOREPERNOTE: f64 = 300.0;
 
 /// A damage due to the MISS grading. Only applied when the grading is not due to the bomb.
-static MISS_DAMAGE: Damage = GaugeDamage(0.059);
+const MISS_DAMAGE: Damage = GaugeDamage(0.059);
 /// A damage due to the BAD grading.
-static BAD_DAMAGE: Damage = GaugeDamage(0.030);
+const BAD_DAMAGE: Damage = GaugeDamage(0.030);
 
 /// Game play states independent to the display.
 pub struct Player {
@@ -395,7 +395,8 @@ impl Player {
         let nchannels = sdl_mixer::allocate_channels(-1 as libc::c_int);
         let nchannels = sdl_mixer::allocate_channels(nchannels + howmany) as uint;
         if self.lastchsnd.len() < nchannels {
-            self.lastchsnd.grow(nchannels, &None);
+            let ncopies = nchannels - self.lastchsnd.len();
+            self.lastchsnd.grow(ncopies, None);
         }
     }
 

@@ -6,7 +6,7 @@
 
 use std::{io, result, path};
 use std::io::{IoError, OtherIoError, IoResult, FileStat, SeekSet};
-use std::io::fs::{File, readdir};
+use std::io::fs::{PathExtensions, File, readdir};
 use util::md5::{MD5, MD5Hash};
 use format::metadata::{Level, Difficulty, Meta};
 
@@ -140,9 +140,9 @@ pub struct MetadataCache {
 }
 
 /// A value for `files.size` when the "file" is actually a directory.
-static SIZE_FOR_DIRECTORY: i64 = -1;
+const SIZE_FOR_DIRECTORY: i64 = -1;
 /// A value for `files.size` when the "file" is actually not a file nor a directory.
-static SIZE_FOR_NON_REGULAR: i64 = -2;
+const SIZE_FOR_NON_REGULAR: i64 = -2;
 
 /// Calculates the value for `files.size` from given `stat` result.
 fn size_from_filestat(st: &FileStat) -> i64 {
@@ -450,7 +450,7 @@ impl MetadataCache {
                        filestat.as_ref().ok().map(|st| st.modified));
 
                 let mut f = try!(File::open(path));
-                let hash = try!(MD5::from_reader(&mut f)).final();
+                let hash = try!(MD5::from_reader(&mut f)).finish();
 
                 match res {
                     CacheInvalid(fileid) => {

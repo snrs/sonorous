@@ -15,15 +15,15 @@ use util::filesearch::SearchContext;
 use gfx::gl::PreparedSurface;
 
 /// The width of BGA, or the width of screen for the exclusive mode.
-pub static BGAW: uint = 256;
+pub const BGAW: uint = 256;
 /// The height of BGA, or the height of screen for the exclusive mode.
-pub static BGAH: uint = 256;
+pub const BGAH: uint = 256;
 
 /// An internal sampling rate for SDL_mixer. Every chunk loaded is first converted to
 /// this sampling rate for the purpose of mixing.
-pub static SAMPLERATE: i32 = 44100;
+pub const SAMPLERATE: i32 = 44100;
 /// The number of bytes in the chunk converted to an internal sampling rate.
-pub static BYTESPERSEC: i32 = SAMPLERATE * 2 * 2; // stereo, 16 bits/sample
+pub const BYTESPERSEC: i32 = SAMPLERATE * 2 * 2; // stereo, 16 bits/sample
 
 /// Alternative file extensions for sound resources.
 static SOUND_EXTS: &'static [&'static str] = &[".WAV", ".OGG", ".MP3"];

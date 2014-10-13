@@ -21,7 +21,7 @@ pub mod ll {
     pub type HDC = HANDLE;
     pub type HINSTANCE = HANDLE;
 
-    pub static OFN_HIDEREADONLY: DWORD = 4;
+    pub const OFN_HIDEREADONLY: DWORD = 4;
 
     #[allow(non_snake_case)]
     #[repr(C)]

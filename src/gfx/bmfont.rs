@@ -14,10 +14,10 @@ use gfx::draw::{ShadedDrawing, ShadedDrawingTraits};
 use opengles::gl2 as gl;
 
 /// Intrinsic width of the bitmap font.
-pub static NCOLUMNS: uint = 8;
+pub const NCOLUMNS: uint = 8;
 
 /// Intrinsic height of the bitmap font.
-pub static NROWS: uint = 16;
+pub const NROWS: uint = 16;
 
 /// Bit vector which represents one row of zoomed font.
 type ZoomedFontRow = u32;
@@ -124,8 +124,8 @@ impl Font {
                 let code = indices[i] as uint;
                 i += 1;
                 match code {
-                    33..97 => { glyphs.push(words.as_slice()[code - 33]); }
-                    98..126 => {
+                    33...97 => { glyphs.push(words.as_slice()[code - 33]); }
+                    98...126 => {
                         let length = code - 95; // code=98 -> length=3
                         let distance = indices[i] as uint - 32;
                         i += 1;

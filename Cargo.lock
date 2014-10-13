@@ -1,0 +1,54 @@
+[root]
+name = "sonorous"
+version = "0.1.0"
+dependencies = [
+ "cson 0.1.0 (git+https://github.com/lifthrasiir/cson-rust.git#99fbc3f72a277adb398e28d72ce67ba6a47ffab2)",
+ "encoding 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git#16aff34b35e68b0f3a23e4d9dcff4f23cea2a414)",
+ "opengles 0.1.0 (git+https://github.com/lifthrasiir/rust-opengles-angle.git#8464d0ea5d4bb0775d5b6c29315df43b2f7fc4bb)",
+ "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
+ "sdl_image 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
+ "sdl_mixer 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
+ "sqlite3 0.1.0 (git+https://github.com/lifthrasiir/rustsqlite.git#e423c6c83c272c2db9461805b3d27a7d225cbd11)",
+]
+
+[[package]]
+name = "cson"
+version = "0.1.0"
+source = "git+https://github.com/lifthrasiir/cson-rust.git#99fbc3f72a277adb398e28d72ce67ba6a47ffab2"
+
+[[package]]
+name = "encoding"
+version = "0.1.0"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#16aff34b35e68b0f3a23e4d9dcff4f23cea2a414"
+
+[[package]]
+name = "opengles"
+version = "0.1.0"
+source = "git+https://github.com/lifthrasiir/rust-opengles-angle.git#8464d0ea5d4bb0775d5b6c29315df43b2f7fc4bb"
+
+[[package]]
+name = "sdl"
+version = "0.3.4"
+source = "git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09"
+
+[[package]]
+name = "sdl_image"
+version = "0.3.4"
+source = "git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09"
+dependencies = [
+ "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
+]
+
+[[package]]
+name = "sdl_mixer"
+version = "0.3.4"
+source = "git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09"
+dependencies = [
+ "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
+]
+
+[[package]]
+name = "sqlite3"
+version = "0.1.0"
+source = "git+https://github.com/lifthrasiir/rustsqlite.git#e423c6c83c272c2db9461805b3d27a7d225cbd11"
+

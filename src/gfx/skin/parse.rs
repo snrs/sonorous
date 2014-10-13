@@ -27,7 +27,7 @@ use gfx::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
 use gfx::skin::ast::{ColorSource, ScalarColor, StaticColor, ColorBlock};
 use gfx::skin::ast::{GradientSource, FlatColorGradient, ColorGradient, GradientBlock};
 use gfx::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
-                     Text, Group, Clip};
+                     Text, Group, Clip, NodeBlock};
 use gfx::skin::ast::{Skin};
 
 /// Values that can be constructed from JSON.
@@ -347,8 +347,8 @@ impl FromJson for Expr {
                 let mut idlen = s.len();
                 for (i, c) in s.char_indices() {
                     match c {
-                        'a'..'z' | 'A'..'Z' | '_' => { first = false; }
-                        '0'..'9' if !first => { first = false; }
+                        'a'...'z' | 'A'...'Z' | '_' => { first = false; }
+                        '0'...'9' if !first => { first = false; }
                         '.' if !first => { first = true; }
                         _ => { idlen = i; break; }
                     }
@@ -851,7 +851,7 @@ impl FromJson for Node {
                                     q: Pos { x: invert(w), y: Expr::one() } })
 
                 // {"$$": "even?", ...} etc. (delegated to Block)
-                Ok(Block(try!(from_json(Object(map)))))
+                Ok(NodeBlock(try!(from_json(Object(map)))))
             },
 
             _ => fail_with_json!(json, "a node")

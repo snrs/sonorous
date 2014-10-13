@@ -11,9 +11,9 @@ use engine::resource::{BGAW, BGAH, SAMPLERATE};
 use gfx::screen::Screen;
 
 /// The width of screen, unless the exclusive mode.
-pub static SCREENW: uint = 800;
+pub const SCREENW: uint = 800;
 /// The height of screen, unless the exclusive mode.
-pub static SCREENH: uint = 600;
+pub const SCREENH: uint = 600;
 
 /// Initializes SDL video subsystem, and creates a small screen for BGAs (`BGAW` by `BGAH` pixels)
 /// if `exclusive` is set, or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise.

@@ -31,7 +31,7 @@ use gfx::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
 use gfx::skin::ast::{ColorSource, ScalarColor, StaticColor, ColorBlock};
 use gfx::skin::ast::{GradientSource, FlatColorGradient, ColorGradient, GradientBlock};
 use gfx::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
-                     Text, Group, Clip};
+                     Text, Group, Clip, NodeBlock};
 use gfx::skin::ast::{Skin};
 use gfx::skin::hook::Hook;
 
@@ -625,7 +625,7 @@ impl<'a> State<'a> {
                     }
                 }
 
-                Block(ref block) => {
+                NodeBlock(ref block) => {
                     let mut keepgoing = true;
                     self.block(hook, block, |hook_, nodes_| {
                         keepgoing = self.nodes(hook_, nodes_.as_slice());

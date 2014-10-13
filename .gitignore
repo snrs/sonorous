@@ -1,8 +1,4 @@
-sonorous
-sonorous-test
-*.exe
+*.db
 *.o
 *.a
-*.so
-*.dll
-*.dylib
+target

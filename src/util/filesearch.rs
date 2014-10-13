@@ -11,6 +11,7 @@
 use std::{str, io};
 use std::rc::Rc;
 use std::collections::HashMap;
+use std::io::fs::PathExtensions;
 
 /// Context for searching files.
 pub struct SearchContext {

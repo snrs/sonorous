@@ -110,25 +110,23 @@ impl MD5State {
          */
         assert!(size > 0 && size % 64 == 0);
 
-        #[cfg(target_arch="x86", not(md5_force_aligned))]
-        #[cfg(target_arch="x86_64", not(md5_force_aligned))]
-        #[cfg(target_arch="vax", not(md5_force_aligned))]
+        #[cfg(all(any(target_arch="x86", target_arch="x86_64", target_arch="vax"),
+                  not(md5_force_aligned)))]
         #[inline(always)]
         unsafe fn set(ptr: *const u8, _block: &mut [u32plus], n: int) -> u32plus {
             use std::mem;
             *mem::transmute::<*const u8, *const u32>(ptr.offset(n * 4)) as u32plus
         }
 
-        #[cfg(target_arch="x86", not(md5_force_aligned))]
-        #[cfg(target_arch="x86_64", not(md5_force_aligned))]
-        #[cfg(target_arch="vax", not(md5_force_aligned))]
+        #[cfg(all(any(target_arch="x86", target_arch="x86_64", target_arch="vax"),
+                  not(md5_force_aligned)))]
         #[inline(always)]
         unsafe fn get(ptr: *const u8, block: &mut [u32plus], n: int) -> u32plus {
             set(ptr, block, n)
         }
 
-        #[cfg(not(target_arch="x86"), not(target_arch="x86_64"), not(target_arch="vax"))]
-        #[cfg(md5_force_aligned)]
+        #[cfg(any(not(any(target_arch="x86", target_arch="x86_64", target_arch="vax")),
+                  md5_force_aligned))]
         #[inline(always)]
         unsafe fn set(ptr: *const u8, block: &mut [u32plus], n: int) -> u32plus {
             let v = *ptr.offset(n * 4) as u32plus |
@@ -139,8 +137,8 @@ impl MD5State {
             v
         }
 
-        #[cfg(not(target_arch="x86"), not(target_arch="x86_64"), not(target_arch="vax"))]
-        #[cfg(md5_force_aligned)]
+        #[cfg(any(not(any(target_arch="x86", target_arch="x86_64", target_arch="vax")),
+                  md5_force_aligned))]
         #[inline(always)]
         unsafe fn get(_ptr: *const u8, block: &mut [u32plus], n: int) -> u32plus {
             *block.unsafe_ref(n as uint)
@@ -264,7 +262,7 @@ pub struct MD5 {
 /// The calculated 128-bit MD5 hash.
 pub struct MD5Hash(pub [u8, ..16]);
 
-impl Slice<u8> for MD5Hash {
+impl AsSlice<u8> for MD5Hash {
     fn as_slice<'a>(&'a self) -> &'a [u8] {
         let MD5Hash(ref hash) = *self;
         hash.as_slice()
@@ -300,7 +298,7 @@ impl MD5 {
     pub fn from_reader(rdr: &mut Reader) -> IoResult<MD5> {
         let mut md5 = MD5::new();
 
-        static BUFSIZE: uint = 4096;
+        const BUFSIZE: uint = 4096;
         let mut buf = Vec::with_capacity(BUFSIZE);
         loop {
             let read = match rdr.push(BUFSIZE, &mut buf) {
@@ -347,7 +345,7 @@ impl MD5 {
     }
 
     /// Returns a finished 16-byte digest.
-    pub fn final(self) -> MD5Hash {
+    pub fn finish(self) -> MD5Hash {
         let mut ctx = self;
 
         let mut used = (ctx.lo & 0x3f) as uint;
@@ -424,7 +422,7 @@ mod tests {
         fn md5(s: &str) -> String {
             let mut md5 = MD5::new();
             md5.update(s.as_bytes());
-            md5.final().to_string()
+            md5.finish().to_string()
         }
 
         assert_eq!(md5("").as_slice(), "d41d8cd98f00b204e9800998ecf8427e");
@@ -465,7 +463,7 @@ mod tests {
         bencher.iter(|| {
             let mut md5 = MD5::new();
             md5.update(buf.as_slice());
-            md5.final();
+            md5.finish();
         });
     }
 }

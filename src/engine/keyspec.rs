@@ -165,7 +165,7 @@ pub fn parse_key_spec(s: &str) -> Option<Vec<(Lane, KeyKind)>> {
             return None;
         }
         match (chan, KeyKind::from_char(kind)) {
-            (Key(chan @ 36/*1*36*/..107/*3*36-1*/), Some(kind)) => {
+            (Key(chan @ 36/*1*36*/...107/*3*36-1*/), Some(kind)) => {
                 specs.push((Lane(chan as uint - 1*36), kind));
             }
             (_, _) => { return None; }

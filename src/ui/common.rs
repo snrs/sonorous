@@ -144,7 +144,7 @@ impl Ticker {
     /// Returns a new ticker with a default display interval.
     pub fn new() -> Ticker {
         /// A reasonable interval for the console and graphic display. Currently set to about 21fps.
-        static INFO_INTERVAL: uint = 47;
+        const INFO_INTERVAL: uint = 47;
         Ticker::with_interval(INFO_INTERVAL)
     }
 

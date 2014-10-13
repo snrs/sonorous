@@ -285,7 +285,7 @@ pub enum Node {
     // reclipping command
     Clip { pub at: Rect },
     // block
-    Block(Block<Vec<Node>>),
+    NodeBlock(Block<Vec<Node>>),
 }
 
 /// The top-level parsed skin data.

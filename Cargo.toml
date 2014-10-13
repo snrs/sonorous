@@ -1,0 +1,30 @@
+[package]
+name = "sonorous"
+version = "0.1.0"
+authors = ["Kang Seonghoon <public+rust@mearie.org>"]
+build = "make rust-deps"
+
+[[bin]]
+name = "sonorous"
+
+[dependencies.sdl]
+git = "https://github.com/lifthrasiir/rust-sdl.git"
+
+[dependencies.sdl_image]
+git = "https://github.com/lifthrasiir/rust-sdl.git"
+
+[dependencies.sdl_mixer]
+git = "https://github.com/lifthrasiir/rust-sdl.git"
+
+[dependencies.encoding]
+git = "https://github.com/lifthrasiir/rust-encoding.git"
+
+[dependencies.opengles]
+git = "https://github.com/lifthrasiir/rust-opengles-angle.git"
+
+[dependencies.sqlite3]
+git = "https://github.com/lifthrasiir/rustsqlite.git"
+
+[dependencies.cson]
+git = "https://github.com/lifthrasiir/cson-rust.git"
+

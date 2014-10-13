@@ -169,6 +169,7 @@ pub fn play(bmspath: &Path, opts: ui::options::Options) {
     use std::rc::Rc;
     use std::cell::RefCell;
     use std::collections::HashMap;
+    use std::io::fs::PathExtensions;
 
     use ui::init::{init_audio, init_video, init_joystick};
     use ui::scene::{Scene, run_scene};

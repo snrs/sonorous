@@ -16,7 +16,7 @@ use format::metadata::{Level, LevelSystemBms, Difficulty, Meta};
 use format::bms::{parse, diag};
 use format::bms::types::{Key, MAXKEY};
 use format::bms::diag::BmsMessage;
-use format::bms::{ImageRef, SoundRef, DefaultBPM, BmsMeta, Bms};
+use format::bms::{ImageRef, SoundRef, DEFAULT_BPM, BmsMeta, Bms};
 use format::bms::{SinglePlay, CouplePlay, DoublePlay, BattlePlay};
 
 /// Loader options for BMS format.
@@ -81,7 +81,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
     // A builder for objects.
     let mut builder = TimelineBuilder::new();
-    builder.set_initbpm(DefaultBPM);
+    builder.set_initbpm(DEFAULT_BPM);
 
     // A list of unprocessed data lines. They have to be sorted with a stable algorithm and
     // processed in the order of measure number.
@@ -90,7 +90,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // objects.
     let mut shortens = Vec::new();
     // A table of BPMs. Maps to BMS #BPMxx command.
-    let mut bpmtab = Vec::from_elem(MAXKEY as uint, DefaultBPM);
+    let mut bpmtab = Vec::from_elem(MAXKEY as uint, DEFAULT_BPM);
     // A table of the length of scroll stoppers. Maps to BMS #STOP/#STP commands.
     let mut stoptab = Vec::from_elem(MAXKEY as uint, Seconds(0.0));
 
@@ -335,7 +335,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 10 => { builder.add(t, SetBGA(Layer3, imgref_to_bgaref(ImageRef(v)))); }
 
                 // channels #1x/2x: visible object, possibly LNs when #LNOBJ is in active
-                36/*1*36*/..107/*3*36-1*/ => {
+                36/*1*36*/...107/*3*36-1*/ => {
                     let lane = chan.to_lane();
                     if lnobj.is_some() && lnobj == Some(v) {
                         // change the last inserted visible object to the start of LN if any.
@@ -355,13 +355,13 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 }
 
                 // channels #3x/4x: invisible object
-                108/*3*36*/..179/*5*36-1*/ => {
+                108/*3*36*/...179/*5*36-1*/ => {
                     let lane = chan.to_lane();
                     builder.add(t, Invisible(lane, Some(SoundRef(v))));
                 }
 
                 // channels #5x/6x, #LNTYPE 1: LN endpoints
-                180/*5*36*/..251/*7*36-1*/ if !consecutiveln => {
+                180/*5*36*/...251/*7*36-1*/ if !consecutiveln => {
                     let lane = chan.to_lane();
 
                     // a pair of non-00 alphanumeric keys designate one LN. if there are an odd
@@ -376,7 +376,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 }
 
                 // channels #5x/6x, #LNTYPE 2: LN areas
-                180/*5*36*/..251/*7*36-1*/ if consecutiveln => {
+                180/*5*36*/...251/*7*36-1*/ if consecutiveln => {
                     let lane = chan.to_lane();
 
                     // one non-00 alphanumeric key, in the absence of other information, inserts one
@@ -408,10 +408,10 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
                 // channels #Dx/Ex: bombs, base-36 damage value (unit of 0.5% of the full gauge) or
                 // instant death (ZZ)
-                468/*0xD*36*/..539/*0xF*36-1*/ => {
+                468/*0xD*36*/...539/*0xF*36-1*/ => {
                     let lane = chan.to_lane();
                     let damage = match v {
-                        Key(v @ 1..200) => Some(GaugeDamage(v as f64 / 200.0)),
+                        Key(v @ 1...200) => Some(GaugeDamage(v as f64 / 200.0)),
                         Key(1295) => Some(InstantDeath), // XXX 1295=MAXKEY-1
                         _ => None
                     };
@@ -468,7 +468,8 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // since shortens are properties of the axis and not of the chart itself,
     // it is possible that some shortens can be placed after the end of chart.
     // therefore we ignore any shortens after the logical end of the chart.
-    shortens.grow(nmeasures + 1, &1.0); // we would have SetMeasureFactor up to nmeasures
+    let ncopies = nmeasures - shortens.len() + 1;
+    shortens.grow(ncopies, 1.0); // we would have SetMeasureFactor up to nmeasures
     let mut prevfactor = 1.0;
     for (measure, &factor) in shortens.slice_to(nmeasures + 1).iter().enumerate() {
         builder.add(measure as f64, MeasureBar);

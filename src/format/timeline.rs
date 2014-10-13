@@ -194,11 +194,11 @@ pub mod builder {
         for lane in range(0, NLANES) {
             let lane0 = Lane(lane);
 
-            static LNDONE: uint = 0;
-            static LNSTART: uint = 1;
-            static VISIBLE: uint = 2;
-            static INVISIBLE: uint = 3;
-            static BOMB: uint = 4;
+            const LNDONE: uint = 0;
+            const LNSTART: uint = 1;
+            const VISIBLE: uint = 2;
+            const INVISIBLE: uint = 3;
+            const BOMB: uint = 4;
             let to_type = |obj: &ObjData<S,I>| -> Option<uint> {
                 match *obj {
                     Visible(lane,_) if lane == lane0 => Some(VISIBLE),
@@ -212,7 +212,7 @@ pub mod builder {
 
             let mut inside = false;
             sanitize(objs, |obj| to_type(obj), |mut types| {
-                static LNMASK: int = (1 << LNSTART) | (1 << LNDONE);
+                const LNMASK: int = (1 << LNSTART) | (1 << LNDONE);
 
                 // remove overlapping LN endpoints altogether
                 if (types & LNMASK) == LNMASK { types &= !LNMASK; }

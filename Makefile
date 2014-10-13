@@ -2,90 +2,80 @@
 # Copyright (c) 2005, 2007, 2009, 2012, 2013, 2014, Kang Seonghoon.
 # See README.md and LICENSE.txt for details.
 
-SRC = $(wildcard src/*.rs src/*/*.rs src/*/*/*.rs src/*/*/*/*.rs)
-CRATE = src/sonorous.rs
-BIN = sonorous
-TESTBIN = sonorous-test
-RUSTC ?= rustc
-RUSTDOC ?= rustdoc
-RUSTSDL ?= libs/rust-sdl
-RUSTOPENGLES ?= libs/rust-opengles
-RUSTENCODING ?= libs/rust-encoding
-RUSTSQLITE ?= libs/rustsqlite
-CSONRUST ?= libs/cson-rust
+TARGET ?= target
+TARGETREL ?= target/release
+
+RUSTOPENGLESANGLE ?= libs/rust-opengles
 DIRECTX_SDK_INCLUDES ?= libs/w32api-directx-standalone/include
 SQLITE3 ?= libs/sqlite3
-RUSTFLAGS ?= -O
-RUSTPKGFLAGS ?= -O
+
+GIT ?= git
+DLLTOOL ?= dlltool
 CFLAGS ?= -Os
 CXXFLAGS ?= -Os
 
-LIBSDL = $(RUSTSDL)/libsdl_rust.rlib
-LIBSDL_IMAGE = $(RUSTSDL)/libsdl_image_rust.rlib
-LIBSDL_MIXER = $(RUSTSDL)/libsdl_mixer_rust.rlib
-LIBOPENGLES = $(RUSTOPENGLES)/libopengles_rust.rlib
-LIBENCODING = $(RUSTENCODING)/libencoding.rlib
-LIBSQLITE3 = $(RUSTSQLITE)/libsqlite3_rust.rlib
-LIBCSON = $(CSONRUST)/libcson.rlib
-LIBS = $(LIBSDL) $(LIBSDL_IMAGE) $(LIBSDL_MIXER) $(LIBOPENGLES) $(LIBENCODING) $(LIBSQLITE3) $(LIBCSON)
+.PHONY: all
+all:
+	@echo 'Use Cargo to build Sonorous.'
+	@echo 'This Makefile is used for external dependencies. In particular, use `$(MAKE) deps` for copying non-system dependencies into `target/` and `target/release/`.'
 
+.PHONY: update-git-submodule
+update-git-submodule:
+	$(GIT) submodule init
+	$(GIT) submodule update
 
-.PHONY: all check doc clean clean-sdl clean-opengles clean-encoding clean-sqlite clean-cson
+.PHONY: deps
+deps: \
+	update-git-submodule \
+	$(TARGET)/libGLESv2.dll \
+	$(TARGET)/libEGL.dll \
+	$(TARGETREL)/libGLESv2.dll \
+	$(TARGETREL)/libEGL.dll
 
-all: $(BIN)
+.PHONY: angle
+angle:
+	cd $(RUSTOPENGLESANGLE) && $(MAKE) angle DIRECTX_SDK_INCLUDES=$(realpath $(DIRECTX_SDK_INCLUDES))
 
-$(BIN): $(SRC) $(LIBS)
-	$(RUSTC) $(RUSTFLAGS) $(patsubst %,-L %,$(dir $(LIBS))) -L $(SQLITE3) $(CRATE) -o $(BIN)
+$(RUSTOPENGLESANGLE)/angle/src/libGLESv2.dll $(RUSTOPENGLESANGLE)/angle/src/libEGL.dll: angle
+$(TARGET)/libGLESv2.dll: $(RUSTOPENGLESANGLE)/angle/src/libGLESv2.dll
+	mkdir -p $(dir $@)
+	cp $< $@
+$(TARGET)/libEGL.dll: $(RUSTOPENGLESANGLE)/angle/src/libEGL.dll
+	mkdir -p $(dir $@)
+	cp $< $@
+$(TARGETREL)/libGLESv2.dll: $(RUSTOPENGLESANGLE)/angle/src/libGLESv2.dll
+	mkdir -p $(dir $@)
+	cp $< $@
+$(TARGETREL)/libEGL.dll: $(RUSTOPENGLESANGLE)/angle/src/libEGL.dll
+	mkdir -p $(dir $@)
+	cp $< $@
 
-$(LIBSDL): $(RUSTSDL)/src/sdl/lib.rs
-	$(RUSTC) $(RUSTPKGFLAGS) $< -C extra-filename=_rust --out-dir $(dir $@)
-
-$(LIBSDL_IMAGE): $(RUSTSDL)/src/sdl_image/lib.rs $(LIBSDL)
-	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $< -C extra-filename=_rust --out-dir $(dir $@)
-
-$(LIBSDL_MIXER): $(RUSTSDL)/src/sdl_mixer/lib.rs $(LIBSDL)
-	$(RUSTC) $(RUSTPKGFLAGS) -L $(RUSTSDL) $< -C extra-filename=_rust --out-dir $(dir $@)
-
-$(LIBOPENGLES):
-	cd $(RUSTOPENGLES) && ./configure && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS) -C extra-filename=_rust --crate-type rlib" DIRECTX_SDK_INCLUDES=$(realpath $(DIRECTX_SDK_INCLUDES))
-
-$(LIBENCODING):
-	cd $(RUSTENCODING) && $(MAKE) RUSTFLAGS="$(RUSTPKGFLAGS)"
-
-$(LIBSQLITE3): $(RUSTSQLITE)/src/sqlite3.rs $(SQLITE3)/libsqlite3.a
-	$(RUSTC) $(RUSTPKGFLAGS) -L $(SQLITE3) $< -C extra-filename=_rust --out-dir $(dir $@)
+.PHONY: rust-deps
+ifneq (,$(findstring MINGW,$(shell uname -s)))
+rust-deps: \
+	update-git-submodule \
+	$(OUT_DIR)/libsqlite3.a \
+	$(OUT_DIR)/libGLESv2.dll \
+	$(OUT_DIR)/libEGL.dll
+else
+rust-deps:
+endif
 
 $(SQLITE3)/libsqlite3.a:
 	cd $(SQLITE3) && $(MAKE) all
 
-$(LIBCSON): $(CSONRUST)/src/lib.rs
-	$(RUSTC) $(RUSTPKGFLAGS) $< --out-dir $(dir $@)
+$(OUT_DIR)/libsqlite3.a: $(SQLITE3)/libsqlite3.a
+	cp $< $@
+# XXX technically we may be able to use .def files instead of .dll, but it currently doesn't work
+$(OUT_DIR)/libGLESv2.dll: $(RUSTOPENGLESANGLE)/angle/src/libGLESv2.dll
+	cp $< $@
+$(OUT_DIR)/libEGL.dll: $(RUSTOPENGLESANGLE)/angle/src/libEGL.dll
+	cp $< $@
 
-#$(TESTBIN): $(SRC) $(LIBS)
-#	$(RUSTC) $(RUSTFLAGS) $(patsubst %,-L %,$(dir $(LIBS))) -L $(SQLITE3) --test $(CRATE) -o $(TESTBIN)
-#
-#check: $(TESTBIN)
-#	./$(TESTBIN)
-
-doc:
-	$(RUSTDOC) $(patsubst %,-L %,$(dir $(LIBS))) $(CRATE)
-
-clean: clean-sdl clean-opengles clean-encoding clean-sqlite clean-cson
-	rm -rf $(BIN) $(BIN).exe $(TESTBIN) $(TESTBIN).exe
-
-clean-sdl:
-	cd $(RUSTSDL) && rm -f *.so *.dylib *.dll *.rlib *.dummy
-
-clean-opengles:
-	cd $(RUSTOPENGLES) && $(MAKE) clean
-
-clean-encoding:
-	cd $(RUSTENCODING) && $(MAKE) clean
-
-clean-sqlite:
+.PHONY: clean-all clean-angle clean-sqlite3
+clean-all: clean-angle clean-sqlite3
+clean-angle:
+	cd $(RUSTOPENGLESANGLE) && $(MAKE) clean-all
+clean-sqlite3:
 	cd $(SQLITE3) && $(MAKE) clean
-	cd $(RUSTSQLITE) && rm -f *.so *.dylib *.dll *.rlib *.dummy
-
-clean-cson:
-	cd $(CSONRUST) && rm -f *.so *.dylib *.dll *.rlib *.dummy
 

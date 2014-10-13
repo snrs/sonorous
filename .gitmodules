@@ -1,18 +1,6 @@
-[submodule "libs/rust-sdl"]
-	path = libs/rust-sdl
-	url = https://github.com/lifthrasiir/rust-sdl.git
 [submodule "libs/rust-opengles"]
 	path = libs/rust-opengles
 	url = https://github.com/lifthrasiir/rust-opengles-angle.git
 [submodule "libs/w32api-directx-standalone"]
 	path = libs/w32api-directx-standalone
 	url = https://github.com/lifthrasiir/w32api-directx-standalone.git
-[submodule "libs/rust-encoding"]
-	path = libs/rust-encoding
-	url = https://github.com/lifthrasiir/rust-encoding.git
-[submodule "libs/rustsqlite"]
-	path = libs/rustsqlite
-	url = https://github.com/lifthrasiir/rustsqlite.git
-[submodule "libs/cson-rust"]
-	path = libs/cson-rust
-	url = https://github.com/lifthrasiir/cson-rust.git

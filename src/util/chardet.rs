@@ -158,8 +158,8 @@ impl CharClass for CharClassJa {
     fn from_char(&self, c: char) -> Option<uint> {
         use encoding::index::jis0208;
         match c {
-            '\u0000'..'\u0080'|'\u00a5'|'\u203e' => None,
-            '\uff61'..'\uff9f' => Some(1),
+            '\u0000'...'\u0080'|'\u00a5'|'\u203e' => None,
+            '\uff61'...'\uff9f' => Some(1),
             _ => {
                 let ptr = jis0208::backward(c as u32);
                 if ptr == 0xffff {

@@ -12,7 +12,7 @@ use std::fmt;
 pub struct Lane(pub uint);
 
 /// The maximum number of lanes.
-pub static NLANES: uint = 72;
+pub const NLANES: uint = 72;
 
 impl Deref<uint> for Lane {
     fn deref<'a>(&'a self) -> &'a uint {
@@ -36,7 +36,7 @@ pub enum BGALayer {
 }
 
 /// The number of BGA layers.
-pub static NLAYERS: uint = 4;
+pub const NLAYERS: uint = 4;
 
 /// Beats per minute. Used as a conversion factor between the time position and actual time
 /// in BMS.

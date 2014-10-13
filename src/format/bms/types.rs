@@ -14,7 +14,7 @@ use format::obj::Lane;
 pub struct Key(pub int);
 
 /// The number of all possible alphanumeric keys.
-pub static MAXKEY: int = 36*36;
+pub const MAXKEY: int = 36*36;
 
 impl Deref<int> for Key {
     fn deref<'a>(&'a self) -> &'a int {
@@ -29,9 +29,9 @@ static BASE36_MAP: &'static [u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 /// Converts a single alphanumeric (base-36) letter to an integer.
 fn getdigit(n: char) -> Option<int> {
     match n {
-        '0'..'9' => Some((n as int) - ('0' as int)),
-        'a'..'z' => Some((n as int) - ('a' as int) + 10),
-        'A'..'Z' => Some((n as int) - ('A' as int) + 10),
+        '0'...'9' => Some((n as int) - ('0' as int)),
+        'a'...'z' => Some((n as int) - ('a' as int) + 10),
+        'A'...'Z' => Some((n as int) - ('A' as int) + 10),
         _ => None
     }
 }

@@ -348,8 +348,8 @@ impl Scene for PlayingScene {
     fn render(&self) {
         let mut screen = self.screen.borrow_mut();
 
-        static W: f32 = SCREENW as f32;
-        static H: f32 = SCREENH as f32;
+        const W: f32 = SCREENW as f32;
+        const H: f32 = SCREENH as f32;
 
         let beat = self.player.cur.loc.vpos * 4.0 % 1.0;
 

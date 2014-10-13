@@ -202,10 +202,10 @@ pub fn print_diag(line: Option<uint>, msg: bms::diag::BmsMessage) -> bool {
 }
 
 /// The maximum number of entries displayed in one screen.
-static NUMENTRIES: uint = 15;
+const NUMENTRIES: uint = 15;
 /// The number of milliseconds after `update_offset` before the actual preloading starts,
 /// in order to avoid the worker congestion.
-static PRELOAD_DELAY: uint = 300;
+const PRELOAD_DELAY: uint = 300;
 
 impl SelectingScene {
     /// Creates a new selection scene from the screen, the root path and initial options.

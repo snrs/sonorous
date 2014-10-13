@@ -78,7 +78,7 @@ impl fmt::Show for ImageRef {
 }
 
 /// Default BPM. This value comes from the original BMS specification.
-pub static DefaultBPM: BPM = BPM(130.0);
+pub const DEFAULT_BPM: BPM = BPM(130.0);
 
 /// Play mode specified in the BMS file. This maps to BMS #PLAYER command. Over the course of
 /// the evolution of the BMS format, this value became highly ambiguous and the client is advised
