@@ -13,7 +13,7 @@ before_script:
   - rustc -v
   - cargo -V
 script:
-  - make RUSTFLAGS= RUSTPKGFLAGS=
-  - make doc
+  - cargo build -v
+  - cargo doc
 after_script:
-  - curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh
+  - cd target && curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh
