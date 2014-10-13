@@ -37,7 +37,7 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
         sdl::mouse::set_cursor_visible(false);
     }
 
-    sdl::wm::set_caption(::version().as_slice(), "");
+    sdl::wm::set_caption(::version()[], "");
     screen
 }
 

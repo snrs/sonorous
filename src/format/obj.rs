@@ -434,7 +434,7 @@ impl<S:Clone,I:Clone,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
             LNStart(_,Some(ref sref)) |
             LNDone(_,Some(ref sref)) |
             Bomb(_,Some(ref sref),_) |
-            BGM(ref sref) => vec!(sref.clone()),
+            BGM(ref sref) => vec![sref.clone()],
             _ => Vec::new()
         }
     }
@@ -457,7 +457,7 @@ impl<S:Clone,I:Clone,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
     fn images(&self) -> Vec<I> {
         match self.to_obj_data() {
             SetBGA(_,ImageBGA(ref iref)) |
-            SetBGA(_,SlicedImageBGA(ref iref,_)) => vec!(iref.clone()),
+            SetBGA(_,SlicedImageBGA(ref iref,_)) => vec![iref.clone()],
             _ => Vec::new()
         }
     }

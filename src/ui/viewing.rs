@@ -74,7 +74,7 @@ fn upload_bga_ref_to_texture(bgaref: &BGARef<ImageRef>, imgres: &[ImageResource]
         SlicedImageBGA(iref, ref slice)
                 if force || imgres[**iref as uint].should_always_upload() => {
             scratch.as_surface().fill(RGBA(0, 0, 0, 0));
-            for surface in imgres[**iref as uint].surface().move_iter() {
+            for surface in imgres[**iref as uint].surface().into_iter() {
                 // this requires SDL_SRCALPHA flags in `surface` (and not `scratch`).
                 // see `LoadedImageResource::new` for relevant codes.
                 scratch.as_surface().blit_area(surface.as_surface(), (slice.sx, slice.sy),
@@ -125,18 +125,18 @@ impl BGACanvas {
                 // TODO this design can't handle the case that a BGA layer is updated to the same
                 // image reference, which should rewind the movie playback.
                 if self.state[layer].as_image_ref() != current[layer].as_image_ref() {
-                    for &iref in self.state[layer].as_image_ref().move_iter() {
+                    for &iref in self.state[layer].as_image_ref().into_iter() {
                         imgres[**iref as uint].stop_animating();
                     }
-                    for &iref in current[layer].as_image_ref().move_iter() {
+                    for &iref in current[layer].as_image_ref().into_iter() {
                         imgres[**iref as uint].start_animating();
                     }
                 }
                 upload_bga_ref_to_texture(&current[layer], imgres,
-                                          &self.textures.as_slice()[layer], &self.scratch, true);
+                                          &self.textures[layer], &self.scratch, true);
             } else {
                 upload_bga_ref_to_texture(&self.state[layer], imgres,
-                                          &self.textures.as_slice()[layer], &self.scratch, false);
+                                          &self.textures[layer], &self.scratch, false);
             }
             self.state[layer] = current[layer].clone();
         }
@@ -150,7 +150,7 @@ impl BGACanvas {
                 match self.state[layer as uint] {
                     BlankBGA => {}
                     _ => {
-                        buf.draw_textured(&self.textures.as_slice()[layer as uint], |d| {
+                        buf.draw_textured(&self.textures[layer as uint], |d| {
                             d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
                         });
                     }
@@ -198,7 +198,7 @@ impl Scene for TextualViewingScene {
                             duration/600, duration/10%60, duration%10,
                             pos = self.player.cur.loc.vpos, bpm = *self.player.bpm,
                             lastcombo = self.player.lastcombo,
-                            nnotes = self.player.infos.nnotes).as_slice());
+                            nnotes = self.player.infos.nnotes)[]);
     }
 
     fn deactivate(&mut self) {
@@ -226,7 +226,7 @@ impl ViewingScene {
     /// and pre-loaded image resources.
     pub fn new(screen: Rc<RefCell<Screen>>, imgres: Vec<ImageResource>,
                player: Player) -> Box<ViewingScene> {
-        let bgacanvas = BGACanvas::new(imgres.as_slice());
+        let bgacanvas = BGACanvas::new(imgres[]);
         box ViewingScene { parent: TextualViewingScene::new(player),
                            screen: screen, imgres: imgres, bgacanvas: bgacanvas }
     }
@@ -239,7 +239,7 @@ impl Scene for ViewingScene {
 
     fn tick(&mut self) -> SceneCommand {
         let cmd = self.parent.tick();
-        self.bgacanvas.update(&self.parent.player.bga, self.imgres.as_slice());
+        self.bgacanvas.update(&self.parent.player.bga, self.imgres[]);
         cmd
     }
 

@@ -4,7 +4,7 @@
 
 //! Caches backed by the external database.
 
-use std::{io, result, path};
+use std::{io, path};
 use std::io::{IoError, OtherIoError, IoResult, FileStat, SeekSet};
 use std::io::fs::{PathExtensions, File, readdir};
 use util::md5::{MD5, MD5Hash};
@@ -30,33 +30,33 @@ fn test_encode_path() {
         if cs.len() == 1 {
             Path::new(cs[0])
         } else {
-            Path::new(cs[0]).join_many(cs.slice_from(1))
+            Path::new(cs[0]).join_many(cs[1..])
         }
     }
 
     let root = path([".", "a", "b"]);
-    assert_eq!(encode_path(&root, &path([".", "c", "d"])).as_slice(), b".\0..\0..\0c\0d");
-    assert_eq!(encode_path(&root, &path([".", "c", "d", ""])).as_slice(), b".\0..\0..\0c\0d");
-    assert_eq!(encode_path(&root, &path([".", "a", "e"])).as_slice(), b".\0..\0e");
-    assert_eq!(encode_path(&root, &path([".", "a", "b", "f"])).as_slice(), b".\0f");
+    assert_eq!(encode_path(&root, &path([".", "c", "d"]))[], b".\0..\0..\0c\0d");
+    assert_eq!(encode_path(&root, &path([".", "c", "d", ""]))[], b".\0..\0..\0c\0d");
+    assert_eq!(encode_path(&root, &path([".", "a", "e"]))[], b".\0..\0e");
+    assert_eq!(encode_path(&root, &path([".", "a", "b", "f"]))[], b".\0f");
 
     if cfg!(target_os = "windows") {
-        assert_eq!(encode_path(&root, &path(["\\", "x", "y", "z"])).as_slice(), b"\\\0x\0y\0z");
-        assert_eq!(encode_path(&root, &path(["C:\\", "x", "y", "z"])).as_slice(), b"C:\\\0x\0y\0z");
-        assert_eq!(encode_path(&root, &path(["c:\\", "x", "y", "z"])).as_slice(), b"C:\\\0x\0y\0z");
-        assert_eq!(encode_path(&root, &path(["C:.", "x", "y", "z"])).as_slice(), b"C:\0x\0y\0z");
-        assert_eq!(encode_path(&root, &path(["c:.", "x", "y", "z"])).as_slice(), b"C:\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["\\", "x", "y", "z"]))[], b"\\\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["C:\\", "x", "y", "z"]))[], b"C:\\\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["c:\\", "x", "y", "z"]))[], b"C:\\\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["C:.", "x", "y", "z"]))[], b"C:\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["c:.", "x", "y", "z"]))[], b"C:\0x\0y\0z");
 
         let absroot = path(["C:\\", "a", "b"]);
-        assert_eq!(encode_path(&absroot, &path(["C:\\", "c", "d"])).as_slice(), b".\0..\0..\0c\0d");
-        assert_eq!(encode_path(&absroot, &path(["D:\\", "c", "d"])).as_slice(), b"D:\\\0c\0d");
+        assert_eq!(encode_path(&absroot, &path(["C:\\", "c", "d"]))[], b".\0..\0..\0c\0d");
+        assert_eq!(encode_path(&absroot, &path(["D:\\", "c", "d"]))[], b"D:\\\0c\0d");
     } else {
-        assert_eq!(encode_path(&root, &path(["/", "x", "y", "z"])).as_slice(), b"/\0x\0y\0z");
+        assert_eq!(encode_path(&root, &path(["/", "x", "y", "z"]))[], b"/\0x\0y\0z");
 
         let absroot = path(["/", "a", "b"]);
-        assert_eq!(encode_path(&absroot, &path(["/", "c", "d"])).as_slice(), b".\0..\0..\0c\0d");
+        assert_eq!(encode_path(&absroot, &path(["/", "c", "d"]))[], b".\0..\0..\0c\0d");
         // this is why the caller should use the absolute path if possible
-        assert_eq!(encode_path(&absroot, &path([".", "c", "d"])).as_slice(), b".\0c\0d");
+        assert_eq!(encode_path(&absroot, &path([".", "c", "d"]))[], b".\0c\0d");
     }
 }
 
@@ -282,7 +282,7 @@ impl MetadataCache {
 
         let tr = try!(Transaction::new(&self.db));
 
-        let (res, dirstat) = try!(self.check_cached_entries(path, encoded.as_slice()));
+        let (res, dirstat) = try!(self.check_cached_entries(path, encoded[]));
         debug!("get_entries: cache result = {}", res);
 
         match res {
@@ -330,8 +330,8 @@ impl MetadataCache {
                         debug!("get_entries: entries = {}",
                                entries.iter().map(|p| p.display().to_string())
                                              .collect::<Vec<String>>());
-                        let entrystats: Vec<FileStat> =
-                            try!(result::collect(entries.iter().map(|p| p.stat())));
+                        let entrystats = try!(entries.iter().map(|p| p.stat())
+                                                            .collect::<Result<Vec<FileStat>,_>>());
                         debug!("get_entries: entrystats.modified = {}",
                                entrystats.iter().map(|p| p.modified).collect::<Vec<u64>>());
 
@@ -350,8 +350,8 @@ impl MetadataCache {
                             INSERT INTO files(dir, name, size, mtime) VALUES(?, ?, ?, ?);
                         "));
                         c.bind_param(1, &sqlite3::Integer64(dirid));
-                        for (path, st) in entries.move_iter().zip(entrystats.iter()) {
-                            let filename = Vec::from_slice(path.filename().unwrap());
+                        for (path, st) in entries.into_iter().zip(entrystats.iter()) {
+                            let filename = path.filename().unwrap().to_vec();
                             c.reset();
                             c.bind_param(2, &sqlite3::Blob(filename));
                             c.bind_param(3, &sqlite3::Integer64(size_from_filestat(st)));
@@ -437,7 +437,7 @@ impl MetadataCache {
 
         let tr = try!(Transaction::new(&self.db));
 
-        let (res, filestat) = try!(self.check_cached_hash(path, encoded.as_slice(), filename));
+        let (res, filestat) = try!(self.check_cached_hash(path, encoded[], filename));
         debug!("get_hash: cache result = {}", res);
 
         match res {

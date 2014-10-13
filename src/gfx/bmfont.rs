@@ -111,7 +111,7 @@ impl Font {
          * pixels with group bits 15 will be drawn.
          */
         fn decompress(dwords: &[u16], indices: &[u8]) -> Vec<u16> {
-            let mut words = vec!(0);
+            let mut words = vec![0];
             for &delta in dwords.iter() {
                 let last = *words.last().unwrap();
                 words.push(last + delta);
@@ -124,14 +124,14 @@ impl Font {
                 let code = indices[i] as uint;
                 i += 1;
                 match code {
-                    33...97 => { glyphs.push(words.as_slice()[code - 33]); }
+                    33...97 => { glyphs.push(words[code - 33]); }
                     98...126 => {
                         let length = code - 95; // code=98 -> length=3
                         let distance = indices[i] as uint - 32;
                         i += 1;
                         let start = glyphs.len() - distance;
                         for i in range(start, start + length) {
-                            let v = glyphs.as_slice()[i];
+                            let v = glyphs[i];
                             glyphs.push(v);
                         }
                     }
@@ -227,7 +227,7 @@ impl Font {
 
         let mut polygons = Vec::new();
         for base in iter::range_step(0, glyphs.len(), NROWS * 2) {
-            polygons.push(calculate_polygons(glyphs.slice(base, base + NROWS * 2), NCOLUMNS));
+            polygons.push(calculate_polygons(glyphs[base..base + NROWS * 2], NCOLUMNS));
         }
 
         Font { polygons: polygons }
@@ -257,7 +257,7 @@ impl FontDrawingUtils for ShadedDrawing {
         assert!(zoom > 0.0);
         assert!(self.prim == gl::TRIANGLES);
         let zoom = zoom * 0.5;
-        for &polygon in font.polygons.as_slice()[glyph].iter() {
+        for &polygon in font.polygons[glyph].iter() {
             let flat1 = polygon.x11 == polygon.xm1 && polygon.xm1 == polygon.x21;
             let flat2 = polygon.x12 == polygon.xm2 && polygon.xm2 == polygon.x22;
             let x11 = x + polygon.x11 as f32 * zoom;

@@ -19,7 +19,7 @@
 #![crate_type = "bin"]
 
 #![no_start]
-#![feature(macro_rules, phase, struct_variant, link_args, unsafe_destructor)]
+#![feature(macro_rules, phase, struct_variant, link_args, unsafe_destructor, slicing_syntax)]
 
 #![comment = "Sonorous"]
 #![license = "GPLv2+"]
@@ -124,7 +124,7 @@ pub fn version() -> String { "Sonorous 0.1.0-pre".to_string() }
 /// Returns an executable name used in the command line if any.
 pub fn exename() -> String {
     let args = std::os::args();
-    if args.is_empty() {"sonorous".to_string()} else {args.as_slice()[0].clone()}
+    if args.is_empty() {"sonorous".to_string()} else {args[0].clone()}
 }
 
 /// Dumps the recognized BMS commands. This is used by `-Z dump-bmscommand[-full]` debug options.
@@ -145,7 +145,7 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
     fn print_command<'r>(parsed: Parsed<'r>, callback: |Option<uint>, BmsMessage| -> bool) {
         match parsed {
             Command(_lineno, BmsUnknown(..)) => {}
-            Command(_lineno, cmd) => { util::console::printoutln(cmd.to_string().as_slice()); }
+            Command(_lineno, cmd) => { util::console::printoutln(cmd.to_string()[]); }
             Message(lineno, msg) => { callback(lineno, msg); }
             Encoding(..) => {}
         }
@@ -309,7 +309,7 @@ Available debugging options:
 /// The entry point for subprograms. Only enabled with `--cfg subprogram`.
 #[cfg(not(no_subprogram))]
 pub fn subprogram(args: &[String]) -> ! {
-    let ret: int = match args.head().map(|s| s.as_slice()) {
+    let ret: int = match args.head().map(|s| s[]) {
         None => {
             let _ = write!(&mut std::io::stderr(), "\
 The list of available subprograms:
@@ -339,9 +339,9 @@ pub fn main() {
     use ui::options;
 
     let args = std::os::args();
-    let args = args.slice(1, args.len());
+    let args = args[1..];
     if !args.is_empty() && "--subprogram".equiv(&args[0]) {
-        subprogram(args.slice(1, args.len()));
+        subprogram(args[1..]);
     }
     match options::parse_opts(args, ui::common::get_path_from_dialog) {
         options::ShowVersion => { println!("{}", version()); }

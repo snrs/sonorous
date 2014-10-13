@@ -53,13 +53,13 @@ mod from_str_prefix_impls {
     fn scan_float(s: &str) -> Option<uint> {
         scan_int(s).and_then(|pos| {
             // scan `.` followed by digits if any
-            match s.slice_from(pos).slice_shift_char() {
+            match s[pos..].slice_shift_char() {
                 (Some('.'), s_) => scan_uint(s_).map(|pos2| pos + 1u + pos2),
                 _ => Some(pos)
             }
         }).and_then(|pos| {
             // scan `e` or `E` followed by an optional sign and digits if any
-            match s.slice_from(pos).slice_shift_char() {
+            match s[pos..].slice_shift_char() {
                 (Some('e'), s_) | (Some('E'), s_) => scan_int(s_).map(|pos2| pos + 1u + pos2),
                 _ => Some(pos)
             }
@@ -72,7 +72,7 @@ mod from_str_prefix_impls {
                 impl FromStrPrefix for $t {
                     fn from_str_prefix<'a>(s: &'a str) -> Option<($t, &'a str)> {
                         $scan(s).and_then(|pos| {
-                            from_str::<$t>(s.slice_to(pos)).map(|v| (v, s.slice_from(pos)))
+                            from_str::<$t>(s[..pos]).map(|v| (v, s[pos..]))
                         })
                     }
                 }
@@ -130,7 +130,7 @@ impl ShiftablePrefix for char {
 impl<'r> ShiftablePrefix for &'r str {
     fn prefix_shifted<'r>(&self, s: &'r str) -> Option<&'r str> {
         if s.starts_with(*self) {
-            Some(s.slice_from(self.len()))
+            Some(s[self.len()..])
         } else {
             None
         }
@@ -181,7 +181,7 @@ macro_rules! lex(
     ($e:expr; str -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
         if !_line.is_empty() {
-            $dst = _line.slice_from(0); // Rust: why we need to reborrow `_line` here?!
+            $dst = _line[];
             lex!(""; $($tail)*) // optimization!
         } else {
             false
@@ -194,7 +194,7 @@ macro_rules! lex(
     });
     ($e:expr; str* -> $dst:expr, $($tail:tt)*) => ({
         let _line: &str = $e;
-        $dst = _line.slice_from(0); // Rust: why we need to reborrow `_line` here?!
+        $dst = _line[];
         lex!(""; $($tail)*) // optimization!
     });
     ($e:expr; $t:ty -> $dst:expr, $($tail:tt)*) => ({

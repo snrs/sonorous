@@ -20,9 +20,9 @@ pub fn exit(exitcode: int) -> ! {
 #[cfg(target_os = "windows")]
 pub fn die(s: String) -> ! {
     use util::std::str::StrUtil;
-    ::exename().as_slice().as_utf16_c_str(|caption| {
-        s.as_slice().as_utf16_c_str(|text| {
-            unsafe { ::ext::win32::ll::MessageBoxW(::std::ptr::mut_null(), text, caption, 0); }
+    ::exename()[].as_utf16_c_str(|caption| {
+        s[].as_utf16_c_str(|text| {
+            unsafe { ::ext::win32::ll::MessageBoxW(::std::ptr::null_mut(), text, caption, 0); }
         })
     });
     exit(1)
@@ -31,13 +31,13 @@ pub fn die(s: String) -> ! {
 /// Exits with an error message. Internally used in the `die!` macro below.
 #[cfg(not(target_os = "windows"))]
 pub fn die(s: String) -> ! {
-    printerrln(format!("{}: {}", ::exename(), s).as_slice());
+    printerrln(format!("{}: {}", ::exename(), s)[]);
     exit(1)
 }
 
 /// Prints an warning message. Internally used in the `warn!` macro below.
 pub fn warn(s: String) {
-    printerrln(format!("*** Warning: {}", s).as_slice());
+    printerrln(format!("*** Warning: {}", s)[]);
 }
 
 /// Exits with a formatted error message.
@@ -68,7 +68,7 @@ pub fn check_exit(atexit: ||) {
 /// Writes a line to the console without advancing to the next line. `s` should be short enough
 /// to be replaced (currently up to 72 bytes).
 pub fn update_line(s: &str) {
-    printerr(format!("\r{:72}\r{}", "", s).as_slice());
+    printerr(format!("\r{:72}\r{}", "", s)[]);
 }
 
 /// Reads a path string from the user in the platform-dependent way. Returns `None` if the user
@@ -76,7 +76,7 @@ pub fn update_line(s: &str) {
 #[cfg(target_os = "windows")]
 pub fn get_path_from_dialog() -> Option<Path> {
     use std::mem;
-    use std::ptr::{null, mut_null};
+    use std::ptr::{null, null_mut};
     use util::std::str::StrUtil;
     use ext::win32;
 
@@ -100,22 +100,22 @@ pub fn get_path_from_dialog() -> Option<Path> {
                 Flags: win32::ll::OFN_HIDEREADONLY,
 
                 // zero-initialized fields
-                hwndOwner: mut_null(), hInstance: mut_null(),
-                lpstrCustomFilter: mut_null(), nMaxCustFilter: 0, nFilterIndex: 0,
-                lpstrFileTitle: mut_null(), nMaxFileTitle: 0,
+                hwndOwner: null_mut(), hInstance: null_mut(),
+                lpstrCustomFilter: null_mut(), nMaxCustFilter: 0, nFilterIndex: 0,
+                lpstrFileTitle: null_mut(), nMaxFileTitle: 0,
                 lpstrInitialDir: null(), nFileOffset: 0, nFileExtension: 0,
-                lpstrDefExt: null(), lCustData: 0, lpfnHook: mut_null(),
-                lpTemplateName: null(), pvReserved: mut_null(),
+                lpstrDefExt: null(), lCustData: 0, lpfnHook: null_mut(),
+                lpTemplateName: null(), pvReserved: null_mut(),
                 dwReserved: 0, FlagsEx: 0,
             };
             let ret = unsafe {win32::ll::GetOpenFileNameW(mem::transmute(&ofn))};
             if ret != 0 {
                 let path: &[u16] = match buf.position_elem(&0) {
-                    Some(idx) => buf.slice(0, idx),
-                    None => buf.as_slice()
+                    Some(idx) => buf[..idx],
+                    None => buf[]
                 };
                 // path may result in an invaild UTF-16 path (but valid UCS-2 one)
-                String::from_utf16(path).map(|s| Path::new(s.as_slice()))
+                String::from_utf16(path).map(|s| Path::new(s[]))
             } else {
                 None
             }

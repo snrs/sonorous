@@ -4,6 +4,8 @@
 
 //! Diagnostics for BMS format.
 
+#![allow(non_uppercase_statics)]
+
 use std::fmt;
 
 /// The severity of messages. Every error message has one of the severity assigned.

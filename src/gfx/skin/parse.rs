@@ -45,7 +45,7 @@ impl<T:FromJson> FromJson for Box<T> {
 impl<T:FromJson> FromJson for Vec<T> {
     fn from_json(json: Json) -> Result<Vec<T>,String> {
         match json {
-            List(l) => l.move_iter().map(from_json::<T>).collect(),
+            List(l) => l.into_iter().map(from_json::<T>).collect(),
             _ => Err(format!("expected a list")),
         }
     }
@@ -78,7 +78,7 @@ fn num(json: &Json) -> Option<f64> {
 
 /// Returns a string representation of remaining keys in the tree map.
 fn treemap_keys(map: &TreeMap<String,Json>) -> String {
-    map.iter().map(|(k,_)| k.as_slice()).collect::<Vec<&str>>().connect(", ")
+    map.iter().map(|(k,_)| k[]).collect::<Vec<&str>>().connect(", ")
 }
 
 macro_rules! ensure_empty(
@@ -165,8 +165,8 @@ impl FromJson for Color {
             // "#rgb", "#rgba" (preferred)
             // "#rrggbb", "#rrggbbaa" (preferred)
             // "white", "transparent", ...
-            String(s) => if s.as_slice().starts_with("#") {
-                match (s.len(), num::from_str_radix::<u32>(s.as_slice().slice_from(1), 16)) {
+            String(s) => if s[].starts_with("#") {
+                match (s.len(), num::from_str_radix::<u32>(s[1..], 16)) {
                     (4, Some(v)) => Ok(RGB((((v >> 8) & 0xf) * 0x11) as u8,
                                            (((v >> 4) & 0xf) * 0x11) as u8,
                                            (( v       & 0xf) * 0x11) as u8)),
@@ -185,7 +185,7 @@ impl FromJson for Color {
                 }
             } else {
                 // predefined colors
-                match s.as_slice() {
+                match s[] {
                     "transparent"   => Ok(RGBA(0, 0, 0, 0)),
                     "white"         => Ok(RGB(255, 255, 255)),
                     "silver"        => Ok(RGB(192, 192, 192)),
@@ -208,8 +208,8 @@ impl FromJson for Color {
                 }
             },
 
-            List(l) => match l.as_slice() {
-                [List(ref l)] => match l.as_slice() {
+            List(l) => match l[] {
+                [List(ref l)] => match l[] {
                     // [[r/255, g/255, b/255]]
                     [ref r, ref g, ref b] => match (num(r), num(g), num(b)) {
                         (Some(r), Some(g), Some(b)) =>
@@ -281,7 +281,7 @@ impl FromJson for GradientSource {
 
             List(mut l) => if l.len() == 2 {
                 // [x, y]
-                let mut it = mem::replace(&mut l, Vec::new()).move_iter();
+                let mut it = mem::replace(&mut l, Vec::new()).into_iter();
                 let zero = try!(from_json(it.next().unwrap()));
                 let one = try!(from_json(it.next().unwrap()));
                 Ok(ColorGradient(zero, one))
@@ -329,16 +329,16 @@ impl FromJson for Expr {
             if lex!(s; f32 -> v, ws*, str* -> s, !) {
                 if s.starts_with("%") {
                     let e = ENum(RatioNum::from_ratio(v / 100.0));
-                    Ok((s.slice_from(1), e, TRatioNum))
+                    Ok((s[1..], e, TRatioNum))
                 } else {
                     let e = ENum(RatioNum::from_num(v));
                     Ok((s, e, TNum))
                 }
             } else if s.starts_with("(") {
-                let (s, e, t) = try!(additive(s.slice_from(1)));
+                let (s, e, t) = try!(additive(s[1..]));
                 let s = s.trim_left();
                 if s.starts_with(")") {
-                    Ok((s.slice_from(1), e, t))
+                    Ok((s[1..], e, t))
                 } else {
                     Err(format!("parsing failed at `{}`: expected `)`", s))
                 }
@@ -356,8 +356,8 @@ impl FromJson for Expr {
                 if idlen == 0 {
                     Err(format!("parsing failed at `{}`: expected an id", s))
                 } else {
-                    let e = EScalar(Id(s.slice_to(idlen).to_string()));
-                    Ok((s.slice_from(idlen), e, TNum)) // yes, no dimensional scalar for now.
+                    let e = EScalar(Id(s[..idlen].to_string()));
+                    Ok((s[idlen..], e, TNum)) // yes, no dimensional scalar for now.
                 }
             }
         }
@@ -366,7 +366,7 @@ impl FromJson for Expr {
         fn unary<'a>(s: &'a str) -> Result<(&'a str, Expr, Type), String> {
             let s = s.trim_left();
             if s.starts_with("-") {
-                let (s, e, t) = try!(atom(s.slice_from(1)));
+                let (s, e, t) = try!(atom(s[1..]));
                 Ok((s, Expr::neg(e), t))
             } else {
                 atom(s)
@@ -381,7 +381,7 @@ impl FromJson for Expr {
             loop {
                 s = s.trim_left();
                 if s.starts_with("*") {
-                    let (s_, e_, t_) = try!(unary(s.slice_from(1)));
+                    let (s_, e_, t_) = try!(unary(s[1..]));
                     s = s_;
                     e = Expr::mul(e, e_);
                     t = match (t, t_) {
@@ -392,7 +392,7 @@ impl FromJson for Expr {
                         }
                     };
                 } else if s.starts_with("/") {
-                    let (s_, e_, t_) = try!(unary(s.slice_from(1)));
+                    let (s_, e_, t_) = try!(unary(s[1..]));
                     s = s_;
                     e = Expr::div(e, e_);
                     t = match (t, t_) {
@@ -416,12 +416,12 @@ impl FromJson for Expr {
             loop {
                 s = s.trim_left();
                 if s.starts_with("+") {
-                    let (s_, e_, t_) = try!(multiplicative(s.slice_from(1)));
+                    let (s_, e_, t_) = try!(multiplicative(s[1..]));
                     s = s_;
                     e = Expr::add(e, e_);
                     t = if t == TNum && t_ == TNum {TNum} else {TRatioNum};
                 } else if s.starts_with("-") {
-                    let (s_, e_, t_) = try!(multiplicative(s.slice_from(1)));
+                    let (s_, e_, t_) = try!(multiplicative(s[1..]));
                     s = s_;
                     e = Expr::sub(e, e_);
                     t = if t == TNum && t_ == TNum {TNum} else {TRatioNum};
@@ -443,7 +443,7 @@ impl FromJson for Expr {
         }
 
         match json {
-            String(s) => expr(s.as_slice()),
+            String(s) => expr(s[]),
             I64(v) => Ok(ENum(RatioNum::from_num(v as f32))),
             U64(v) => Ok(ENum(RatioNum::from_num(v as f32))),
             F64(v) => Ok(ENum(RatioNum::from_num(v as f32))),
@@ -458,7 +458,7 @@ impl FromJson for Pos {
             // [x, y]
             List(ref mut l) => match l.len() {
                 2 => {
-                    let mut it = mem::replace(l, Vec::new()).move_iter();
+                    let mut it = mem::replace(l, Vec::new()).into_iter();
                     let x = try!(from_json(it.next().unwrap()));
                     let y = try!(from_json(it.next().unwrap()));
                     Ok(Pos { x: x, y: y })
@@ -485,7 +485,7 @@ impl FromJson for Rect {
             List(ref mut l) => match l.len() {
                 // [[px, py], [qx, qy]] (preferred)
                 2 => {
-                    let mut it = mem::replace(l, Vec::new()).move_iter();
+                    let mut it = mem::replace(l, Vec::new()).into_iter();
                     let p = try!(from_json(it.next().unwrap()));
                     let q = try!(from_json(it.next().unwrap()));
                     Ok(Rect { p: p, q: q })
@@ -493,7 +493,7 @@ impl FromJson for Rect {
 
                 // [px, py, qx, qy]
                 4 => {
-                    let mut it = mem::replace(l, Vec::new()).move_iter();
+                    let mut it = mem::replace(l, Vec::new()).into_iter();
                     let px = try!(from_json(it.next().unwrap()));
                     let py = try!(from_json(it.next().unwrap()));
                     let qx = try!(from_json(it.next().unwrap()));
@@ -552,7 +552,7 @@ impl<T:FromJson> FromJson for Block<T> {
         if then.is_some() && !map.is_empty() {
             return Err(format!("`$then` cannot be used with other alternatives in the block"));
         }
-        if map.iter().any(|(k,_)| k.as_slice().starts_with("$")) {
+        if map.iter().any(|(k,_)| k[].starts_with("$")) {
             return Err(format!("some alternatives in the block start with `$`: {}",
                                treemap_keys(&map)));
         }
@@ -571,7 +571,7 @@ impl<T:FromJson> FromJson for Block<T> {
 
             // {"$$": "even?", "alt1": ..., "alt2": ..., "$default": ..., "$else": ...}
             (None, default, else_, false) => {
-                let map: Result<HashMap<String,T>, String> = map.move_iter().map(|(k,v)|
+                let map: Result<HashMap<String,T>, String> = map.into_iter().map(|(k,v)|
                     match from_json::<T>(v) {
                         Ok(v) => Ok((k.into_string(), v)),
                         Err(err) => Err(err),
@@ -597,34 +597,34 @@ impl FromJson for ScalarFormat {
             ($msg:expr) => (return Err(format!("invalid scalar format `{}`: {}", fmt, $msg)))
         )
 
-        let mut s = fmt.as_slice();
-        let sign = if s.starts_with("+") { s = s.slice_from(1); true } else { false };
-        let unbounded = if s.starts_with("..") { s = s.slice_from(2); true } else { false };
+        let mut s = fmt[];
+        let sign = if s.starts_with("+") { s = s[1..]; true } else { false };
+        let unbounded = if s.starts_with("..") { s = s[2..]; true } else { false };
         let nhashes = s.find(|c: char| c != '#').unwrap_or(s.len());
-        s = s.slice_from(nhashes);
+        s = s[nhashes..];
         let nzeroes = s.find(|c: char| c != '0').unwrap_or(s.len());
         if nzeroes == 0 { invalid!("no `0` in the integer part"); }
-        s = s.slice_from(nzeroes);
+        s = s[nzeroes..];
         let nsixties = if s.starts_with(":00") {
-            s = s.slice_from(3);
-            if s.starts_with(":00") { s = s.slice_from(3); 2u } else { 1u }
+            s = s[3..];
+            if s.starts_with(":00") { s = s[3..]; 2u } else { 1u }
         } else {
             0u
         };
         let precision = if s.starts_with(".0") {
-            s = s.slice_from(1);
+            s = s[1..];
             let prec = s.find(|c: char| c != '0').unwrap_or(s.len());
             assert!(prec > 0);
-            s = s.slice_from(prec);
+            s = s[prec..];
             prec
         } else {
             0
         };
         s = s.trim_left();
         let mult = if s.starts_with("*") {
-            from_str::<f64>(s.slice_from(1).trim())
+            from_str::<f64>(s[1..].trim())
         } else if s.starts_with("/") {
-            from_str::<f64>(s.slice_from(1).trim()).map(|v| 1.0 / v)
+            from_str::<f64>(s[1..].trim()).map(|v| 1.0 / v)
         } else {
             if !s.is_empty() { invalid!("unknown trailing characters"); }
             Some(1.0)
@@ -786,7 +786,7 @@ impl FromJson for Node {
                         None => NROWS as f32,
                     };
                     let anchor = match map.pop(&"anchor".to_string()) {
-                        Some(String(s)) => match s.as_slice() {
+                        Some(String(s)) => match s[] {
                             "left"   => (0.0, 0.0),
                             "center" => (0.5, 0.0),
                             "right"  => (1.0, 0.0),
@@ -794,7 +794,7 @@ impl FromJson for Node {
                                 return Err(format!("unrecognized anchor type `{}` in the text", s));
                             }
                         },
-                        Some(List(l)) => match l.as_slice() {
+                        Some(List(l)) => match l[] {
                             [ref x, ref y] => match (num(x), num(y)) {
                                 (Some(x), Some(y)) => (x as f32, y as f32),
                                 _ => return Err(format!("expected an anchor pair in the list")),
@@ -867,7 +867,7 @@ impl FromJson for Skin {
                 let mut scalars = HashMap::new();
                 match map.pop(&"scalars".to_string()) {
                     Some(Object(scalarmap)) => {
-                        for (k, v) in scalarmap.move_iter() {
+                        for (k, v) in scalarmap.into_iter() {
                             scalars.insert(k.into_string(), try!(from_json(v)));
                         }
                     }

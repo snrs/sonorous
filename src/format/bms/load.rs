@@ -146,7 +146,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             parse::BmsComment(s) => {
                 let mut s_ = s.as_slice().trim();
                 if s_.starts_with("\"") && s_.ends_with("\"") { // strip quotes
-                    s_ = s_.slice(1, s_.len()-1);
+                    s_ = s_[1..s_.len()-1];
                 }
                 comments.push(s_.to_string());
             }
@@ -171,7 +171,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 if *bpm <= 0.0 {
                     diag!(diag::BmsHasNonpositiveBPM at lineno);
                 }
-                bpmtab.as_mut_slice()[i as uint] = bpm;
+                bpmtab[mut][i as uint] = bpm;
             }
 
             parse::BmsPlayer(1) => { mode = SinglePlay; }
@@ -206,20 +206,20 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
             }
 
             parse::BmsWAV(Key(i), s) => {
-                sndpath.as_mut_slice()[i as uint] = Some(s.into_string());
+                sndpath[mut][i as uint] = Some(s.into_string());
             }
             parse::BmsBMP(Key(i), s) => {
-                imgpath.as_mut_slice()[i as uint] = Some(s.into_string());
+                imgpath[mut][i as uint] = Some(s.into_string());
             }
             parse::BmsBGA(Key(i), Key(j), slice) => {
-                imgslices.as_mut_slice()[i as uint] = Some((ImageRef(Key(j)), slice));
+                imgslices[mut][i as uint] = Some((ImageRef(Key(j)), slice));
             }
 
             parse::BmsStop(Key(i), dur) => {
                 if dur.sign() < 0 {
                     diag!(diag::BmsHasNegativeSTOPDuration at lineno);
                 } else {
-                    stoptab.as_mut_slice()[i as uint] = dur;
+                    stoptab[mut][i as uint] = dur;
                 }
             }
             parse::BmsStp(pos, dur) => {
@@ -239,7 +239,11 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
             parse::BmsShorten(measure, factor) => {
                 if factor > 0.0 {
-                    shortens.grow_set(measure, &1.0, factor);
+                    if shortens.len() <= measure {
+                        let ncopies = measure - shortens.len() + 1;
+                        shortens.grow(ncopies, 1.0);
+                    }
+                    shortens[mut][measure] = factor;
                 }
             }
             parse::BmsData(measure, chan, data) => {
@@ -257,7 +261,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     if genre.is_none() { diag!(diag::BmsHasNoGENRE); }
 
     // clip the image slices if needed.
-    for slice in imgslices.mut_iter() {
+    for slice in imgslices.iter_mut() {
         match slice {
             &Some((_, ref mut slice)) => {
                 slice.sx = cmp::max(slice.sx, 0);
@@ -290,7 +294,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // Replaces the reference to #BGA/#@BGA keys into a pair of the reference to #BMP keys
     // and corresponding `ImageSlice`, if possible.
     let imgref_to_bgaref = |iref: ImageRef| -> BGARef<ImageRef> {
-        match imgslices.as_slice()[**iref as uint] {
+        match imgslices[**iref as uint] {
             Some((iref, ref slice)) => SlicedImageBGA(iref.clone(), box slice.clone()),
             None => ImageBGA(iref),
         }
@@ -326,10 +330,10 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 7 => { builder.add(t, SetBGA(Layer2, imgref_to_bgaref(ImageRef(v)))); }
 
                 // channel #08: BPM defined by #BPMxx
-                8 => { builder.add(t, SetBPM(bpmtab.as_slice()[*v as uint])); }
+                8 => { builder.add(t, SetBPM(bpmtab[*v as uint])); }
 
                 // channel #09: scroll stopper defined by #STOPxx
-                9 => { builder.add(t, Stop(stoptab.as_slice()[*v as uint])); }
+                9 => { builder.add(t, Stop(stoptab[*v as uint])); }
 
                 // channel #0A: BGA layer 3
                 10 => { builder.add(t, SetBGA(Layer3, imgref_to_bgaref(ImageRef(v)))); }
@@ -432,11 +436,11 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
         bmsline.sort_by(|a, b| (a.measure, a.chan).cmp(&(b.measure, b.chan)));
         for line in bmsline.iter() {
             let measure = line.measure as f64;
-            let data: Vec<char> = line.data.as_slice().chars().collect();
+            let data: Vec<char> = line.data[].chars().collect();
             let max = data.len() / 2 * 2;
             let count = max as f64;
             for i in iter::range_step(0, max, 2) {
-                let v = Key::from_chars(data.slice(i, i+2));
+                let v = Key::from_chars(data[i..i+2]);
                 for &v in v.iter() {
                     if v != Key(0) { // ignores 00
                         let t = measure + i as f64 / count;
@@ -468,10 +472,10 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // since shortens are properties of the axis and not of the chart itself,
     // it is possible that some shortens can be placed after the end of chart.
     // therefore we ignore any shortens after the logical end of the chart.
-    let ncopies = nmeasures - shortens.len() + 1;
+    let ncopies = nmeasures - shortens.len() + 2;
     shortens.grow(ncopies, 1.0); // we would have SetMeasureFactor up to nmeasures
     let mut prevfactor = 1.0;
-    for (measure, &factor) in shortens.slice_to(nmeasures + 1).iter().enumerate() {
+    for (measure, &factor) in shortens[..nmeasures + 1].iter().enumerate() {
         builder.add(measure as f64, MeasureBar);
         if prevfactor != factor {
             builder.add(measure as f64, SetMeasureFactor(factor));

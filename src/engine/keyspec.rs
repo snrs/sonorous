@@ -61,7 +61,7 @@ impl KeyKind {
     pub fn all() -> &'static [KeyKind] {
         static ALL: [KeyKind, ..10] = [WhiteKey, WhiteKeyAlt, BlackKey, Scratch, FootPedal,
                                        Button1, Button2, Button3, Button4, Button5];
-        ALL.as_slice()
+        ALL[]
     }
 
     /// Converts a mnemonic character to an appropriate key kind. Used for parsing a key
@@ -139,18 +139,18 @@ impl KeySpec {
     /// Returns a list of lanes on the left side, from left to right.
     pub fn left_lanes<'r>(&'r self) -> &'r [Lane] {
         assert!(self.split <= self.order.len());
-        self.order.slice(0, self.split)
+        self.order[..self.split]
     }
 
     /// Returns a list of lanes on the right side if any, from left to right.
     pub fn right_lanes<'r>(&'r self) -> &'r [Lane] {
         assert!(self.split <= self.order.len());
-        self.order.slice(self.split, self.order.len())
+        self.order[self.split..]
     }
 
     /// Removes insignificant lanes.
     pub fn filter_timeline<S:Clone,I:Clone>(&self, timeline: &mut Timeline<S,I>) {
-        filter_lanes(timeline, self.order.as_slice());
+        filter_lanes(timeline, self.order[]);
     }
 }
 
@@ -235,7 +235,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<String>) -> Option<(String, 
     };
 
     for &(name, leftkeys, rightkeys) in PRESETS.iter() {
-        if name == preset.as_slice() {
+        if name == preset[] {
             return Some((leftkeys.to_string(), rightkeys.to_string()));
         }
     }
@@ -279,9 +279,9 @@ pub fn key_spec(bms: &Bms, preset: Option<String>,
             Some(left) => {
                 let mut err = false;
                 for &(lane,kind) in left.iter() {
-                    if keyspec.kinds.as_slice()[*lane].is_some() { err = true; break; }
+                    if keyspec.kinds[*lane].is_some() { err = true; break; }
                     keyspec.order.push(lane);
-                    keyspec.kinds.as_mut_slice()[*lane] = Some(kind);
+                    keyspec.kinds[mut][*lane] = Some(kind);
                 }
                 if err {None} else {Some(left.len())}
             }
@@ -289,7 +289,7 @@ pub fn key_spec(bms: &Bms, preset: Option<String>,
     };
 
     if !leftkeys.is_empty() {
-        match parse_and_add(&mut keyspec, leftkeys.as_slice()) {
+        match parse_and_add(&mut keyspec, leftkeys[]) {
             None => { return Err(format!("Invalid key spec for left hand side: {}", leftkeys)); }
             Some(nkeys) => { keyspec.split += nkeys; }
         }
@@ -297,7 +297,7 @@ pub fn key_spec(bms: &Bms, preset: Option<String>,
         return Err(format!("No key model is specified using -k or -K"));
     }
     if !rightkeys.is_empty() {
-        match parse_and_add(&mut keyspec, rightkeys.as_slice()) {
+        match parse_and_add(&mut keyspec, rightkeys[]) {
             None => { return Err(format!("Invalid key spec for right hand side: {}", rightkeys)); }
             Some(nkeys) => { // no split panes except for Couple Play
                 if bms.meta.mode != CouplePlay { keyspec.split += nkeys; }

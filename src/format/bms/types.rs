@@ -90,7 +90,7 @@ impl Key {
 
 impl FromStrPrefix for Key {
     fn from_str_prefix<'a>(s: &'a str) -> Option<(Key, &'a str)> {
-        Key::from_str(s).map(|key| (key, s.slice_from(2)))
+        Key::from_str(s).map(|key| (key, s[2..]))
     }
 }
 
@@ -129,11 +129,11 @@ impl PartialKey {
         if s.len() < 1 { return None; }
         getdigit(s[0]).map(|a| {
             if s.len() < 2 {
-                (PartialKey(-a - 1), s.slice_from(1))
+                (PartialKey(-a - 1), s[1..])
             } else {
                 match getdigit(s[1]) {
-                    Some(b) => (PartialKey(a * 36 + b), s.slice_from(2)),
-                    None => (PartialKey(-a - 1), s.slice_from(1))
+                    Some(b) => (PartialKey(a * 36 + b), s[2..]),
+                    None => (PartialKey(-a - 1), s[1..])
                 }
             }
         })
@@ -147,15 +147,15 @@ impl PartialKey {
         getdigit(c1).map(|a| {
             assert!(p1 == 1); // c1 should be in ASCII
             if s.len() < 2 { // do not advance
-                (PartialKey(-a - 1), s.slice_from(p1))
+                (PartialKey(-a - 1), s[p1..])
             } else {
                 let str::CharRange {ch:c2, next:p2} = s.char_range_at(p1);
                 match getdigit(c2) {
                     Some(b) => {
                         assert!(p2 == 2); // both characters should be in ASCII
-                        (PartialKey(a * 36 + b), s.slice_from(p2))
+                        (PartialKey(a * 36 + b), s[p2..])
                     },
-                    None => (PartialKey(-a - 1), s.slice_from(p1))
+                    None => (PartialKey(-a - 1), s[p1..])
                 }
             }
         })

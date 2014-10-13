@@ -100,7 +100,7 @@ impl<'a> Scalar<'a> {
     /// Extracts the string slice if any.
     pub fn as_slice(&'a self) -> Option<&'a str> {
         match *self {
-            OwnedStrScalar(ref s) => Some(s.as_slice()),
+            OwnedStrScalar(ref s) => Some(s[]),
             BorrowedStrScalar(s) => Some(s),
             _ => None,
         }
@@ -136,7 +136,7 @@ impl<'a> IntoScalar<'a> for &'a str {
 }
 
 impl<'a> AsScalar<'a> for String {
-    #[inline] fn as_scalar(&'a self) -> Scalar<'a> { BorrowedStrScalar(self.as_slice()) }
+    #[inline] fn as_scalar(&'a self) -> Scalar<'a> { BorrowedStrScalar(self[]) }
 }
 
 impl IntoScalar<'static> for String {

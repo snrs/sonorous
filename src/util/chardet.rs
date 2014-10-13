@@ -52,7 +52,7 @@ impl Iterator<uint> for CharClasses {
         let limit = self.seen.len() * 64;
         let mut i = self.index;
         while i < limit {
-            if (self.seen.as_slice()[i/64] >> (i%64)) & 1 == 1 {
+            if (self.seen[i/64] >> (i%64)) & 1 == 1 {
                 self.index = i + 1;
                 return Some(i);
             }
@@ -86,8 +86,8 @@ pub trait CharClass {
         let mut seen = Vec::from_elem((self.num_classes() + 63) / 64, 0u64);
         for c in s.chars() {
             match self.from_char(c) {
-                Some(cls) if (seen.as_slice()[cls/64] >> (cls%64)) & 1 == 0 => {
-                    seen.as_mut_slice()[cls/64] |= 1 << (cls%64);
+                Some(cls) if (seen[cls/64] >> (cls%64)) & 1 == 0 => {
+                    seen[mut][cls/64] |= 1 << (cls%64);
                 }
                 _ => {}
             }
@@ -201,7 +201,7 @@ impl<CC:CharClass> Trainer<CC> {
     /// Adds a set of default frequencies to the trainer.
     pub fn add_default(&mut self) {
         for cls in range(0, self.weights.len()) {
-            let (ref mut pos, ref mut neg) = self.weights.as_mut_slice()[cls];
+            let (ref mut pos, ref mut neg) = self.weights[mut][cls];
             let (pos_, neg_) = self.cc.default_freq(cls);
             *pos += pos_;
             *neg += neg_;
@@ -214,7 +214,7 @@ impl<CC:CharClass> Trainer<CC> {
         let posw = if positive {1.0} else {0.0};
         let negw = if positive {0.0} else {1.0};
         for cls in self.cc.classes(s) {
-            let (ref mut pos, ref mut neg) = self.weights.as_mut_slice()[cls];
+            let (ref mut pos, ref mut neg) = self.weights[mut][cls];
             *pos += posw;
             *neg += negw;
         }
@@ -223,7 +223,7 @@ impl<CC:CharClass> Trainer<CC> {
     /// Scales the frequencies with given factor.
     pub fn scale(&mut self, scale: f64) {
         for cls in range(0, self.weights.len()) {
-            let (ref mut pos, ref mut neg) = self.weights.as_mut_slice()[cls];
+            let (ref mut pos, ref mut neg) = self.weights[mut][cls];
             *pos *= scale;
             *neg *= scale;
         }
@@ -233,8 +233,8 @@ impl<CC:CharClass> Trainer<CC> {
     pub fn merge(&mut self, trainer: Trainer<CC>) {
         assert!(self.weights.len() == trainer.weights.len());
         for cls in range(0, self.weights.len()) {
-            let (ref mut pos, ref mut neg) = self.weights.as_mut_slice()[cls];
-            let (pos_, neg_) = trainer.weights.as_slice()[cls];
+            let (ref mut pos, ref mut neg) = self.weights[mut][cls];
+            let (pos_, neg_) = trainer.weights[cls];
             *pos += pos_;
             *neg += neg_;
         }
@@ -243,7 +243,7 @@ impl<CC:CharClass> Trainer<CC> {
     /// Calculates the probabilities for the classifier. The original trainer is destroyed.
     pub fn into_classifier(self) -> Classifier<CC> {
         let Trainer { weights, cc } = self;
-        let logprobs: Vec<i32> = weights.move_iter().map(|(pos, neg)| {
+        let logprobs: Vec<i32> = weights.into_iter().map(|(pos, neg)| {
             let p = (pos + 1.0) / (pos + neg + 2.0);
             (((1.0 - p).ln() - p.ln()) * 65536.0).round() as i32
         }).collect();
@@ -316,7 +316,7 @@ pub fn chardet_train(args: &[String]) -> int {
         return 1;
     }
 
-    let rescale = match from_str::<f64>(args[0].as_slice()) {
+    let rescale = match from_str::<f64>(args[0][]) {
         Some(v) if v > 0.0 => v,
         _ => {
             let _ = write!(&mut stderr(), "Invalid rescale argument: {}\n", args[1]);
@@ -335,27 +335,27 @@ pub fn chardet_train(args: &[String]) -> int {
 
     let mut stream = BufferedReader::new(stdin());
     let words: Vec<String> =
-        stream.lines().map(|s| s.unwrap()).filter(|s| !s.as_slice().trim().is_empty()).collect();
+        stream.lines().map(|s| s.unwrap()).filter(|s| !s[].trim().is_empty()).collect();
     let nwords = words.len();
-    for (i, w) in words.move_iter().enumerate() {
+    for (i, w) in words.into_iter().enumerate() {
         if (i + 1) % 10000 == 0 {
             let _ = write!(&mut stderr(), "Processing {} out of {} words...\n", i + 1, nwords);
         }
-        match WINDOWS_949.encode(w.as_slice(), EncodeStrict) {
+        match WINDOWS_949.encode(w[], EncodeStrict) {
             Ok(w_) => {
-                let w_ = WINDOWS_31J.decode(w_.as_slice(), DecodeReplace).unwrap();
+                let w_ = WINDOWS_31J.decode(w_[], DecodeReplace).unwrap();
                 nkowords += 1;
-                kotrainerko.train(w.as_slice(), true);
-                jatrainerko.train(w_.as_slice(), false);
+                kotrainerko.train(w[], true);
+                jatrainerko.train(w_[], false);
             }
             Err(..) => {}
         }
-        match WINDOWS_31J.encode(w.as_slice(), EncodeStrict) {
+        match WINDOWS_31J.encode(w[], EncodeStrict) {
             Ok(w_) => {
-                let w_ = WINDOWS_949.decode(w_.as_slice(), DecodeReplace).unwrap();
+                let w_ = WINDOWS_949.decode(w_[], DecodeReplace).unwrap();
                 njawords += 1;
-                jatrainerja.train(w.as_slice(), true);
-                kotrainerja.train(w_.as_slice(), false);
+                jatrainerja.train(w[], true);
+                kotrainerja.train(w_[], false);
             }
             Err(..) => {}
         }

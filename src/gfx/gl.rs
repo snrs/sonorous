@@ -154,7 +154,7 @@ impl Shader {
     /// Creates a shader from given file path.
     pub fn from_file(shader_type: ShaderType, path: &Path) -> Result<Shader,String> {
         match io::File::open(path).and_then(|mut f| f.read_to_string()) {
-            Ok(s) => Shader::from_str(shader_type, s.as_slice()),
+            Ok(s) => Shader::from_str(shader_type, s[]),
             Err(err) => Err(err.to_string()),
         }
     }
@@ -383,7 +383,7 @@ impl Texture2D {
     /// Creates a new texture with given intrinsic dimension, which is only used for convenience
     /// in `*Drawing` interfaces.
     pub fn new(width: uint, height: uint) -> Result<Texture2D,String> {
-        let texture = gl::gen_textures(1).as_slice()[0];
+        let texture = gl::gen_textures(1)[0];
         Ok(Texture2D { index: texture, width: width, height: height })
     }
 
@@ -469,7 +469,7 @@ impl Drop for VertexBuffer {
 impl VertexBuffer {
     /// Creates a new vertex buffer object.
     pub fn new() -> VertexBuffer {
-        let vbo = gl::gen_buffers(1).as_slice()[0];
+        let vbo = gl::gen_buffers(1)[0];
         VertexBuffer { index: vbo }
     }
 
@@ -534,7 +534,7 @@ fn framebuffer_renderbuffer(target: GLenum, attachment: GLenum,
 impl RenderBuffer {
     /// Creates a new render buffer object.
     pub fn new(width: uint, height: uint) -> RenderBuffer {
-        let rbo = /*gl::*/gen_renderbuffers(1).as_slice()[0];
+        let rbo = /*gl::*/gen_renderbuffers(1)[0];
         RenderBuffer { index: rbo, width: width, height: height }
     }
 
@@ -569,7 +569,7 @@ impl Drop for FrameBuffer {
 impl FrameBuffer {
     /// Creates a new frame buffer object.
     pub fn new(width: uint, height: uint) -> FrameBuffer {
-        let fbo = gl::gen_framebuffers(1).as_slice()[0];
+        let fbo = gl::gen_framebuffers(1)[0];
         FrameBuffer { index: fbo, width: width, height: height }
     }
 

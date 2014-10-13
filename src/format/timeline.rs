@@ -390,7 +390,7 @@ pub mod builder {
         pub fn mutate(&mut self, mark: Mark, f: |f64,ObjData<S,I>| -> (f64,ObjData<S,I>)) {
             let Mark(mark) = mark;
             assert!(mark < self.objs.len());
-            let obj = &mut self.objs.as_mut_slice()[mark];
+            let obj = &mut self.objs[mut][mark];
             let (vpos, data) = f(obj.vpos, obj.data.clone()); // XXX can we just move the data?
             assert!(vpos >= 0.0);
             obj.vpos = vpos;
@@ -407,9 +407,9 @@ pub mod builder {
             let TimelineBuilder { initbpm: initbpm, objs: objs, endvpos: endvpos } = self;
             let initbpm = initbpm.expect("initial BPM should have been set");
             let mut objs = objs;
-            sort_objs(objs.as_mut_slice());
-            sanitize_objs(objs.as_mut_slice());
-            let objs = precalculate_time(initbpm, objs.as_slice(), endvpos);
+            sort_objs(objs[mut]);
+            sanitize_objs(objs[mut]);
+            let objs = precalculate_time(initbpm, objs[], endvpos);
             Timeline { initbpm: initbpm, objs: objs }
         }
     }
@@ -427,12 +427,12 @@ pub mod modf {
     pub fn filter_lanes<S:Clone,I:Clone>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
         let mut keep = Vec::from_elem(NLANES, false);
         for &Lane(lane) in lanes.iter() {
-            keep.as_mut_slice()[lane] = true;
+            keep[mut][lane] = true;
         }
 
-        for obj in timeline.objs.mut_iter() {
+        for obj in timeline.objs.iter_mut() {
             match (*obj).object_lane() {
-                Some(lane) if !keep.as_slice()[*lane] => { obj.data = obj.data.to_effect(); }
+                Some(lane) if !keep[*lane] => { obj.data = obj.data.to_effect(); }
                 _ => {}
             }
         }
@@ -452,25 +452,25 @@ pub mod modf {
     pub fn mirror<S:Clone,I:Clone>(timeline: &mut Timeline<S,I>, lanes: &[Lane]) {
         let mut map = Vec::from_fn(NLANES, |lane| Lane(lane));
         for (&Lane(from), &to) in lanes.iter().zip(lanes.iter().rev()) {
-            map.as_mut_slice()[from] = to;
+            map[mut][from] = to;
         }
 
-        for obj in timeline.objs.mut_iter() {
-            map_object_lane(obj, map.as_slice());
+        for obj in timeline.objs.iter_mut() {
+            map_object_lane(obj, map[]);
         }
     }
 
     /// Swaps given lanes in the random order.
     pub fn shuffle<S:Clone,I:Clone,R:Rng>(timeline: &mut Timeline<S,I>, r: &mut R, lanes: &[Lane]) {
-        let mut shuffled = Vec::from_slice(lanes);
-        r.shuffle(shuffled.as_mut_slice());
+        let mut shuffled = lanes.to_vec();
+        r.shuffle(shuffled[mut]);
         let mut map = Vec::from_fn(NLANES, |lane| Lane(lane));
         for (&Lane(from), &to) in lanes.iter().zip(shuffled.iter()) {
-            map.as_mut_slice()[from] = to;
+            map[mut][from] = to;
         }
 
-        for obj in timeline.objs.mut_iter() {
-            map_object_lane(obj, map.as_slice());
+        for obj in timeline.objs.iter_mut() {
+            map_object_lane(obj, map[]);
         }
     }
 
@@ -479,11 +479,11 @@ pub mod modf {
     /// close time position to the same lane.
     pub fn randomize<S:Clone,I:Clone,R:Rng>(timeline: &mut Timeline<S,I>, r: &mut R,
                                             lanes: &[Lane]) {
-        let mut movable = Vec::from_slice(lanes);
+        let mut movable = lanes.to_vec();
         let mut map = Vec::from_fn(NLANES, |lane| Lane(lane));
 
         let mut lasttime = f64::NEG_INFINITY;
-        for obj in timeline.objs.mut_iter() {
+        for obj in timeline.objs.iter_mut() {
             if (*obj).is_lnstart() {
                 let lane = (*obj).object_lane().unwrap();
                 match movable.iter().position(|&i| i == lane) {
@@ -494,16 +494,16 @@ pub mod modf {
             if lasttime < obj.loc.time { // reshuffle required
                 lasttime = obj.loc.time; // XXX should we use this restriction on very quick notes?
                 let mut shuffled = movable.clone();
-                r.shuffle(shuffled.as_mut_slice());
+                r.shuffle(shuffled[mut]);
                 for (&Lane(from), &to) in movable.iter().zip(shuffled.iter()) {
-                    map.as_mut_slice()[from] = to;
+                    map[mut][from] = to;
                 }
             }
             if (*obj).is_lnstart() {
                 let lane = (*obj).object_lane().unwrap();
                 movable.push(lane);
             }
-            map_object_lane(obj, map.as_slice());
+            map_object_lane(obj, map[]);
         }
     }
 }

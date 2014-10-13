@@ -265,7 +265,7 @@ pub struct MD5Hash(pub [u8, ..16]);
 impl AsSlice<u8> for MD5Hash {
     fn as_slice<'a>(&'a self) -> &'a [u8] {
         let MD5Hash(ref hash) = *self;
-        hash.as_slice()
+        (*hash)[]
     }
 }
 
@@ -306,7 +306,7 @@ impl MD5 {
                 Err(ref err) if err.kind == EndOfFile => break,
                 Err(err) => return Err(err),
             };
-            md5.update(buf.slice_to(read));
+            md5.update(buf[..read]);
             buf.clear();
         }
         Ok(md5)
@@ -326,19 +326,19 @@ impl MD5 {
             let available = 64 - used;
 
             if data.len() < available {
-                bytes::copy_memory(self.buffer.mut_slice_from(used), data);
+                bytes::copy_memory(self.buffer[mut used..], data);
                 return;
             }
 
-            bytes::copy_memory(self.buffer.mut_slice_from(used), data.slice_to(available));
-            data = data.slice_from(available);
+            bytes::copy_memory(self.buffer[mut used..], data[..available]);
+            data = data[available..];
             self.state.body(self.buffer);
         }
 
         if data.len() >= 64 {
             let size_ = data.len() & !0x3f;
-            self.state.body(data.slice_to(size_));
-            data = data.slice_from(size_);
+            self.state.body(data[..size_]);
+            data = data[size_..];
         }
 
         bytes::copy_memory(self.buffer, data);
@@ -354,12 +354,12 @@ impl MD5 {
 
         let available = 64 - used;
         if available < 8 {
-            ctx.buffer.mut_slice_from(used).set_memory(0);
+            ctx.buffer[mut used..].set_memory(0);
             ctx.state.body(ctx.buffer);
             used = 0;
         }
 
-        ctx.buffer.mut_slice(used, 56).set_memory(0);
+        ctx.buffer[mut used..56].set_memory(0);
 
         ctx.lo <<= 3;
         ctx.buffer[56] = ctx.lo as u8;
@@ -400,7 +400,7 @@ impl Drop for MD5 {
         self.state.b = 0;
         self.state.c = 0;
         self.state.d = 0;
-        for v in self.state.block.mut_iter() { *v = 0; }
+        for v in self.state.block.iter_mut() { *v = 0; }
         self.buffer.set_memory(0);
     }
 }
@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn test_md5_hash_to_string() {
         assert_eq!(MD5Hash([0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
-                            0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10]).to_string().as_slice(),
+                            0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10]).to_string()[],
                    "0123456789abcdeffedcba9876543210");
     }
 
@@ -425,16 +425,16 @@ mod tests {
             md5.finish().to_string()
         }
 
-        assert_eq!(md5("").as_slice(), "d41d8cd98f00b204e9800998ecf8427e");
-        assert_eq!(md5("a").as_slice(), "0cc175b9c0f1b6a831c399e269772661");
-        assert_eq!(md5("abc").as_slice(), "900150983cd24fb0d6963f7d28e17f72");
-        assert_eq!(md5("message digest").as_slice(), "f96b697d7cb7938d525a2f31aaf161d0");
-        assert_eq!(md5("abcdefghijklmnopqrstuvwxyz").as_slice(),
+        assert_eq!(md5("")[], "d41d8cd98f00b204e9800998ecf8427e");
+        assert_eq!(md5("a")[], "0cc175b9c0f1b6a831c399e269772661");
+        assert_eq!(md5("abc")[], "900150983cd24fb0d6963f7d28e17f72");
+        assert_eq!(md5("message digest")[], "f96b697d7cb7938d525a2f31aaf161d0");
+        assert_eq!(md5("abcdefghijklmnopqrstuvwxyz")[],
                    "c3fcd3d76192e4007dfb496cca67e13b");
-        assert_eq!(md5("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789").as_slice(),
+        assert_eq!(md5("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")[],
                    "d174ab98d277d9f5a5611c2c9f419d9f");
         assert_eq!(md5("1234567890123456789012345678901234567890\
-                        1234567890123456789012345678901234567890").as_slice(),
+                        1234567890123456789012345678901234567890")[],
                    "57edf4a22be3c955ac49da2e2107b67a");
     }
 
@@ -448,7 +448,7 @@ mod tests {
 
         let mut md5 = MD5::new();
         bencher.iter(|| {
-            md5.update(buf.as_slice());
+            md5.update(buf[]);
         });
     }
 
@@ -462,7 +462,7 @@ mod tests {
 
         bencher.iter(|| {
             let mut md5 = MD5::new();
-            md5.update(buf.as_slice());
+            md5.update(buf[]);
             md5.finish();
         });
     }

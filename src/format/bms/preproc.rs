@@ -104,7 +104,7 @@ pub struct Preprocessor<'r, T, R:'r> {
 impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
     /// Creates a new preprocessor with given RNG.
     pub fn new(r: &'r mut R) -> Preprocessor<'r,T,R> {
-        let blocks = vec!(Block { val: None, state: Outside, skip: false });
+        let blocks = vec![Block { val: None, state: Outside, skip: false }];
         Preprocessor { blocks: blocks, r: r }
     }
 
@@ -154,7 +154,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
                 let val = if val <= 0 {None} else {Some(val)};
                 let haspriorelse = match *flow { BmsElseIf(..) => true, _ => false };
 
-                let last = self.blocks.mut_last().unwrap();
+                let last = self.blocks.last_mut().unwrap();
                 last.state =
                     if (!haspriorelse && !last.state.inactive()) || last.state == Ignore {
                         if val.is_none() || val != last.val {Ignore} else {Process}
@@ -163,7 +163,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
                     };
             }
             BmsElse => {
-                let last = self.blocks.mut_last().unwrap();
+                let last = self.blocks.last_mut().unwrap();
                 last.state = if last.state == Ignore {Process} else {NoFurther};
             }
             BmsEndIf => {
@@ -171,7 +171,7 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
                     if idx > 0 { self.blocks.truncate(idx + 1); }
                 }
 
-                self.blocks.mut_last().unwrap().state = Outside;
+                self.blocks.last_mut().unwrap().state = Outside;
             }
             BmsSwitch(..) | BmsSetSwitch(..) | BmsEndSw | BmsCase(..) | BmsSkip | BmsDef => {
                 messages.push(diag::BmsHasUnimplementedFlow);
@@ -205,13 +205,13 @@ mod tests {
             let mut messages = Vec::new();
             let mut out = Vec::new();
             pp.feed_other(42u, &mut messages, &mut out);
-            assert!(messages.as_slice() == []);
-            assert!(out.as_slice() == [42u]);
+            assert!(messages[] == []);
+            assert!(out[] == [42u]);
             messages.clear();
             out.clear();
             pp.finish(&mut messages, &mut out);
-            assert!(messages.as_slice() == []);
-            assert!(out.as_slice() == []);
+            assert!(messages[] == []);
+            assert!(out[] == []);
         })
     }
 

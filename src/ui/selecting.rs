@@ -173,7 +173,7 @@ pub struct SelectingScene {
 fn is_bms_file(path: &Path) -> bool {
     use std::ascii::StrAsciiExt;
     match path.extension().and_then(str::from_utf8) {
-        Some(ext) => match ext.to_ascii_lower().as_slice() {
+        Some(ext) => match ext.to_ascii_lower()[] {
             "bms" | "bme" | "bml" | "pms" => true,
             _ => false
         },
@@ -248,7 +248,7 @@ impl SelectingScene {
                 let ret = cache.lock().get_entries(&root);
                 let (dirs, files) = match ret {
                     Ok((dirs, files)) => {
-                        (dirs, files.move_iter().filter(|&(ref p, _)| is_bms_file(p)).collect())
+                        (dirs, files.into_iter().filter(|&(ref p, _)| is_bms_file(p)).collect())
                     }
                     Err(err) => {
                         warn!("scanner failed to read {}: {}", root.display(), err);
@@ -256,7 +256,7 @@ impl SelectingScene {
                     }
                 };
                 sender.send(PushFiles(files));
-                for dir in dirs.move_iter() {
+                for dir in dirs.into_iter() {
                     if !recur(cache, dir, sender, keepgoing) { return false; }
                 }
                 true
@@ -287,7 +287,7 @@ impl SelectingScene {
                 let mut search = SearchContext::new();
                 let basedir = basepath.clone().unwrap_or(Path::new("."));
                 let fullpath =
-                    search.resolve_relative_path_for_image(bannerpath.as_slice(), &basedir);
+                    search.resolve_relative_path_for_image(bannerpath[], &basedir);
                 let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
                 match res {
                     Ok(LoadedImage(surface)) => {
@@ -408,7 +408,7 @@ impl SelectingScene {
     /// Returns a `Path` to the currently selected entry if any.
     pub fn current<'r>(&'r self) -> Option<&'r Path> {
         if self.offset < self.files.len() {
-            Some(&self.files.as_slice()[self.offset].path)
+            Some(&self.files[self.offset].path)
         } else {
             None
         }
@@ -557,7 +557,7 @@ impl Scene for SelectingScene {
                     if self.files.is_empty() { // immediately preloads the first entry
                         self.preloaded = PreloadAfter(0);
                     }
-                    for (path, hash) in paths.move_iter() {
+                    for (path, hash) in paths.into_iter() {
                         let job = match hash {
                             Some(hash) => self.make_cached_preloading_task(&hash, &path),
                             None => self.make_preloading_task(&path),
@@ -578,13 +578,13 @@ impl Scene for SelectingScene {
                 }
                 Ok(BmsHashRead(bmspath, hash)) => {
                     match self.fileindices.find(&bmspath) {
-                        Some(&offset) => { self.files.as_mut_slice()[offset].hash = Some(hash); }
+                        Some(&offset) => { self.files[mut][offset].hash = Some(hash); }
                         None => {}
                     }
                 }
                 Ok(BmsCacheLoaded(bmspath, meta)) => {
                     match self.fileindices.find(&bmspath) {
-                        Some(&offset) => { self.files.as_mut_slice()[offset].meta = Some(meta); }
+                        Some(&offset) => { self.files[mut][offset].meta = Some(meta); }
                         None => {}
                     }
                 }
@@ -696,14 +696,14 @@ define_hooks! {
         block "scanning" => scene.filesdone || body(parent, "");
         block "entries" => {
             let top = cmp::min(scene.scrolloffset, scene.files.len());
-            scene.files.slice_from(top).iter().enumerate().all(|(i, entry)| {
+            scene.files[top..].iter().enumerate().all(|(i, entry)| {
                 let inverted = scene.scrolloffset + i == scene.offset;
                 body(&(scene, inverted, entry), "")
             });
         };
         block "entries.before" => {
             let top = cmp::min(scene.scrolloffset, scene.files.len());
-            scene.files.slice_to(top).iter().rev().all(|entry| {
+            scene.files[..top].iter().rev().all(|entry| {
                 body(&(scene, false, entry), "")
             });
         };
@@ -712,7 +712,7 @@ define_hooks! {
             Preloading => { body(parent, "loading"); }
             Preloaded(ref data) => { body(&parent.delegate(data), "loaded"); }
             PreloadFailed(ref err) => {
-                body(&parent.add_text("preload.error", err.as_slice()), "failed");
+                body(&parent.add_text("preload.error", err[]), "failed");
             }
         };
     }

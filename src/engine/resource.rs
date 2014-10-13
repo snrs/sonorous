@@ -58,7 +58,7 @@ impl SearchContextAdditions for SearchContext {
                                        basedir: &Path) -> Result<Path,String> {
         use std::ascii::StrAsciiExt;
         // preserve extensions for the movie files
-        if path.to_ascii_lower().as_slice().ends_with(".mpg") {
+        if path.to_ascii_lower()[].ends_with(".mpg") {
             resolve_relative_path_result(self, basedir, path, [])
         } else {
             resolve_relative_path_result(self, basedir, path, IMAGE_EXTS)
@@ -85,7 +85,7 @@ impl SoundResource {
     }
 
     /// Returns the associated chunk if any.
-    pub fn mut_chunk<'r>(&'r mut self) -> Option<&'r mut Chunk> {
+    pub fn chunk_mut<'r>(&'r mut self) -> Option<&'r mut Chunk> {
         match *self {
             NoSound => None,
             Sound(ref mut chunk) => Some(chunk)

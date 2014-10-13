@@ -272,7 +272,7 @@ impl ShadedDrawingTraits for ShadedDrawing {
         program.color.define_pointer_u8(4, true, rowsize, coloroffset);
 
         let ShadedDrawing { prim, vertices } = self;
-        vertexbuf.upload(vertices.as_slice(), gl::DYNAMIC_DRAW);
+        vertexbuf.upload(vertices[], gl::DYNAMIC_DRAW);
         gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }
@@ -395,7 +395,7 @@ impl TexturedDrawingTraits for TexturedDrawing {
         texture.bind(0);
 
         let TexturedDrawing { prim, vertices, .. } = self;
-        vertexbuf.upload(vertices.as_slice(), gl::DYNAMIC_DRAW);
+        vertexbuf.upload(vertices[], gl::DYNAMIC_DRAW);
         gl::draw_arrays(prim, 0, vertices.len() as GLsizei);
     }
 }

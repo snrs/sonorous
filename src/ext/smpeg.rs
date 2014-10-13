@@ -9,7 +9,7 @@
 //! The minimal but functional binding for SMPEG.
 
 use libc::{c_int, c_float};
-use std::ptr::mut_null;
+use std::ptr::null_mut;
 use std::mem::transmute;
 use std::string::raw::from_buf;
 use sdl::video::Surface;
@@ -105,7 +105,7 @@ impl MPEG {
     pub fn from_path(path: &Path) -> Result<MPEG, String> {
         let raw = unsafe {
             let path = path.to_c_str();
-            ll::SMPEG_new(path.as_ptr(), mut_null(), 0)
+            ll::SMPEG_new(path.as_ptr(), null_mut(), 0)
         };
 
         if raw.is_null() { Err(::sdl::get_error()) }
@@ -122,7 +122,7 @@ impl MPEG {
 
     pub fn set_display(&self, surface: &Surface) {
         unsafe {
-            ll::SMPEG_setdisplay(self.raw, surface.raw, mut_null(), mut_null());
+            ll::SMPEG_setdisplay(self.raw, surface.raw, null_mut(), null_mut());
         }
     }
 

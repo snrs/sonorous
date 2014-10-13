@@ -32,7 +32,7 @@ pub mod str {
 
     impl<'r> StrUtil<'r> for &'r str {
         fn slice_upto(&self, begin: uint, end: uint) -> &'r str {
-            self.slice(begin, begin + self.count_bytes_upto(begin, end))
+            (*self)[begin..begin + self.count_bytes_upto(begin, end)]
         }
 
         fn count_bytes_upto(&self, start: uint, limit: uint) -> uint {

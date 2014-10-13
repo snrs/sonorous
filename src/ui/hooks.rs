@@ -62,15 +62,15 @@ define_hooks! {
         block "meta.title" => meta.title.is_some() && body(parent, "");
         block "meta.subtitle" =>
             meta.subtitles.iter().all(|s|
-                body(&parent.add_text("meta.subtitle", s.as_slice()), ""));
+                body(&parent.add_text("meta.subtitle", s[]), ""));
         block "meta.genre" => meta.genre.is_some() && body(parent, "");
         block "meta.artist" => meta.artist.is_some() && body(parent, "");
         block "meta.subartist" =>
             meta.subartists.iter().all(|s|
-                body(&parent.add_text("meta.subartist", s.as_slice()), ""));
+                body(&parent.add_text("meta.subartist", s[]), ""));
         block "meta.comment" =>
             meta.comments.iter().all(|s|
-                body(&parent.add_text("meta.comment", s.as_slice()), ""));
+                body(&parent.add_text("meta.comment", s[]), ""));
         block "meta.level" => meta.level.is_some() && body(parent, "");
         block "meta.levelsystem" => match meta.level.as_ref().map(|lv| lv.system) {
             Some(metadata::LevelSystemBms) => { body(parent, "bms"); }

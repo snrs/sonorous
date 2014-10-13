@@ -36,8 +36,8 @@ pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modf, r: &mu
 
     let mut lanes = Vec::new();
     for i in range(begin, end) {
-        let lane = keyspec.order.as_slice()[i];
-        let kind = keyspec.kinds.as_slice()[*lane];
+        let lane = keyspec.order[i];
+        let kind = keyspec.kinds[*lane];
         if modf == ShuffleExModf || modf == RandomExModf ||
                 kind.map_or(false, |kind| kind.counts_as_key()) {
             lanes.push(lane);
@@ -45,9 +45,9 @@ pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modf, r: &mu
     }
 
     match modf {
-        MirrorModf => timeline_modf::mirror(timeline, lanes.as_slice()),
-        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(timeline, r, lanes.as_slice()),
-        RandomModf | RandomExModf => timeline_modf::randomize(timeline, r, lanes.as_slice())
+        MirrorModf => timeline_modf::mirror(timeline, lanes[]),
+        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(timeline, r, lanes[]),
+        RandomModf | RandomExModf => timeline_modf::randomize(timeline, r, lanes[])
     };
 }
 
@@ -260,7 +260,7 @@ fn create_beep() -> sdl_mixer::Chunk {
         |i| { let i = i as i32; (i%28-14) * cmp::min(2000, (12000-i)*(12000-i)/50000) });
     unsafe {
         slice::raw::buf_as_slice(samples.as_ptr() as *const u8, samples.len() * 4, |samples| {
-            sdl_mixer::Chunk::new(Vec::from_slice(samples), 128)
+            sdl_mixer::Chunk::new(samples.to_vec(), 128)
         })
     }
 }
@@ -286,8 +286,7 @@ impl Player {
 
         // set all pointers to the origin and let the `tick` do the initial calculation
         let origin = timeline.pointer(VirtualPos, originoffset);
-        let duration = timeline.duration(originoffset,
-                                         |sref| sndres.as_slice()[**sref as uint].duration());
+        let duration = timeline.duration(originoffset, |sref| sndres[**sref as uint].duration());
         let mut player = Player {
             opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
             keyspec: keyspec, keymap: keymap,
@@ -405,16 +404,16 @@ impl Player {
     /// key sounds.
     pub fn play_sound(&mut self, sref: SoundRef, bgm: bool) {
         let sref = **sref as uint;
-        if self.sndres.as_slice()[sref].chunk().is_none() {
+        if self.sndres[sref].chunk().is_none() {
             return;
         }
-        let lastch = self.sndlastch.as_slice()[sref].map(|ch| ch as libc::c_int);
+        let lastch = self.sndlastch[sref].map(|ch| ch as libc::c_int);
 
         // try to play on the last channel if it is not occupied by other sounds (in this case
         // the last channel info is removed)
         let mut ch;
         loop {
-            ch = self.sndres.as_mut_slice()[sref].mut_chunk().unwrap().play(lastch, 0);
+            ch = self.sndres[mut][sref].chunk_mut().unwrap().play(lastch, 0);
             if ch >= 0 { break; }
             self.allocate_more_channels(32);
         }
@@ -424,11 +423,11 @@ impl Player {
         sdl_mixer::group_channel(Some(ch), Some(group));
 
         let ch = ch as uint;
-        for &idx in self.lastchsnd.as_slice()[ch].iter() {
-            self.sndlastch.as_mut_slice()[idx] = None;
+        for &idx in self.lastchsnd[ch].iter() {
+            self.sndlastch[mut][idx] = None;
         }
-        self.sndlastch.as_mut_slice()[sref] = Some(ch);
-        self.lastchsnd.as_mut_slice()[ch] = Some(sref);
+        self.sndlastch[mut][sref] = Some(ch);
+        self.lastchsnd[mut][ch] = Some(sref);
     }
 
     /// Plays a given sound if `sref` is not zero. This reflects the fact that an alphanumeric
@@ -485,7 +484,7 @@ impl Player {
         // if LN grading is in progress and it is not within the threshold then
         // MISS grade is issued
         let nextlndone =
-            self.thru.as_slice()[*lane].as_ref().and_then(|thru| {
+            self.thru[*lane].as_ref().and_then(|thru| {
                 thru.find_next_of_type(|obj| {
                     obj.object_lane() == Some(lane) &&
                     obj.is_lndone()
@@ -494,12 +493,12 @@ impl Player {
         for p in nextlndone.iter() {
             let delta = (p.loc.vtime - self.cur.loc.vtime) * self.gradefactor;
             if num::abs(delta) < BAD_CUTOFF {
-                self.nograding.as_mut_slice()[p.index] = true;
+                self.nograding[mut][p.index] = true;
             } else {
                 self.update_grade_to_miss();
             }
         }
-        self.thru.as_mut_slice()[*lane] = None;
+        self.thru[mut][*lane] = None;
     }
 
     /// Processes the press event at given lane:
@@ -522,12 +521,11 @@ impl Player {
                 obj.object_lane() == Some(lane) && obj.is_gradable()
             });
         for p in gradable.iter() {
-            if p.index >= self.checked.index && !self.nograding.as_slice()[p.index] &&
-                                                !p.is_lndone() {
+            if p.index >= self.checked.index && !self.nograding[p.index] && !p.is_lndone() {
                 let dist = (p.loc.vtime - self.cur.loc.vtime) * self.gradefactor;
                 if num::abs(dist) < BAD_CUTOFF {
-                    if p.is_lnstart() { self.thru.as_mut_slice()[*lane] = Some(p.clone()); }
-                    self.nograding.as_mut_slice()[p.index] = true;
+                    if p.is_lnstart() { self.thru[mut][*lane] = Some(p.clone()); }
+                    self.nograding[mut][p.index] = true;
                     self.update_grade_from_distance(dist);
                 }
             }
@@ -602,17 +600,17 @@ impl Player {
                 let dist = (self.cur.loc.vtime - p.loc.vtime) * self.gradefactor;
                 if dist < BAD_CUTOFF { break; }
 
-                if !self.nograding.as_slice()[p.index] {
+                if !self.nograding[p.index] {
                     for &Lane(lane) in p.object_lane().iter() {
                         let missable =
                             match p.data() {
                                 Visible(..) | LNStart(..) => true,
-                                LNDone(..) => self.thru.as_slice()[lane].is_some(),
+                                LNDone(..) => self.thru[lane].is_some(),
                                 _ => false,
                             };
                         if missable {
                             self.update_grade_to_miss();
-                            self.thru.as_mut_slice()[lane] = None;
+                            self.thru[mut][lane] = None;
                         }
                     }
                 }
@@ -680,7 +678,7 @@ impl Player {
                 match p.data() {
                     Bomb(lane,sref,damage) if self.key_pressed(lane) => {
                         // ongoing long note is not graded twice
-                        self.thru.as_mut_slice()[*lane] = None;
+                        self.thru[mut][*lane] = None;
                         for &sref in sref.iter() {
                             self.play_sound(sref, false);
                         }

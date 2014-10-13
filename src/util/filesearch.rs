@@ -37,7 +37,7 @@ impl SearchContext {
             let (dirs, files) = entries.partition(|path| path.is_dir());
             (Rc::new(dirs), Rc::new(files))
         });
-        (dirs.as_slice(), files.as_slice())
+        ((**dirs)[], (**files)[])
     }
 
     /**
@@ -89,9 +89,9 @@ impl SearchContext {
             let mut found = name.as_ref().map_or(false, |name| *name == lastpart);
             if !found && name.is_some() {
                 let name = name.unwrap();
-                match name.as_slice().rfind('.') {
+                match name[].rfind('.') {
                     Some(idx) => {
-                        let nextnoext = name.as_slice().slice_to(idx);
+                        let nextnoext = name[..idx];
                         for ext in exts.iter() {
                             if nextnoext.to_string() + *ext == lastpart {
                                 found = true;

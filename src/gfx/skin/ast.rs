@@ -72,7 +72,7 @@ impl Id {
     /// Returns a slice of the identifier for a convenient matching.
     pub fn as_slice<'a>(&'a self) -> &'a str {
         let &Id(ref id) = self;
-        id.as_slice()
+        id[]
     }
 }
 
@@ -301,7 +301,7 @@ impl Skin {
     /// Converts the relative paths in the scalar data into the absolute ones.
     pub fn make_absolute(self, base: &Path) -> Skin {
         let Skin { mut scalars, nodes } = self;
-        for (_, v) in scalars.mut_iter() {
+        for (_, v) in scalars.iter_mut() {
             match *v {
                 ImageScalar(PathSource(ref mut path), _clip) => { *path = base.join(&*path); }
                 _ => {}

@@ -61,7 +61,7 @@ impl<'r,T> AsSlice<T> for MaybeOwnedVec<'r,T> {
     #[inline]
     fn as_slice<'r>(&'r self) -> &'r [T] {
         match *self {
-            OwnedVec(ref v) => v.as_slice(),
+            OwnedVec(ref v) => v[],
             VecSlice(v) => v,
         }
     }

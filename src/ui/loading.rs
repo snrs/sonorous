@@ -102,7 +102,7 @@ impl LoadingContext {
             Some(ref path) => path,
             None => { return; }
         };
-        let fullpath = self.search.resolve_relative_path_for_image(path.as_slice(), &self.basedir);
+        let fullpath = self.search.resolve_relative_path_for_image(path[], &self.basedir);
 
         let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
         let tex_or_err = res.and_then(|res| {
@@ -126,13 +126,13 @@ impl LoadingContext {
 
     /// Loads the sound and creates a `Chunk` for it.
     pub fn load_sound(&mut self, i: uint) {
-        let path = self.bms.meta.sndpath.as_slice()[i].as_ref().unwrap().clone();
+        let path = self.bms.meta.sndpath[i].as_ref().unwrap().clone();
         self.lastpath = Some(path.clone());
-        let fullpath = self.search.resolve_relative_path_for_sound(path.as_slice(), &self.basedir);
+        let fullpath = self.search.resolve_relative_path_for_sound(path[], &self.basedir);
 
         match fullpath.and_then(|path| LoadedSoundResource::new(&path)) {
             Ok(res) => {
-                self.sndres.as_mut_slice()[i] = res.wrap();
+                self.sndres[mut][i] = res.wrap();
             }
             Err(_) => {
                 warn!("failed to load sound #WAV{} ({})", Key(i as int), path);
@@ -142,14 +142,14 @@ impl LoadingContext {
 
     /// Loads the image or movie and creates an OpenGL texture for it.
     pub fn load_image(&mut self, i: uint) {
-        let path = self.bms.meta.imgpath.as_slice()[i].as_ref().unwrap().clone();
+        let path = self.bms.meta.imgpath[i].as_ref().unwrap().clone();
         self.lastpath = Some(path.clone());
-        let fullpath = self.search.resolve_relative_path_for_image(path.as_slice(), &self.basedir);
+        let fullpath = self.search.resolve_relative_path_for_image(path[], &self.basedir);
 
         let has_movie = self.opts.has_movie();
         match fullpath.and_then(|path| LoadedImageResource::new(&path, has_movie)) {
             Ok(res) => {
-                self.imgres.as_mut_slice()[i] = res.wrap();
+                self.imgres[mut][i] = res.wrap();
             }
             Err(_) => {
                 warn!("failed to load image #BMP{} ({})", Key(i as int), path);
@@ -277,24 +277,24 @@ impl Scene for TextualLoadingScene {
 ----------------------------------------------------------------------------------------------
 Title:    {title}",
                     title = meta.title.as_ref_slice_or("")
-                ).as_slice());
+                )[]);
             for subtitle in meta.subtitles.iter() {
                 printerr(format!("
-          {subtitle}", subtitle = *subtitle).as_slice());
+          {subtitle}", subtitle = *subtitle)[]);
             }
             printerr(format!("
 Genre:    {genre}
 Artist:   {artist}",
                     genre = meta.genre.as_ref_slice_or(""),
                     artist = meta.artist.as_ref_slice_or("")
-                ).as_slice());
+                )[]);
             for subartist in meta.subartists.iter() {
                 printerr(format!("
-          {subartist}", subartist = *subartist).as_slice());
+          {subartist}", subartist = *subartist)[]);
             }
             for comment in meta.comments.iter() {
                 printerr(format!("
-\"{comment}\"", comment = *comment).as_slice());
+\"{comment}\"", comment = *comment)[]);
             }
             printerrln(format!("
 Level {level} | BPM {bpm:.2}{hasbpmchange} | \
@@ -310,7 +310,7 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
                     difficulty =
                         meta.difficulty.and_then(|d| d.name()).as_ref()
                                        .map_or("".to_string(),
-                                               |name| " ".to_string() + *name)).as_slice());
+                                               |name| " ".to_string() + *name))[]);
         }
         Continue
     }
@@ -326,10 +326,9 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
             match self.context.lastpath {
                 Some(ref path) => {
                     use util::std::str::StrUtil;
-                    let path = if path.len() < 63 {path.as_slice()}
-                               else {path.as_slice().slice_upto(0, 63)};
+                    let path = if path.len() < 63 {path[]} else {path[].slice_upto(0, 63)};
                     update_line(format!("Loading: {} ({:.0}%)", path,
-                                        100.0 * self.context.processed_jobs_ratio()).as_slice());
+                                        100.0 * self.context.processed_jobs_ratio())[]);
                 }
                 None => { update_line("Loading done."); }
             };

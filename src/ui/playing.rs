@@ -134,7 +134,7 @@ fn build_lane_styles(keyspec: &KeySpec) ->
     let mut rightmost = SCREENW;
     let mut styles = Vec::new();
     for &lane in keyspec.left_lanes().iter() {
-        let kind = keyspec.kinds.as_slice()[*lane];
+        let kind = keyspec.kinds[*lane];
         assert!(kind.is_some());
         let kind = kind.unwrap();
         let style = LaneStyle::from_kind(kind, leftmost, false);
@@ -145,7 +145,7 @@ fn build_lane_styles(keyspec: &KeySpec) ->
         }
     }
     for &lane in keyspec.right_lanes().iter().rev() {
-        let kind = keyspec.kinds.as_slice()[*lane];
+        let kind = keyspec.kinds[*lane];
         assert!(kind.is_some());
         let kind = kind.unwrap();
         let style = LaneStyle::from_kind(kind, rightmost, true);
@@ -161,14 +161,14 @@ fn build_lane_styles(keyspec: &KeySpec) ->
     let cutoff = 165;
     if leftmost < cutoff {
         for i in range(0, keyspec.split) {
-            let (_lane, ref mut style) = styles.as_mut_slice()[i];
+            let (_lane, ref mut style) = styles[mut][i];
             style.left += (cutoff - leftmost) / 2;
         }
         leftmost = cutoff;
     }
     if rightmost.map_or(false, |x| x > SCREENW - cutoff) {
         for i in range(keyspec.split, styles.len()) {
-            let (_lane, ref mut style) = styles.as_mut_slice()[i];
+            let (_lane, ref mut style) = styles[mut][i];
             style.left -= (rightmost.unwrap() - (SCREENW - cutoff)) / 2;
         }
         rightmost = Some(SCREENW - cutoff);
@@ -286,8 +286,8 @@ impl PlayingScene {
         let centerwidth = rightmost.unwrap_or(SCREENW) - leftmost;
         let bgax = leftmost + (centerwidth - BGAW) / 2;
         let bgay = (SCREENH - BGAH) / 2;
-        let sprite = create_sprite(leftmost, rightmost, styles.as_slice());
-        let bgacanvas = BGACanvas::new(imgres.as_slice());
+        let sprite = create_sprite(leftmost, rightmost, styles[]);
+        let bgacanvas = BGACanvas::new(imgres[]);
 
         Ok(box PlayingScene {
             player: player, sprite: sprite, screen: screen, imgres: imgres,
@@ -329,7 +329,7 @@ impl Scene for PlayingScene {
             }
             if self.poorlimit < Some(self.player.now) { self.poorlimit = None; }
             if self.gradelimit < Some(self.player.now) { self.gradelimit = None; }
-            self.bgacanvas.update(&self.player.bga, self.imgres.as_slice());
+            self.bgacanvas.update(&self.player.bga, self.imgres[]);
 
             Continue
         } else {
@@ -359,8 +359,7 @@ impl Scene for PlayingScene {
         if self.player.opts.has_bga() {
             static POOR_LAYERS: [BGALayer, ..1] = [PoorBGA];
             static NORM_LAYERS: [BGALayer, ..3] = [Layer1, Layer2, Layer3];
-            let layers = if self.poorlimit.is_some() {POOR_LAYERS.as_slice()}
-                         else {NORM_LAYERS.as_slice()};
+            let layers = if self.poorlimit.is_some() {POOR_LAYERS[]} else {NORM_LAYERS[]};
             self.bgacanvas.render_to_texture(screen.deref_mut(), layers);
             screen.draw_textured(self.bgacanvas.as_texture(), |d| {
                 d.rect(self.bgax as f32, self.bgay as f32,
@@ -489,7 +488,7 @@ impl Scene for PlayingScene {
                 d.string(cx, cy - 40.0, 2.0, Centered, gradename, gradecolor);
                 if self.player.lastcombo > 1 {
                     d.string(cx, cy - 12.0, 1.0, Centered,
-                             format!("{} COMBO", self.player.lastcombo).as_slice(),
+                             format!("{} COMBO", self.player.lastcombo)[],
                              Gradient { zero: RGB(0xff,0xff,0xff), one: RGB(0x80,0x80,0x80) });
                 }
                 if self.player.opts.is_autoplay() {
@@ -512,17 +511,17 @@ impl Scene for PlayingScene {
             // render panel text
             let black = RGB(0,0,0);
             d.string(10.0, 8.0, 1.0, LeftAligned,
-                     format!("SCORE {:07}", self.player.score).as_slice(), black);
+                     format!("SCORE {:07}", self.player.score)[], black);
             let nominalplayspeed = self.player.nominal_playspeed();
             d.string(5.0, H-78.0, 2.0, LeftAligned,
-                     format!("{:4.1}x", nominalplayspeed).as_slice(), black);
+                     format!("{:4.1}x", nominalplayspeed)[], black);
             d.string((self.leftmost-94) as f32, H-35.0, 1.0, LeftAligned,
                      format!("{:02u}:{:02u} / {:02u}:{:02}",
-                             elapsed/60, elapsed%60, duration/60, duration%60).as_slice(), black);
+                             elapsed/60, elapsed%60, duration/60, duration%60)[], black);
             d.string(95.0, H-62.0, 1.0, LeftAligned,
-                     format!("@{:9.4}", self.player.cur.loc.vpos).as_slice(), black);
+                     format!("@{:9.4}", self.player.cur.loc.vpos)[], black);
             d.string(95.0, H-78.0, 1.0, LeftAligned,
-                     format!("BPM {:6.2}", *self.player.bpm).as_slice(), black);
+                     format!("BPM {:6.2}", *self.player.bpm)[], black);
             let timetick = cmp::min(self.leftmost, (self.player.now - self.player.origintime) *
                                                    self.leftmost / durationmsec);
             d.glyph(6.0 + timetick as f32, H-52.0, 1.0, 95, RGB(0x40,0x40,0x40));

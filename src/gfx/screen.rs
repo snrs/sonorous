@@ -72,7 +72,7 @@ impl GLState {
         if configs.is_empty() {
             return Err(format!("no suitable EGL configs available"));
         }
-        let config = configs.as_slice()[0];
+        let config = configs[0];
 
         let surfaceattrs = [
             // none
@@ -155,11 +155,11 @@ impl Screen {
         let mut surfaceflags;
         let mut videoflags;
         if fullscreen {
-            surfaceflags = vec!();
-            videoflags = vec!(video::Fullscreen);
+            surfaceflags = vec![];
+            videoflags = vec![video::Fullscreen];
         } else {
-            surfaceflags = vec!(video::SWSurface);
-            videoflags = vec!(video::DoubleBuf);
+            surfaceflags = vec![video::SWSurface];
+            videoflags = vec![video::DoubleBuf];
         }
         if GLState::uses_sdl_ogl_support() {
             // SDL_OPENGL flag cannot be used in Windows as ANGLE should own the screen context.
@@ -167,7 +167,7 @@ impl Screen {
         }
 
         let screen = try!(video::set_video_mode(width as int, height as int, 32,
-                                                surfaceflags.as_slice(), videoflags.as_slice()));
+                                                surfaceflags[], videoflags[]));
         let glstate = try!(GLState::new());
 
         gl::enable(gl::BLEND);
@@ -202,7 +202,7 @@ impl Screen {
         self.program_for_shades.local_transform.set_matrix_3f(false, matrix);
         self.program_for_textures.bind();
         self.program_for_textures.local_transform.set_matrix_3f(false, matrix);
-        self.last_local_transform.mut_slice(0, 9).clone_from_slice(matrix);
+        self.last_local_transform[mut 0..9].clone_from_slice(matrix);
     }
 
     /// Sets the viewport, which translates [-1,1]x[-1,1] coordinates into the window coordinates.
@@ -219,7 +219,7 @@ impl Screen {
         self.program_for_shades.projection.set_matrix_4f(false, matrix);
         self.program_for_textures.bind();
         self.program_for_textures.projection.set_matrix_4f(false, matrix);
-        self.last_projection.mut_slice(0, 16).clone_from_slice(matrix);
+        self.last_projection[mut 0..16].clone_from_slice(matrix);
     }
 
     /// Sets the orthographic projection matrix with given 2D bounds.
@@ -242,8 +242,8 @@ impl Screen {
         let saved_local_transform = self.last_local_transform;
         f(self);
         self.set_viewport(saved_vl, saved_vt, saved_vw, saved_vh);
-        self.set_projection(saved_projection.as_slice());
-        self.set_local_transform(saved_local_transform.as_slice());
+        self.set_projection(saved_projection[]);
+        self.set_local_transform(saved_local_transform[]);
     }
 
     /// Swap the buffers if the double buffering is enabled. Do nothing otherwise.

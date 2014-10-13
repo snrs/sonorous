@@ -118,7 +118,7 @@ impl Options {
     pub fn loader_options(&self) -> LoaderOptions {
         let mut loaderopts = LoaderOptions::new();
         loaderopts.parser.force_encoding =
-            self.encoding.as_ref().and_then(|s| encoding_from_whatwg_label(s.as_slice()));
+            self.encoding.as_ref().and_then(|s| encoding_from_whatwg_label(s[]));
         loaderopts
     }
 
@@ -159,7 +159,7 @@ pub enum ParsingResult {
 /// Parses given arguments (excluding the program name) and returns a parsed path to BMS file and
 /// options. `get_path` is called only when arguments do not contain the path.
 pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResult {
-    let longargs: HashMap<&str,char> = vec!(
+    let longargs: HashMap<&str,char> = vec![
         ("--help", 'h'), ("--version", 'V'), ("--speed", 'a'),
         ("--autoplay", 'v'), ("--exclusive", 'x'), ("--sound-only", 'X'),
         ("--windowed", 'w'), ("--no-fullscreen", 'w'),
@@ -170,7 +170,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
         ("--movie", ' '), ("--no-movie", 'M'), ("--joystick", 'j'),
         ("--encoding", 'E'), ("--database-root", 'D'), ("--skin-root", 'Y'),
         ("--debug", 'Z')
-    ).move_iter().collect();
+    ].into_iter().collect();
 
     let nargs = args.len();
     let selforcwd = os::self_exe_path().unwrap_or(Path::new("."));
@@ -196,7 +196,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
 
     let mut i = 0;
     while i < nargs {
-        let arg = args[i].as_slice();
+        let arg = args[i][];
         if !arg.starts_with("-") {
             if bmspath.is_none() {
                 bmspath = Some(Path::new(arg));
@@ -215,24 +215,24 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                         None => { return Error(format!("Invalid option: {}", arg)); }
                     }
                 } else {
-                    arg.slice_from(1).to_string()
+                    arg[1..].to_string()
                 };
             let nshortargs = shortargs.len();
 
             let mut inside = true;
-            for (j, c) in shortargs.as_slice().chars().enumerate() {
+            for (j, c) in shortargs[].chars().enumerate() {
                 // Reads the argument of the option. Option string should be consumed first.
                 macro_rules! fetch_arg(($opt:expr) => ({
                     let off = if inside {j+1} else {j};
                     let nextarg =
                         if inside && off < nshortargs {
                             // remaining portion of `args[i]` is an argument
-                            shortargs.as_slice().slice_from(off)
+                            shortargs[off..]
                         } else {
                             // `args[i+1]` is an argument as a whole
                             i += 1;
                             if i < nargs {
-                                args[i].as_slice()
+                                args[i][]
                             } else {
                                 return Error(format!("No argument to the option -{}", $opt));
                             }
@@ -285,7 +285,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                     }
                     'D' => {
                         let arg = fetch_arg!('D');
-                        match Path::new_opt(arg.as_slice()) {
+                        match Path::new_opt(arg[]) {
                             Some(path) => {
                                 metadatacache = Some(path.join("metadata.db"));
                                 dataroot = path;
@@ -295,7 +295,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                     }
                     'Y' => {
                         let arg = fetch_arg!('Y');
-                        match Path::new_opt(arg.as_slice()) {
+                        match Path::new_opt(arg[]) {
                             Some(path) => { skinroot = path; }
                             None => { return Error(format!("Invalid skin path: {}", arg)); }
                         }

@@ -47,8 +47,8 @@ impl FromStrPrefix for Measure {
     fn from_str_prefix<'a>(s: &'a str) -> Option<(Measure, &'a str)> {
         let isdigit = |c| '0' <= c && c <= '9';
         if s.len() >= 3 && isdigit(s.char_at(0)) && isdigit(s.char_at(1)) && isdigit(s.char_at(2)) {
-            let measure = from_str::<uint>(s.slice_to(3)).unwrap();
-            Some((Measure(measure), s.slice_from(3)))
+            let measure = from_str::<uint>(s[..3]).unwrap();
+            Some((Measure(measure), s[3..]))
         } else {
             None
         }
@@ -130,7 +130,7 @@ impl<'r> BmsCommand<'r> {
             BmsExBPM(key, bpm) => BmsExBPM(key, bpm),
             BmsPlayer(v) => BmsPlayer(v),
             BmsLanes(lanes) =>
-                BmsLanes(lanes.move_iter().map(|(lane,spec)| (lane,spec.clone())).collect()),
+                BmsLanes(lanes.into_iter().map(|(lane,spec)| (lane,spec.clone())).collect()),
             BmsPlayLevel(v) => BmsPlayLevel(v),
             BmsDifficulty(v) => BmsDifficulty(v),
             BmsRank(v) => BmsRank(v),
@@ -218,16 +218,16 @@ impl<'r> fmt::Show for BmsCommand<'r> {
                 let mut flags = String::new();
                 let mut opts = String::new();
                 if pan.is_some() {
-                    flags.push_char('p');
-                    opts.push_str(format!(" {}", pan.unwrap()).as_slice());
+                    flags.push('p');
+                    opts.push_str(format!(" {}", pan.unwrap())[]);
                 }
                 if vol.is_some() {
-                    flags.push_char('v');
-                    opts.push_str(format!(" {}", vol.unwrap()).as_slice());
+                    flags.push('v');
+                    opts.push_str(format!(" {}", vol.unwrap())[]);
                 }
                 if freq.is_some() {
-                    flags.push_char('f');
-                    opts.push_str(format!(" {}", freq.unwrap()).as_slice());
+                    flags.push('f');
+                    opts.push_str(format!(" {}", freq.unwrap())[]);
                 }
                 write!(f, "#EXWAV{} {}{} {}", key, flags, opts, *s)
             },
@@ -381,8 +381,8 @@ impl<'r> Parser<'r> {
     /// Returns a parsing iterator over this BMS file.
     pub fn iter<'a>(&'a self) -> ParsingIterator<'a> {
         let (encname, confidence) = self.encoding;
-        ParsingIterator { iter: self.file.as_slice().split('\u000a'), lineno: 0, opts: self.opts,
-                          queued: vec!(Encoding(encname, confidence)) }
+        ParsingIterator { iter: self.file[].split('\u000a'), lineno: 0, opts: self.opts,
+                          queued: vec![Encoding(encname, confidence)] }
     }
 }
 
@@ -508,21 +508,21 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 );
                 ($prefix:tt -> $constr:expr) => (
                     // avoids an unreachable code
-                    if upperline.as_slice().starts_with(tt_to_expr!($prefix)) {
+                    if upperline[].starts_with(tt_to_expr!($prefix)) {
                         emit!($constr);
                     }
                 );
                 ($prefix:tt -> $constr:expr; $diag:expr) => (
                     // avoids an unreachable code
-                    if upperline.as_slice().starts_with(tt_to_expr!($prefix)) {
+                    if upperline[].starts_with(tt_to_expr!($prefix)) {
                         diag!($diag);
                         emit!($constr);
                     }
                 );
                 ($prefix:tt |$v:ident| $then:expr) => ({ // #<command>...
                     let prefix: &'static str = tt_to_expr!($prefix);
-                    if upperline.as_slice().starts_with(prefix) {
-                        let $v = line.slice_from(prefix.len());
+                    if upperline[].starts_with(prefix) {
+                        let $v = line[prefix.len()..];
                         let _ = $v; // removes warning
                         $then;
                         emit!(BmsUnknown($v.into_maybe_owned())); // no more matching possible
@@ -530,8 +530,8 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 });
                 ($prefix:tt |$k:ident, $v:ident| $then:expr) => ({ // #<command>xx ...
                     let prefix: &'static str = tt_to_expr!($prefix);
-                    if upperline.as_slice().starts_with(prefix) {
-                        let line = line.slice_from(prefix.len());
+                    if upperline[].starts_with(prefix) {
+                        let line = line[prefix.len()..];
                         let mut key = PartialKey::dummy();
                         let mut text = "";
                         if lex!(line; PartialKey -> key, ws, str -> text, !) {
@@ -608,10 +608,10 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                     let mut lanes = Vec::new();
                     let mut okay = true;
                     for i in iter::range_step(0, words.len(), 2) {
-                        if words.as_slice()[i].len() != 2 { okay = false; break; }
-                        match Key::from_str(words.as_slice()[i]) {
+                        if words[i].len() != 2 { okay = false; break; }
+                        match Key::from_str(words[i]) {
                             Some(key) => {
-                                lanes.push((key, words.as_slice()[i+1].to_string()));
+                                lanes.push((key, words[i+1].to_string()));
                             }
                             None => {
                                 okay = false;
@@ -643,12 +643,12 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 let mut line = line;
                 match line.find(|c: char| c.is_whitespace()) {
                     Some(sep) => {
-                        let flags = line.slice_to(sep);
+                        let flags = line[..sep];
                         let mut pan = None;
                         let mut vol = None;
                         let mut freq = None;
 
-                        line = line.slice_from(sep);
+                        line = line[sep..];
                         let mut okay = true;
                         for flag in flags.chars() {
                             let mut value = 0;
@@ -899,8 +899,8 @@ impl<'r,R:Rng> Iterator<Parsed<'static>> for PreprocessingParsingIterator<'r,R> 
                         }
                     }
 
-                    self.queued.extend(messages.move_iter().map(|msg| Message(lineno, msg)));
-                    self.queued.extend(out.move_iter().map(|(line, cmd)| Command(line, cmd)));
+                    self.queued.extend(messages.into_iter().map(|msg| Message(lineno, msg)));
+                    self.queued.extend(out.into_iter().map(|(line, cmd)| Command(line, cmd)));
                     // now the next iteration will return a queued item if any
                 }
                 Some(parsed) => {
@@ -912,8 +912,8 @@ impl<'r,R:Rng> Iterator<Parsed<'static>> for PreprocessingParsingIterator<'r,R> 
                     let mut messages = Vec::new();
                     let mut out = Vec::new();
                     self.pp.finish(&mut messages, &mut out);
-                    self.queued.extend(messages.move_iter().map(|msg| Message(None, msg)));
-                    self.queued.extend(out.move_iter().map(|(line, cmd)| Command(line, cmd)));
+                    self.queued.extend(messages.into_iter().map(|msg| Message(None, msg)));
+                    self.queued.extend(out.into_iter().map(|(line, cmd)| Command(line, cmd)));
                 }
             }
         }

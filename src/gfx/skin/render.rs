@@ -68,7 +68,7 @@ impl Renderer {
     pub fn render(&mut self, screen: &mut Screen, hook: &Hook) {
         let skin = self.skin.clone();
         let state = State::new(self, screen);
-        state.nodes(hook, skin.nodes.as_slice());
+        state.nodes(hook, skin.nodes[]);
         state.finish();
     }
 }
@@ -227,7 +227,7 @@ impl<'a> State<'a> {
                 Some(scalar) => {
                     let text = scalar.into_maybe_owned();
                     if !text.is_empty() {
-                        body(hook, text.as_slice().char_len().to_string().as_slice());
+                        body(hook, text.as_slice().char_len().to_string()[]);
                     }
                     true
                 },
@@ -315,19 +315,19 @@ impl<'a> State<'a> {
                     format!("{:.*}", precision, v)
                 };
                 let ss = if s.len() > maxwidth {
-                    s.as_slice().slice_from(s.len() - maxwidth)
+                    s[s.len() - maxwidth..]
                 } else {
-                    s.as_slice()
+                    s[]
                 };
                 if ss.len() < minwidth {
                     let signidx = if ss.starts_with("+") || ss.starts_with("-") {1} else {0};
                     if signidx > 0 {
-                        try!(write!(out, "{}", ss.slice_to(signidx)));
+                        try!(write!(out, "{}", ss[..signidx]));
                     }
                     for _ in range(0, minwidth - ss.len()) {
                         try!(write!(out, "0"));
                     }
-                    write!(out, "{}", ss.slice_from(signidx))
+                    write!(out, "{}", ss[signidx..])
                 } else {
                     write!(out, "{}", ss)
                 }
@@ -398,7 +398,7 @@ impl<'a> State<'a> {
         let mut out = MemWriter::new();
         match self.text_source(hook, text, &mut out) {
             Ok(()) => {
-                str::from_utf8(out.unwrap().as_slice()).unwrap().to_string().into_maybe_owned()
+                str::from_utf8(out.unwrap()[]).unwrap().to_string().into_maybe_owned()
             },
             Err(err) => {
                 warn!("skin: I/O error on text_source({}), will ignore", err);
@@ -602,16 +602,16 @@ impl<'a> State<'a> {
                         let top = y - h * ay;
                         if zeroes > 0 {
                             d.string(left, top, zoom, LeftAligned,
-                                     text.as_slice().slice_to(zeroes), gradient0);
+                                     text.as_slice()[..zeroes], gradient0);
                         }
                         d.string(left0, top, zoom, LeftAligned,
-                                 text.as_slice().slice_from(zeroes), gradient);
+                                 text.as_slice()[zeroes..], gradient);
                     });
                 }
 
                 Group(ref nodes) => {
                     let savedclip = self.clip.get();
-                    self.nodes(hook, nodes.as_slice());
+                    self.nodes(hook, nodes[]);
                     self.clip.set(savedclip);
                 }
 
@@ -628,7 +628,7 @@ impl<'a> State<'a> {
                 NodeBlock(ref block) => {
                     let mut keepgoing = true;
                     self.block(hook, block, |hook_, nodes_| {
-                        keepgoing = self.nodes(hook_, nodes_.as_slice());
+                        keepgoing = self.nodes(hook_, nodes_[]);
                         keepgoing
                     });
                     if !keepgoing { return false; }

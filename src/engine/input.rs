@@ -100,7 +100,7 @@ impl VirtualInput {
     /// Returns true if the virtual input has a specified key kind in the key specification.
     pub fn active_in_key_spec(&self, kind: KeyKind, keyspec: &KeySpec) -> bool {
         match *self {
-            LaneInput(Lane(lane)) => keyspec.kinds.as_slice()[lane] == Some(kind),
+            LaneInput(Lane(lane)) => keyspec.kinds[lane] == Some(kind),
             SpeedDownInput | SpeedUpInput => true
         }
     }
@@ -209,10 +209,10 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<String>) -> Resul
         let spec = spec.unwrap_or(keyset.default.to_string());
 
         let mut i = 0;
-        for part in spec.as_slice().split('|') {
+        for part in spec[].split('|') {
             let (kind, vinputs) = keyset.mapping[i];
             for s in part.split('%') {
-                match parse_input(s.as_slice()) {
+                match parse_input(s[]) {
                     Some(input) => {
                         for &vinput in vinputs.iter() {
                             add_mapping(&mut map, kind, input, vinput);
@@ -232,11 +232,11 @@ pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<String>) -> Resul
 
     for &lane in keyspec.order.iter() {
         let key = Key(36 + *lane as int);
-        let kind = keyspec.kinds.as_slice()[*lane].unwrap();
+        let kind = keyspec.kinds[*lane].unwrap();
         let envvar = format!("SNRS_{}{}_KEY", key, kind.to_char());
         let envvar2 = format!("ANGOLMOIS_{}{}_KEY", key, kind.to_char());
-        for s in getenv(envvar.as_slice()).or(getenv(envvar2.as_slice())).iter() {
-            match parse_input(s.as_slice()) {
+        for s in getenv(envvar[]).or(getenv(envvar2[])).iter() {
+            match parse_input(s[]) {
                 Some(input) => { add_mapping(&mut map, Some(kind), input, LaneInput(lane)); }
                 None => { return Err(format!("Unknown key name in the environment variable {}: {}",
                                              envvar, *s)); }
