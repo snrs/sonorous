@@ -388,7 +388,7 @@ impl<'r> Parser<'r> {
 
 impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
     fn next(&mut self) -> Option<Parsed<'r>> {
-        use std::ascii::StrAsciiExt;
+        use std::ascii::AsciiExt;
 
         // return the queued items first
         match self.queued.remove(0) {

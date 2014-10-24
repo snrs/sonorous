@@ -10,7 +10,7 @@
 
 use std::{str, io};
 use std::rc::Rc;
-use std::collections::HashMap;
+use std::collections::{HashMap, hashmap};
 use std::io::fs::PathExtensions;
 
 /// Context for searching files.
@@ -32,11 +32,14 @@ impl SearchContext {
         // the original plan is to implement an LRU cache for `get_entries`, but for now we don't
         // invalidate any cache items since it turned out that `os::list_dir` is very, very slow.
         // for example, it is not rare for `list_dir` to take more than 100ms in Windows.
-        let &(ref dirs, ref files) = self.get_entries_cache.find_or_insert_with(dir.clone(), |_| {
-            let entries = io::fs::readdir(dir).ok().unwrap_or_else(|| Vec::new());
-            let (dirs, files) = entries.partition(|path| path.is_dir());
-            (Rc::new(dirs), Rc::new(files))
-        });
+        let &(ref dirs, ref files) = match self.get_entries_cache.entry(dir.clone()) {
+            hashmap::Occupied(entries) => entries.into_mut(),
+            hashmap::Vacant(entry) => {
+                let entries = io::fs::readdir(dir).ok().unwrap_or_else(|| Vec::new());
+                let (dirs, files) = entries.partition(|path| path.is_dir());
+                entry.set((Rc::new(dirs), Rc::new(files)))
+            }
+        };
         ((**dirs)[], (**files)[])
     }
 
@@ -56,7 +59,7 @@ impl SearchContext {
      */
     pub fn resolve_relative_path(&mut self, basedir: &Path, path: &str,
                                  exts: &[&str]) -> Option<Path> {
-        use std::ascii::StrAsciiExt;
+        use std::ascii::AsciiExt;
 
         let mut parts = Vec::new();
         for part in path.split(|c: char| c == '/' || c == '\\') {

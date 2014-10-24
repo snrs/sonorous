@@ -171,7 +171,7 @@ pub struct SelectingScene {
 
 /// Returns true if the path should be parsed as a BMS file.
 fn is_bms_file(path: &Path) -> bool {
-    use std::ascii::StrAsciiExt;
+    use std::ascii::AsciiExt;
     match path.extension().and_then(str::from_utf8) {
         Some(ext) => match ext.to_ascii_lower()[] {
             "bms" | "bme" | "bml" | "pms" => true,
@@ -283,7 +283,7 @@ impl SelectingScene {
 
             let opts = Rc::new(opts);
 
-            let load_banner = |bannerpath: String, basepath: Option<Path>| {
+            let load_banner = |bmspath: &Path, bannerpath: String, basepath: Option<Path>| {
                 let mut search = SearchContext::new();
                 let basedir = basepath.clone().unwrap_or(Path::new("."));
                 let fullpath =
@@ -298,7 +298,8 @@ impl SelectingScene {
                 }
             };
 
-            let load_with_reader = |(hash, mut f): (MD5Hash, io::File)| -> Result<(), String> {
+            let load_with_reader = |bmspath: &Path,
+                                    (hash, mut f): (MD5Hash, io::File)| -> Result<(), String> {
                 let mut r = task_rng();
                 let mut diags = Vec::new();
                 let loaderopts = opts.loader_options();
@@ -308,7 +309,7 @@ impl SelectingScene {
                         diags.push((line, msg));
                         true
                     };
-                    try!(preprocess_bms(&bmspath, &mut f, opts.deref(),
+                    try!(preprocess_bms(bmspath, &mut f, opts.deref(),
                                         &mut r, &loaderopts, callback))
                 };
 
@@ -320,23 +321,23 @@ impl SelectingScene {
 
                 let _ = cache.lock().put_metadata(&hash, meta);
                 if banner.is_some() {
-                    load_banner(banner.unwrap(), basepath);
+                    load_banner(bmspath, banner.unwrap(), basepath);
                 }
                 Ok(())
             };
 
-            let get_hash_and_reader = || -> Result<(MD5Hash, io::File), String> {
+            let get_hash_and_reader = |bmspath: &Path| -> Result<(MD5Hash, io::File), String> {
                 // we have read the file so we don't want the parser to read it again.
-                let (hash, f) = try!(cache.lock().get_hash(&bmspath).map_err(|e| e.to_string()));
+                let (hash, f) = try!(cache.lock().get_hash(bmspath).map_err(|e| e.to_string()));
                 sender.send(BmsHashRead(bmspath.clone(), hash));
                 let f = match f {
                     Some(f) => f,
-                    None => try!(io::File::open(&bmspath).map_err(|e| e.to_string())),
+                    None => try!(io::File::open(bmspath).map_err(|e| e.to_string())),
                 };
                 Ok((hash, f))
             };
 
-            match get_hash_and_reader().and_then(load_with_reader) {
+            match get_hash_and_reader(&bmspath).and_then(|ret| load_with_reader(&bmspath, ret)) {
                 Ok(()) => {}
                 Err(err) => { sender.send(BmsFailed(bmspath, err)); }
             }

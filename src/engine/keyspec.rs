@@ -205,7 +205,7 @@ static PRESETS: &'static [(&'static str, &'static str, &'static str)] = &[
  * - `pms`: Selects one of two presets `9` and `9-bme`.
  */
 pub fn preset_to_key_spec(bms: &Bms, preset: Option<String>) -> Option<(String, String)> {
-    use std::ascii::OwnedStrAsciiExt;
+    use std::ascii::OwnedAsciiExt;
     use util::std::option::StrOption;
 
     let mut present = [false, ..NLANES];
@@ -245,7 +245,7 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<String>) -> Option<(String, 
 /// Parses a key specification from the options.
 pub fn key_spec(bms: &Bms, preset: Option<String>,
                 leftkeys: Option<String>, rightkeys: Option<String>) -> Result<KeySpec,String> {
-    use std::ascii::StrAsciiExt;
+    use std::ascii::AsciiExt;
     use util::std::option::StrOption;
 
     let (leftkeys, rightkeys) =

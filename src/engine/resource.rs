@@ -56,7 +56,7 @@ impl SearchContextAdditions for SearchContext {
     /// Resolves the relative path for the use by `LoadedImageResource::new`.
     fn resolve_relative_path_for_image(&mut self, path: &str,
                                        basedir: &Path) -> Result<Path,String> {
-        use std::ascii::StrAsciiExt;
+        use std::ascii::AsciiExt;
         // preserve extensions for the movie files
         if path.to_ascii_lower()[].ends_with(".mpg") {
             resolve_relative_path_result(self, basedir, path, [])
@@ -184,7 +184,7 @@ pub enum LoadedImageResource {
 impl LoadedImageResource {
     /// Loads an image resource.
     pub fn new(path: &Path, load_movie: bool) -> Result<LoadedImageResource,String> {
-        use std::ascii::StrAsciiExt;
+        use std::ascii::AsciiExt;
 
         /// Converts a surface to the native display format, while preserving a transparency or
         /// setting a color key if required.

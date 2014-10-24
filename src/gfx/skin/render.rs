@@ -12,7 +12,7 @@ use std::{f32, num, str, mem};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::io::{IoResult, MemWriter};
-use std::collections::HashMap;
+use std::collections::{HashMap, hashmap};
 
 use opengles::gl2 as gl;
 use sdl_image;
@@ -422,16 +422,16 @@ impl<'a> State<'a> {
         match scalar {
             Some(ImageScalar(TextureSource(tex), ref clip)) => callback(Some((tex, clip))),
             Some(ImageScalar(PathSource(ref path), ref clip)) => {
-                let ret = renderer.imagecache.find_or_insert_with(path.clone(), |path| {
-                    match sdl_image::load(path) {
-                        Ok(surface) => match Texture2D::from_owned_surface(surface, false, false) {
-                            Ok(tex) => Some(Rc::new(tex)),
-                            Err(..) => None,
-                        },
-                        Err(..) => None,
+                let tex = match renderer.imagecache.entry(path.clone()) {
+                    hashmap::Occupied(tex) => tex.into_mut(),
+                    hashmap::Vacant(entry) => {
+                        let surface = sdl_image::load(path).ok();
+                        let tex = surface.and_then(
+                            |s| Texture2D::from_owned_surface(s, false, false).ok());
+                        entry.set(tex.map(Rc::new))
                     }
-                });
-                callback(ret.as_ref().map(|tex| (tex, clip)))
+                };
+                callback(tex.as_ref().map(|tex| (tex, clip)))
             },
             Some(ref scalar) => {
                 warn!("skin: `{id}` is not a texture scalar hook ({scalar}).",

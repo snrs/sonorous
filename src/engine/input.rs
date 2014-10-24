@@ -166,7 +166,7 @@ pub type KeyMap = HashMap<Input,VirtualInput>;
 
 /// Reads an input mapping from the environment variables.
 pub fn read_keymap(keyspec: &KeySpec, getenv: |&str| -> Option<String>) -> Result<KeyMap,String> {
-    use std::ascii::{StrAsciiExt, OwnedStrAsciiExt};
+    use std::ascii::{AsciiExt, OwnedAsciiExt};
 
     /// Finds an SDL virtual key with the given name. Matching is done case-insensitively.
     fn sdl_key_from_name(name: &str) -> Option<event::Key> {
