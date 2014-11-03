@@ -69,9 +69,9 @@ fn io_error_from_sqlite(db: Option<&sqlite3::Database>, code: sqlite3::ResultCod
     IoError { kind: OtherIoError, desc: "SQLite error", detail: Some(detail) }
 }
 
-/// Calls `fail!` with an SQLite `ResultCode`.
+/// Calls `panic!` with an SQLite `ResultCode`.
 fn fail_from_sqlite(db: &sqlite3::Database, code: sqlite3::ResultCode) -> ! {
-    fail!("SQLite error: {}", io_error_from_sqlite(Some(db), code));
+    panic!("SQLite error: {}", io_error_from_sqlite(Some(db), code));
 }
 
 /// `try!`-friendly version of `Cursor::step`.

@@ -548,8 +548,9 @@ impl Scene for PlayingScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(self) -> Box<Scene+'static> {
-        let PlayingScene { screen, player, .. } = self;
+    fn consume(self: Box<PlayingScene>) -> Box<Scene+'static> {
+        let scene = *self;
+        let PlayingScene { screen, player, .. } = scene;
         PlayResultScene::new(screen, player) as Box<Scene+'static>
     }
 }

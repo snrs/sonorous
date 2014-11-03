@@ -135,7 +135,7 @@ impl Font {
                             glyphs.push(v);
                         }
                     }
-                    _ => fail!("unexpected codeword")
+                    _ => panic!("unexpected codeword")
                 }
             }
             glyphs

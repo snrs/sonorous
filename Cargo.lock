@@ -2,53 +2,53 @@
 name = "sonorous"
 version = "0.1.0"
 dependencies = [
- "cson 0.1.0 (git+https://github.com/lifthrasiir/cson-rust.git#99fbc3f72a277adb398e28d72ce67ba6a47ffab2)",
- "encoding 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git#dd6183298e20b038fcd1cc4ab91405b3c72e49db)",
- "opengles 0.1.0 (git+https://github.com/lifthrasiir/rust-opengles-angle.git#8464d0ea5d4bb0775d5b6c29315df43b2f7fc4bb)",
- "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
- "sdl_image 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
- "sdl_mixer 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
- "sqlite3 0.1.0 (git+https://github.com/lifthrasiir/rustsqlite.git#43bf4081ce670f92db150f9c9bb39c24658072c9)",
+ "cson 0.1.0 (git+https://github.com/lifthrasiir/cson-rust.git)",
+ "encoding 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "opengles 0.1.0 (git+https://github.com/lifthrasiir/rust-opengles-angle.git)",
+ "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
+ "sdl_image 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
+ "sdl_mixer 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
+ "sqlite3 0.1.0 (git+https://github.com/lifthrasiir/rustsqlite.git)",
 ]
 
 [[package]]
 name = "cson"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/cson-rust.git#99fbc3f72a277adb398e28d72ce67ba6a47ffab2"
+source = "git+https://github.com/lifthrasiir/cson-rust.git#a4a0d41f2d30a861cd0b9892819222482b3a2052"
 
 [[package]]
 name = "encoding"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#dd6183298e20b038fcd1cc4ab91405b3c72e49db"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#a739425a3f3174a31fe38c158dcaf22ea1d856f4"
 
 [[package]]
 name = "opengles"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/rust-opengles-angle.git#8464d0ea5d4bb0775d5b6c29315df43b2f7fc4bb"
+source = "git+https://github.com/lifthrasiir/rust-opengles-angle.git#92240a7a31c5dc1ce063046ec22386c0b7a1c74c"
 
 [[package]]
 name = "sdl"
 version = "0.3.4"
-source = "git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09"
+source = "git+https://github.com/lifthrasiir/rust-sdl.git#b76956b16ae64c2c3df1813f98333bbc06cf6989"
 
 [[package]]
 name = "sdl_image"
 version = "0.3.4"
-source = "git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09"
+source = "git+https://github.com/lifthrasiir/rust-sdl.git#b76956b16ae64c2c3df1813f98333bbc06cf6989"
 dependencies = [
- "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
+ "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
 ]
 
 [[package]]
 name = "sdl_mixer"
 version = "0.3.4"
-source = "git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09"
+source = "git+https://github.com/lifthrasiir/rust-sdl.git#b76956b16ae64c2c3df1813f98333bbc06cf6989"
 dependencies = [
- "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git#cb82e9cb149e8d93e5fda5edda67a92f20c4fc09)",
+ "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
 ]
 
 [[package]]
 name = "sqlite3"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/rustsqlite.git#43bf4081ce670f92db150f9c9bb39c24658072c9"
+source = "git+https://github.com/lifthrasiir/rustsqlite.git#84fe05e8655c3267ec51fec0e57ef11dba237385"
 

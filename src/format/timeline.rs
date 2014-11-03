@@ -404,7 +404,7 @@ pub mod builder {
 
         /// Builds an actual timeline.
         pub fn build(self) -> Timeline<S,I> {
-            let TimelineBuilder { initbpm: initbpm, objs: objs, endvpos: endvpos } = self;
+            let TimelineBuilder { initbpm, objs, endvpos } = self;
             let initbpm = initbpm.expect("initial BPM should have been set");
             let mut objs = objs;
             sort_objs(objs[mut]);
@@ -488,7 +488,7 @@ pub mod modf {
                 let lane = (*obj).object_lane().unwrap();
                 match movable.iter().position(|&i| i == lane) {
                     Some(i) => { movable.swap_remove(i); }
-                    None => fail!("non-sanitized timeline")
+                    None => panic!("non-sanitized timeline")
                 }
             }
             if lasttime < obj.loc.time { // reshuffle required

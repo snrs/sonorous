@@ -263,7 +263,7 @@ impl<'a> State<'a> {
                 let mut called = false;
                 self.gen(hook, gen, |hook_, alt| {
                     called = true;
-                    match map.find_equiv(&alt) {
+                    match map.find_equiv(alt) {
                         Some(then) => body(hook_, then),
                         None => match *default {
                             Some(ref default) => body(hook_, default),
@@ -417,7 +417,7 @@ impl<'a> State<'a> {
 
         let mut scalar = hook.scalar_hook(id);
         if scalar.is_none() {
-            scalar = renderer.skin.scalars.find_equiv(&id).map(|v| v.clone());
+            scalar = renderer.skin.scalars.find_equiv(id).map(|v| v.clone());
         }
         match scalar {
             Some(ImageScalar(TextureSource(tex), ref clip)) => callback(Some((tex, clip))),

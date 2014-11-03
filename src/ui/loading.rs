@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::collections::{Deque, DList};
+use std::collections::DList;
 
 use sdl::{event, get_ticks};
 use format::timeline::TimelineInfo;
@@ -115,7 +115,7 @@ impl LoadingContext {
                         Texture2D::from_owned_surface(surface, false, false)
                     })
                 },
-                _ => fail!("unexpected")
+                _ => panic!("unexpected")
             }
         });
         match tex_or_err {
@@ -240,8 +240,9 @@ impl Scene for LoadingScene {
 
     fn deactivate(&mut self) {}
 
-    fn consume(self) -> Box<Scene+'static> {
-        let LoadingScene { context, screen, .. } = self;
+    fn consume(self: Box<LoadingScene>) -> Box<Scene+'static> {
+        let scene = *self;
+        let LoadingScene { context, screen, .. } = scene;
         let (player, imgres) = context.to_player();
         match PlayingScene::new(player, screen, imgres) {
             Ok(scene) => scene as Box<Scene+'static>,
@@ -341,8 +342,9 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
         }
     }
 
-    fn consume(self) -> Box<Scene+'static> {
-        let TextualLoadingScene { context, screen } = self;
+    fn consume(self: Box<TextualLoadingScene>) -> Box<Scene+'static> {
+        let scene = *self;
+        let TextualLoadingScene { context, screen } = scene;
         let (player, imgres) = context.to_player();
         match screen {
             Some(screen) => ViewingScene::new(screen, imgres, player) as Box<Scene+'static>,

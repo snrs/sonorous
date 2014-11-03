@@ -12,7 +12,6 @@ use std::{fmt, hash};
 use std::clone::Clone;
 use std::cmp::{PartialEq, Eq, PartialOrd, Ord, Equiv};
 use std::cmp::Ordering;
-use std::collections::Collection;
 use std::default::Default;
 
 /// A vector that can hold either `&'r [T]` or `Vec<T>`.
@@ -39,6 +38,10 @@ impl<'r,T> MaybeOwnedVec<'r,T> {
             VecSlice(..) => true,
         }
     }
+
+    /// Returns the length of vector.
+    #[inline]
+    pub fn len(&self) -> uint { self.as_slice().len() }
 }
 
 /// A trait for moving into an `MaybeOwnedVec`.
@@ -100,11 +103,6 @@ impl<'r,T:Ord> Ord for MaybeOwnedVec<'r,T> {
     fn cmp(&self, other: &MaybeOwnedVec<'r,T>) -> Ordering {
         self.as_slice().cmp(&other.as_slice())
     }
-}
-
-impl<'r,T> Collection for MaybeOwnedVec<'r,T> {
-    #[inline]
-    fn len(&self) -> uint { self.as_slice().len() }
 }
 
 impl<'r,T:Clone> Clone for MaybeOwnedVec<'r,T> {

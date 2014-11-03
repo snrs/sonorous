@@ -251,7 +251,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                                        data: data.into_string(), lineno: lineno })
             }
 
-            parse::BmsFlow(_) => { fail!("unexpected"); }
+            parse::BmsFlow(_) => { panic!("unexpected"); }
             _ => {}
         }
     }

@@ -103,7 +103,7 @@ impl Drop for GLState {
     fn drop(&mut self) {
         match egl::terminate(self.egl_display) {
             Ok(()) => {}
-            Err(err) => fail!(format!("EGL error 0x{:x}", err))
+            Err(err) => panic!(format!("EGL error 0x{:x}", err))
         }
     }
 }

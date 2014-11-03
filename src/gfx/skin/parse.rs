@@ -885,7 +885,7 @@ impl FromJson for Skin {
 }
 
 /// Parses and returns the skin data.
-pub fn load_skin(f: &mut Buffer) -> Result<Skin,String> {
+pub fn load_skin<T: Buffer>(f: &mut T) -> Result<Skin,String> {
     let json = match cson::reader::Reader::new(f).parse_document() {
         Ok(cson) => cson.to_json(),
         Err(err) => { return Err(err.to_string()); }

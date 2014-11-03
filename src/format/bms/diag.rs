@@ -4,7 +4,7 @@
 
 //! Diagnostics for BMS format.
 
-#![allow(non_uppercase_statics)]
+#![allow(non_upper_case_globals)]
 
 use std::fmt;
 

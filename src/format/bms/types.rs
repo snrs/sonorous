@@ -82,7 +82,7 @@ impl Key {
         let player = match **self / 36 {
             1 | 3 | 5 | 0xD => 0,
             2 | 4 | 6 | 0xE => 1,
-            _ => fail!("non-object channel")
+            _ => panic!("non-object channel")
         };
         Lane(player * 36 + **self as uint % 36)
     }

@@ -78,7 +78,7 @@ pub trait Scene {
 
     /// Called when the scene is to be replaced by a new `Scene` due to the `ReplaceScene` command.
     /// When called due to the `tick` call, this is called after `deactivate` call.
-    fn consume(self) -> Box<Scene+'static>;
+    fn consume(self: Box<Self>) -> Box<Scene+'static>;
 }
 
 /// Runs given scene and other additionally spawned scenes.
@@ -109,7 +109,7 @@ pub fn run_scene(scene: Box<Scene+'static>) {
         }
         match result {
             Continue => {
-                fail!("impossible");
+                panic!("impossible");
             }
             PushScene(newscene) => {
                 stack.push(current);

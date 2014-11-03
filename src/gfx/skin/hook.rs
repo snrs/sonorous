@@ -159,7 +159,7 @@ macro_rules! define_hooks(
         $(block $blockname:pat => $blockvalue:expr;)*
      })*) => ($(
         impl ::gfx::skin::hook::Hook for $ty {
-            #[allow(unused_variable)]
+            #[allow(unused_variables)]
             fn scalar_hook<'a>(&'a self, id: &str) -> Option<::gfx::skin::scalar::Scalar<'a>> {
                 #[allow(unused_imports)] use gfx::skin::scalar::{AsScalar, IntoScalar};
                 type Scalar<'a> = ::gfx::skin::scalar::Scalar<'a>;
@@ -178,7 +178,7 @@ macro_rules! define_hooks(
                 }
             }
 
-            #[allow(unused_mut, unused_variable)]
+            #[allow(unused_mut, unused_variables)]
             fn block_hook(&self, id: &str, parent: &::gfx::skin::hook::Hook,
                           mut body: |&::gfx::skin::hook::Hook, &str| -> bool) -> bool {
                 #[allow(unused_imports)] use gfx::skin::scalar::{AsScalar, IntoScalar};

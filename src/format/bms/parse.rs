@@ -213,7 +213,7 @@ impl<'r> fmt::Show for BmsCommand<'r> {
             BmsLNObj(key) => write!(f, "#LNOBJ {}", key),
             BmsWAV(key, ref s) => write!(f, "#WAV{} {}", key, *s),
             BmsWAVCmd(cmd, key, v) => write!(f, "#WAVCMD {:02} {}{}", cmd, key, v),
-            BmsExWAV(_key, None, None, None, ref _s) => fail!("unsupported"),
+            BmsExWAV(_key, None, None, None, ref _s) => panic!("unsupported"),
             BmsExWAV(key, pan, vol, freq, ref s) => {
                 let mut flags = String::new();
                 let mut opts = String::new();
@@ -249,9 +249,9 @@ impl<'r> fmt::Show for BmsCommand<'r> {
             BmsMovie(ref s) => write!(f, "#MOVIE {}", *s),
             BmsCanvasSize(w, h) => write!(f, "#SNRS:CANVASSIZE {} {}", w, h),
             BmsStop(key, Measures(dur)) => write!(f, "#STOP{} {}", key, (dur * 192.0) as int),
-            BmsStop(..) => fail!("unsupported"),
+            BmsStop(..) => panic!("unsupported"),
             BmsStp(pos, Seconds(dur)) => write!(f, "#STP {:07.3} {}", pos, (dur * 1000.0) as int),
-            BmsStp(..) => fail!("unsupported"),
+            BmsStp(..) => panic!("unsupported"),
             BmsText(key, ref s) => write!(f, "#TEXT{} {}", key, *s),
             BmsOption(ref opt) => write!(f, "#OPTION {}", *opt),
             BmsChangeOption(key, ref opt) => write!(f, "#CHANGEOPTION{} {}", key, *opt),

@@ -641,7 +641,7 @@ impl Scene for SelectingScene {
         *self.keepgoing.write() = false;
     }
 
-    fn consume(self) -> Box<Scene+'static> { fail!("unreachable"); }
+    fn consume(self: Box<SelectingScene>) -> Box<Scene+'static> { panic!("unreachable"); }
 }
 
 define_hooks! {
