@@ -12,7 +12,7 @@ use std::{f32, num, str, mem};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::io::{IoResult, MemWriter};
-use std::collections::{HashMap, hashmap};
+use std::collections::{HashMap, hash_map};
 
 use opengles::gl2 as gl;
 use sdl_image;
@@ -423,8 +423,8 @@ impl<'a> State<'a> {
             Some(ImageScalar(TextureSource(tex), ref clip)) => callback(Some((tex, clip))),
             Some(ImageScalar(PathSource(ref path), ref clip)) => {
                 let tex = match renderer.imagecache.entry(path.clone()) {
-                    hashmap::Occupied(tex) => tex.into_mut(),
-                    hashmap::Vacant(entry) => {
+                    hash_map::Occupied(tex) => tex.into_mut(),
+                    hash_map::Vacant(entry) => {
                         let surface = sdl_image::load(path).ok();
                         let tex = surface.and_then(
                             |s| Texture2D::from_owned_surface(s, false, false).ok());

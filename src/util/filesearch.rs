@@ -10,7 +10,7 @@
 
 use std::{str, io};
 use std::rc::Rc;
-use std::collections::{HashMap, hashmap};
+use std::collections::{HashMap, hash_map};
 use std::io::fs::PathExtensions;
 
 /// Context for searching files.
@@ -33,8 +33,8 @@ impl SearchContext {
         // invalidate any cache items since it turned out that `os::list_dir` is very, very slow.
         // for example, it is not rare for `list_dir` to take more than 100ms in Windows.
         let &(ref dirs, ref files) = match self.get_entries_cache.entry(dir.clone()) {
-            hashmap::Occupied(entries) => entries.into_mut(),
-            hashmap::Vacant(entry) => {
+            hash_map::Occupied(entries) => entries.into_mut(),
+            hash_map::Vacant(entry) => {
                 let entries = io::fs::readdir(dir).ok().unwrap_or_else(|| Vec::new());
                 let (dirs, files) = entries.partition(|path| path.is_dir());
                 entry.set((Rc::new(dirs), Rc::new(files)))
