@@ -3,7 +3,9 @@ name = "sonorous"
 version = "0.1.0"
 dependencies = [
  "cson 0.1.0 (git+https://github.com/lifthrasiir/cson-rust.git)",
- "encoding 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "encoding 0.2.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "encoding-index-japanese 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "encoding-index-korean 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
  "opengles 0.1.0 (git+https://github.com/lifthrasiir/rust-opengles-angle.git)",
  "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
  "sdl_image 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
@@ -18,8 +20,40 @@ source = "git+https://github.com/lifthrasiir/cson-rust.git#a4a0d41f2d30a861cd0b9
 
 [[package]]
 name = "encoding"
-version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#a739425a3f3174a31fe38c158dcaf22ea1d856f4"
+version = "0.2.0"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#a06637cc6d0da37c12c68661e2ee9ca1999764a4"
+dependencies = [
+ "encoding-index-japanese 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "encoding-index-korean 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "encoding-index-simpchinese 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "encoding-index-singlebyte 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "encoding-index-tradchinese 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+]
+
+[[package]]
+name = "encoding-index-japanese"
+version = "1.0.20140915"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#a06637cc6d0da37c12c68661e2ee9ca1999764a4"
+
+[[package]]
+name = "encoding-index-korean"
+version = "1.0.20140915"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#a06637cc6d0da37c12c68661e2ee9ca1999764a4"
+
+[[package]]
+name = "encoding-index-simpchinese"
+version = "1.0.20140915"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#a06637cc6d0da37c12c68661e2ee9ca1999764a4"
+
+[[package]]
+name = "encoding-index-singlebyte"
+version = "1.0.20140915"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#a06637cc6d0da37c12c68661e2ee9ca1999764a4"
+
+[[package]]
+name = "encoding-index-tradchinese"
+version = "1.0.20140915"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#a06637cc6d0da37c12c68661e2ee9ca1999764a4"
 
 [[package]]
 name = "opengles"

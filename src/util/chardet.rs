@@ -39,7 +39,12 @@
  * correlated with the row index of character sets.
  */
 
+extern crate "encoding-index-korean" as encoding_index_korean;
+extern crate "encoding-index-japanese" as encoding_index_japanese;
+
 use util::maybe_owned::{MaybeOwnedVec, IntoMaybeOwnedVec};
+use self::encoding_index_korean::euc_kr;
+use self::encoding_index_japanese::jis0208;
 
 /// An iterator returned by `CharClass::classes`.
 pub struct CharClasses {
@@ -108,7 +113,6 @@ impl CharClass for CharClassKo {
     fn num_classes(&self) -> uint { 167 }
 
     fn from_char(&self, c: char) -> Option<uint> {
-        use encoding::index::euc_kr;
         if c < '\u007f' {
             None
         } else {
@@ -156,7 +160,6 @@ impl CharClass for CharClassJa {
     fn num_classes(&self) -> uint { 122 }
 
     fn from_char(&self, c: char) -> Option<uint> {
-        use encoding::index::jis0208;
         match c {
             '\u0000'...'\u0080'|'\u00a5'|'\u203e' => None,
             '\uff61'...'\uff9f' => Some(1),

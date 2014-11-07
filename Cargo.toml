@@ -28,3 +28,8 @@ git = "https://github.com/lifthrasiir/rustsqlite.git"
 [dependencies.cson]
 git = "https://github.com/lifthrasiir/cson-rust.git"
 
+[dependencies.encoding-index-korean]
+git = "https://github.com/lifthrasiir/rust-encoding.git"
+
+[dependencies.encoding-index-japanese]
+git = "https://github.com/lifthrasiir/rust-encoding.git"
