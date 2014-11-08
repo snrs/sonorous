@@ -77,14 +77,14 @@ impl LoadingContext {
 
         let mut jobs = DList::new();
         if opts.has_bga() { // should go first
-            jobs.push(LoadStageFile);
+            jobs.push_back(LoadStageFile);
         }
         for (i, path) in bms.meta.sndpath.iter().enumerate() {
-            if path.is_some() { jobs.push(LoadSound(i)); }
+            if path.is_some() { jobs.push_back(LoadSound(i)); }
         }
         if opts.has_bga() {
             for (i, path) in bms.meta.imgpath.iter().enumerate() {
-                if path.is_some() { jobs.push(LoadImage(i)); }
+                if path.is_some() { jobs.push_back(LoadImage(i)); }
             }
         }
         let njobs = jobs.len();

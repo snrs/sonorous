@@ -16,7 +16,7 @@ dependencies = [
 [[package]]
 name = "cson"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/cson-rust.git#a4a0d41f2d30a861cd0b9892819222482b3a2052"
+source = "git+https://github.com/lifthrasiir/cson-rust.git#13c1fa3469d0d93f1c6dd99344ef654ef10e1075"
 
 [[package]]
 name = "encoding"
@@ -84,5 +84,5 @@ dependencies = [
 [[package]]
 name = "sqlite3"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/rustsqlite.git#84fe05e8655c3267ec51fec0e57ef11dba237385"
+source = "git+https://github.com/lifthrasiir/rustsqlite.git#0a7b5b42c8c231c1b0575fe0fdb7aa22ff4a244b"
 

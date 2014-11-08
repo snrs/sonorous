@@ -210,7 +210,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
         } else {
             let shortargs =
                 if arg.starts_with("--") {
-                    match longargs.find(&arg) {
+                    match longargs.get(&arg) {
                         Some(&c) => c.to_string(),
                         None => { return Error(format!("Invalid option: {}", arg)); }
                     }

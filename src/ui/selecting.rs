@@ -578,13 +578,13 @@ impl Scene for SelectingScene {
                     self.preloaded = PreloadFailed(err);
                 }
                 Ok(BmsHashRead(bmspath, hash)) => {
-                    match self.fileindices.find(&bmspath) {
+                    match self.fileindices.get(&bmspath) {
                         Some(&offset) => { self.files[mut][offset].hash = Some(hash); }
                         None => {}
                     }
                 }
                 Ok(BmsCacheLoaded(bmspath, meta)) => {
-                    match self.fileindices.find(&bmspath) {
+                    match self.fileindices.get(&bmspath) {
                         Some(&offset) => { self.files[mut][offset].meta = Some(meta); }
                         None => {}
                     }

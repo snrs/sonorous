@@ -631,7 +631,7 @@ impl Player {
                     None => { continue; }
                 }
             };
-            let vkey = match self.keymap.find(&key) {
+            let vkey = match self.keymap.get(&key) {
                 Some(&vkey) => vkey,
                 None => { continue; }
             };

@@ -78,7 +78,7 @@ impl<'r,T:fmt::Show> fmt::Show for MaybeOwnedVec<'r,T> {
 impl<'r,T:PartialEq> PartialEq for MaybeOwnedVec<'r,T> {
     #[inline]
     fn eq(&self, other: &MaybeOwnedVec<'r,T>) -> bool {
-        self.as_slice().eq(&other.as_slice())
+        self.as_slice().eq(other.as_slice())
     }
 }
 
@@ -87,21 +87,21 @@ impl<'r,T:Eq> Eq for MaybeOwnedVec<'r,T> {}
 impl<'r,T:PartialEq,V:AsSlice<T>> Equiv<V> for MaybeOwnedVec<'r,T> {
     #[inline]
     fn equiv(&self, other: &V) -> bool {
-        self.as_slice().eq(&other.as_slice())
+        self.as_slice().eq(other.as_slice())
     }
 }
 
 impl<'r,T:PartialOrd> PartialOrd for MaybeOwnedVec<'r,T> {
     #[inline]
     fn partial_cmp(&self, other: &MaybeOwnedVec<'r,T>) -> Option<Ordering> {
-        self.as_slice().partial_cmp(&other.as_slice())
+        self.as_slice().partial_cmp(other.as_slice())
     }
 }
 
 impl<'r,T:Ord> Ord for MaybeOwnedVec<'r,T> {
     #[inline]
     fn cmp(&self, other: &MaybeOwnedVec<'r,T>) -> Ordering {
-        self.as_slice().cmp(&other.as_slice())
+        self.as_slice().cmp(other.as_slice())
     }
 }
 
