@@ -42,6 +42,8 @@
 extern crate "encoding-index-korean" as encoding_index_korean;
 extern crate "encoding-index-japanese" as encoding_index_japanese;
 
+use std::num::Float;
+
 use util::maybe_owned::{MaybeOwnedVec, IntoMaybeOwnedVec};
 use self::encoding_index_korean::euc_kr;
 use self::encoding_index_japanese::jis0208;

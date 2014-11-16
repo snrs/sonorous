@@ -4,7 +4,7 @@
 
 //! Pointer interface, which provides a reference to the position or object in the timeline.
 
-use std::num;
+use std::num::Float;
 use std::rc::Rc;
 use format::obj::{Obj, ObjAxis, ObjLoc, ObjData, ToObjData};
 use format::timeline::Timeline;
@@ -439,8 +439,8 @@ impl<S,I> Pointer<S,I> {
             (None, Some(next)) => Some(next),
             (Some(prev), None) => Some(prev),
             (Some(prev), Some(next)) =>
-                if num::abs(prev.loc[axis] - self.loc[axis]) <
-                   num::abs(next.loc[axis] - self.loc[axis]) { Some(prev) }
+                if (prev.loc[axis] - self.loc[axis]).abs() <
+                   (next.loc[axis] - self.loc[axis]).abs() { Some(prev) }
                 else { Some(next) }
         }
     }

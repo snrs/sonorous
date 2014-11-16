@@ -4,7 +4,8 @@
 
 //! Core game play logics. Handles the input (if any) and sound but not the user interface.
 
-use std::{slice, cmp, num};
+use std::{slice, cmp};
+use std::num::Float;
 use std::rc::Rc;
 use std::rand::Rng;
 use libc;
@@ -364,7 +365,7 @@ impl Player {
     /// between the object and input time in seconds. The normalized distance equals to
     /// the actual time difference when `gradefactor` is 1.0.
     pub fn update_grade_from_distance(&mut self, dist: f64) {
-        let dist = num::abs(dist);
+        let dist = dist.abs();
         let (grade, damage) = if      dist <  COOL_CUTOFF {(COOL,None)}
                               else if dist < GREAT_CUTOFF {(GREAT,None)}
                               else if dist <  GOOD_CUTOFF {(GOOD,None)}
@@ -492,7 +493,7 @@ impl Player {
             });
         for p in nextlndone.iter() {
             let delta = (p.loc.vtime - self.cur.loc.vtime) * self.gradefactor;
-            if num::abs(delta) < BAD_CUTOFF {
+            if delta.abs() < BAD_CUTOFF {
                 self.nograding[mut][p.index] = true;
             } else {
                 self.update_grade_to_miss();
@@ -523,7 +524,7 @@ impl Player {
         for p in gradable.iter() {
             if p.index >= self.checked.index && !self.nograding[p.index] && !p.is_lndone() {
                 let dist = (p.loc.vtime - self.cur.loc.vtime) * self.gradefactor;
-                if num::abs(dist) < BAD_CUTOFF {
+                if dist.abs() < BAD_CUTOFF {
                     if p.is_lnstart() { self.thru[mut][*lane] = Some(p.clone()); }
                     self.nograding[mut][p.index] = true;
                     self.update_grade_from_distance(dist);
@@ -540,7 +541,7 @@ impl Player {
         if self.targetspeed.is_some() {
             let target = self.targetspeed.unwrap();
             let delta = target - self.playspeed;
-            if num::abs(delta) < 0.001 {
+            if delta.abs() < 0.001 {
                 self.playspeed = target;
                 self.targetspeed = None;
             } else {

@@ -4,7 +4,8 @@
 
 //! Game play screen. Renders the screen from `engine::player::Player` state.
 
-use std::{cmp, num, iter};
+use std::{cmp, iter};
+use std::num::SignedInt;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -198,13 +199,13 @@ fn create_sprite(leftmost: uint, rightmost: Option<uint>,
             for i in range(-10i, 20) {
                 let c = (i*2+j*3+750) % 2000;
                 pixels.put_pixel((j+244) as uint, (i+10) as uint,
-                                 topgrad.blend(850 - num::abs(c-1000), 700));
+                                 topgrad.blend(850 - (c-1000).abs(), 700));
             }
             for i in range(-20i, 60) {
                 let c = (i*3+j*2+750) % 2000;
                 let bottom = (SCREENH - 60) as int;
                 pixels.put_pixel((j+244) as uint, (i+bottom) as uint,
-                                 botgrad.blend(850 - num::abs(c-1000), 700));
+                                 botgrad.blend(850 - (c-1000).abs(), 700));
             }
         }
     });

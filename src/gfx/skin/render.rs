@@ -9,6 +9,7 @@
 //! Skin renderer.
 
 use std::{f32, num, str, mem};
+use std::num::Float;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::io::{IoResult, MemWriter};

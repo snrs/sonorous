@@ -9,7 +9,7 @@
 //! A combined relative ("ratio") and absolute ("num") value.
 
 use std::fmt;
-use std::num::{Zero, One};
+use std::num::{Int, Float};
 use std::default::Default;
 
 /// The sum of relative value (`ratio`) and absolute value (`num`), i.e. `ratio * base + num`.
@@ -23,28 +23,44 @@ pub struct RatioNum<T> {
     pub num: T,
 }
 
-impl<T:Zero> RatioNum<T> {
+impl<T:Float> RatioNum<T> {
     /// Returns a zero value.
     pub fn zero() -> RatioNum<T> {
-        RatioNum { ratio: Zero::zero(), num: Zero::zero() }
+        RatioNum { ratio: Float::zero(), num: Float::zero() }
     }
 
     /// Returns a combined value out of the absolute value.
     pub fn from_num(num: T) -> RatioNum<T> {
-        RatioNum { ratio: Zero::zero(), num: num }
+        RatioNum { ratio: Float::zero(), num: num }
     }
 
     /// Returns a combined value out of the relative value.
     pub fn from_ratio(ratio: T) -> RatioNum<T> {
-        RatioNum { ratio: ratio, num: Zero::zero() }
+        RatioNum { ratio: ratio, num: Float::zero() }
     }
 }
 
-impl<T:Zero+One> RatioNum<T> {
+impl<T:Int> RatioNum<T> {
+    /// Returns `Some(self + rhs)` if it wouldn't occur overflow, or `None` otherwise.
+    pub fn checked_add(&self, rhs: &RatioNum<T>) -> Option<RatioNum<T>> {
+        let ratio = match self.ratio.checked_add(rhs.ratio) { Some(v) => v, None => return None };
+        let num   = match self.num  .checked_add(rhs.num  ) { Some(v) => v, None => return None };
+        Some(RatioNum { ratio: ratio, num: num })
+    }
+
+    /// Returns `Some(self - rhs)` if it wouldn't occur overflow, or `None` otherwise.
+    pub fn checked_sub(&self, rhs: &RatioNum<T>) -> Option<RatioNum<T>> {
+        let ratio = match self.ratio.checked_sub(rhs.ratio) { Some(v) => v, None => return None };
+        let num   = match self.num  .checked_sub(rhs.num  ) { Some(v) => v, None => return None };
+        Some(RatioNum { ratio: ratio, num: num })
+    }
+}
+
+impl<T:Float> RatioNum<T> {
     /// Returns a value equal to the reference base value. Note that this is not
     /// the true multiplicative identity, and `RatioNum` doesn't implement `One`.
     pub fn one() -> RatioNum<T> {
-        RatioNum { ratio: One::one(), num: Zero::zero() }
+        RatioNum { ratio: Float::one(), num: Float::zero() }
     }
 }
 
@@ -86,16 +102,6 @@ impl<T:Default> Default for RatioNum<T> {
     }
 }
 
-impl<T:Zero> Zero for RatioNum<T> {
-    fn zero() -> RatioNum<T> {
-        RatioNum { ratio: Zero::zero(), num: Zero::zero() }
-    }
-
-    fn is_zero(&self) -> bool {
-        self.ratio.is_zero() && self.num.is_zero()
-    }
-}
-
 impl<T:Neg<Result>, Result> Neg<RatioNum<Result>> for RatioNum<T> {
     fn neg(&self) -> RatioNum<Result> {
         RatioNum { ratio: -self.ratio, num: -self.num }
@@ -108,25 +114,9 @@ impl<T:Add<RHS,Result>, RHS, Result> Add<RatioNum<RHS>, RatioNum<Result>> for Ra
     }
 }
 
-impl<T:CheckedAdd> CheckedAdd for RatioNum<T> {
-    fn checked_add(&self, rhs: &RatioNum<T>) -> Option<RatioNum<T>> {
-        let ratio = match self.ratio.checked_add(&rhs.ratio) { Some(v) => v, None => return None };
-        let num   = match self.num  .checked_add(&rhs.num  ) { Some(v) => v, None => return None };
-        Some(RatioNum { ratio: ratio, num: num })
-    }
-}
-
 impl<T:Sub<RHS,Result>, RHS, Result> Sub<RatioNum<RHS>, RatioNum<Result>> for RatioNum<T> {
     fn sub(&self, rhs: &RatioNum<RHS>) -> RatioNum<Result> {
         RatioNum { ratio: self.ratio - rhs.ratio, num: self.num - rhs.num }
-    }
-}
-
-impl<T:CheckedSub> CheckedSub for RatioNum<T> {
-    fn checked_sub(&self, rhs: &RatioNum<T>) -> Option<RatioNum<T>> {
-        let ratio = match self.ratio.checked_sub(&rhs.ratio) { Some(v) => v, None => return None };
-        let num   = match self.num  .checked_sub(&rhs.num  ) { Some(v) => v, None => return None };
-        Some(RatioNum { ratio: ratio, num: num })
     }
 }
 
@@ -142,13 +132,13 @@ impl<T:Div<RHS,Result>, RHS, Result> Div<RHS, RatioNum<Result>> for RatioNum<T> 
     }
 }
 
-impl<T:fmt::Show+Zero+Mul<T,T>+FromPrimitive> fmt::Show for RatioNum<T> {
+impl<T:fmt::Show+Float+Mul<T,T>+FromPrimitive> fmt::Show for RatioNum<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.ratio.is_zero() {
+        if self.ratio == Float::zero() {
             self.num.fmt(f)
         } else {
             let hundred = FromPrimitive::from_u64(100).unwrap();
-            if self.num.is_zero() {
+            if self.num == Float::zero() {
                 write!(f, "{}%", self.ratio * hundred)
             } else {
                 write!(f, "{}%{:+}", self.ratio * hundred, self.num)
