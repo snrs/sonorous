@@ -6,6 +6,9 @@
 
 use std::fmt;
 
+pub use self::ObjData::{Deleted, Visible, Invisible, LNStart, LNDone, Bomb};
+pub use self::ObjData::{BGM, SetBGA, SetBPM, Stop, StopEnd, SetMeasureFactor, MeasureBar, End};
+
 /// A game play element mapped to the single input element (for example, button) and the screen
 /// area (henceforth "lane").
 #[deriving(PartialEq,Eq,Clone)]
@@ -66,15 +69,18 @@ pub enum Duration { Seconds(f64), Measures(f64) }
 impl Duration {
     /// Returns the sign of the duration.
     pub fn sign(&self) -> int {
-        let v = match *self { Seconds(secs) => secs, Measures(measures) => measures };
+        let v = match *self {
+            Duration::Seconds(secs) => secs,
+            Duration::Measures(measures) => measures
+        };
         if v < 0.0 {-1} else if v > 0.0 {1} else {0}
     }
 
     /// Calculates the actual seconds from the current BPM.
     pub fn to_sec(&self, bpm: BPM) -> f64 {
         match *self {
-            Seconds(secs) => secs,
-            Measures(measures) => bpm.measure_to_sec(measures)
+            Duration::Seconds(secs) => secs,
+            Duration::Measures(measures) => bpm.measure_to_sec(measures)
         }
     }
 }
@@ -83,7 +89,7 @@ impl Duration {
 /// (as in `MAXGAUGE`), but sometimes it may cause an instant death. Used in the `Bomb` object
 /// (normal note objects have a fixed value).
 #[deriving(PartialEq,Show,Clone)]
-pub enum Damage { GaugeDamage(f64), InstantDeath }
+pub enum Damage { Gauge(f64), InstantDeath }
 
 /**
  * A slice of the image. BMS #BGA command can override the existing #BMP command with this slice.
@@ -102,19 +108,19 @@ pub struct ImageSlice {
 #[deriving(PartialEq,Show,Clone)]
 pub enum BGARef<ImageRef> {
     /// Fully transparent image.
-    BlankBGA,
+    Blank,
     /// Static image.
-    ImageBGA(ImageRef),
+    Image(ImageRef),
     /// A portion of static image.
-    SlicedImageBGA(ImageRef, Box<ImageSlice>),
+    SlicedImage(ImageRef, Box<ImageSlice>),
 }
 
 impl<I> BGARef<I> {
     /// Returns a reference to the underlying image resource if any.
     pub fn as_image_ref<'r>(&'r self) -> Option<&'r I> {
         match *self {
-            BlankBGA => None,
-            ImageBGA(ref iref) | SlicedImageBGA(ref iref, _) => Some(iref)
+            BGARef::Blank => None,
+            BGARef::Image(ref iref) | BGARef::SlicedImage(ref iref, _) => Some(iref)
         }
     }
 }
@@ -210,19 +216,19 @@ impl<S:fmt::Show,I:fmt::Show> fmt::Show for ObjData<S,I> {
                 write!(f, "Bomb({},{},{})", fmt_lane(lane), fmt_or_default(sref, "--"), damage),
             BGM(ref sref) =>
                 write!(f, "BGM({})", sref),
-            SetBGA(layer, BlankBGA) =>
+            SetBGA(layer, BGARef::Blank) =>
                 write!(f, "SetBGA({},--)", layer),
-            SetBGA(layer, ImageBGA(ref iref)) =>
+            SetBGA(layer, BGARef::Image(ref iref)) =>
                 write!(f, "SetBGA({},{})", layer, iref),
-            SetBGA(layer, SlicedImageBGA(ref iref, ref slice)) =>
+            SetBGA(layer, BGARef::SlicedImage(ref iref, ref slice)) =>
                 write!(f, "SetBGA({},{}:{}+{}+{}x{}:{}+{}+{}x{})",
                           layer, iref, slice.sx, slice.sy, slice.w, slice.h,
                           slice.dx, slice.dy, slice.w, slice.h),
             SetBPM(BPM(bpm)) =>
                 write!(f, "SetBPM({})", bpm),
-            Stop(Seconds(secs)) =>
+            Stop(Duration::Seconds(secs)) =>
                 write!(f, "Stop({}s)", secs),
-            Stop(Measures(measures)) =>
+            Stop(Duration::Measures(measures)) =>
                 write!(f, "Stop({})", measures),
             StopEnd =>
                 write!(f, "StopEnd"),
@@ -264,7 +270,7 @@ pub trait ObjQueryOps<SoundRef:Clone,ImageRef:Clone> {
     fn is_invisible(&self) -> bool;
     /// Returns true if the object is a start of LN object (`LNStart`).
     fn is_lnstart(&self) -> bool;
-    /// Returns true if the object is an end of LN object (`LNEnd`).
+    /// Returns true if the object is an end of LN object (`LNDone`).
     fn is_lndone(&self) -> bool;
     /// Returns true if the object is either a start or an end of LN object.
     fn is_ln(&self) -> bool;
@@ -456,8 +462,8 @@ impl<S:Clone,I:Clone,T:ToObjData<S,I>> ObjQueryOps<S,I> for T {
 
     fn images(&self) -> Vec<I> {
         match self.to_obj_data() {
-            SetBGA(_,ImageBGA(ref iref)) |
-            SetBGA(_,SlicedImageBGA(ref iref,_)) => vec![iref.clone()],
+            SetBGA(_,BGARef::Image(ref iref)) |
+            SetBGA(_,BGARef::SlicedImage(ref iref,_)) => vec![iref.clone()],
             _ => Vec::new()
         }
     }
@@ -564,8 +570,8 @@ impl<T:Clone+PartialOrd> PartialOrd for ObjLoc<T> {
 
 impl<T:Clone> Index<ObjAxis,T> for ObjLoc<T> {
     fn index<'a>(&'a self, axis: &ObjAxis) -> &'a T {
-        match *axis { VirtualPos  => &self.vpos,  ActualPos  => &self.pos,
-                      VirtualTime => &self.vtime, ActualTime => &self.time }
+        match *axis { ObjAxis::VirtualPos  => &self.vpos,  ObjAxis::ActualPos  => &self.pos,
+                      ObjAxis::VirtualTime => &self.vtime, ObjAxis::ActualTime => &self.time }
     }
 }
 

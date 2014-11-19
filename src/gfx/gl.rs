@@ -11,6 +11,7 @@
 use std::{io, mem};
 
 use sdl::video;
+use sdl::video::SurfaceFlag;
 use opengles::gl2 as gl;
 use opengles::gl2::{GLenum, GLint, GLuint, GLsizei, GLfloat};
 
@@ -19,9 +20,9 @@ use opengles::gl2::{GLenum, GLint, GLuint, GLsizei, GLfloat};
 #[deriving(PartialEq,Eq)]
 pub enum ShaderType {
     /// Vertex shader.
-    VertexShader = gl::VERTEX_SHADER as int,
+    Vertex = gl::VERTEX_SHADER as int,
     /// Fragment shader.
-    FragmentShader = gl::FRAGMENT_SHADER as int,
+    Fragment = gl::FRAGMENT_SHADER as int,
 }
 
 /// Compiled shader. Automatically deleted when finalized.
@@ -140,7 +141,7 @@ impl Shader {
         }
 
         gl::shader_source(shader, ["#version 100\n".as_bytes(),
-                                   code.as_bytes()]);
+                                   code.as_bytes()][]);
         gl::compile_shader(shader);
         if gl::get_shader_iv(shader, gl::COMPILE_STATUS) != 0 {
             Ok(Shader { shader_type: shader_type, index: shader })
@@ -178,8 +179,8 @@ pub struct Program {
 impl Program {
     /// Creates a new program from given vertex and fragment shader.
     pub fn new(vertex_shader: Shader, fragment_shader: Shader) -> Result<Program,String> {
-        assert!(vertex_shader.shader_type == VertexShader);
-        assert!(fragment_shader.shader_type == FragmentShader);
+        assert!(vertex_shader.shader_type == ShaderType::Vertex);
+        assert!(fragment_shader.shader_type == ShaderType::Fragment);
 
         let program = gl::create_program();
         gl::attach_shader(program, vertex_shader.index);
@@ -273,7 +274,7 @@ fn prepare_surface_for_texture(surface: &video::Surface) -> Result<video::Surfac
                             (*(*surface.raw).format).Amask != 0 };
     let newfmt = pixel_format_from_tuple(if hasalpha {RGBA_PIXEL_FORMAT_TUPLE}
                                          else {RGB_PIXEL_FORMAT_TUPLE});
-    surface.convert(&newfmt, [video::SWSurface])
+    surface.convert(&newfmt, [SurfaceFlag::SWSurface][])
 }
 
 /// Calls `f` with the OpenGL-compatible parameters of the prepared surface.
@@ -306,7 +307,8 @@ impl PreparedSurface {
         let newfmt = pixel_format_from_tuple(if transparent {RGBA_PIXEL_FORMAT_TUPLE}
                                              else {RGB_PIXEL_FORMAT_TUPLE});
         let surface =
-            video::Surface::new([video::SWSurface], width as int, height as int, newfmt.bpp as int,
+            video::Surface::new([SurfaceFlag::SWSurface][],
+                                width as int, height as int, newfmt.bpp as int,
                                 newfmt.r_mask, newfmt.g_mask, newfmt.b_mask, newfmt.a_mask);
         match surface {
             Ok(surface) => Ok(PreparedSurface(surface)),

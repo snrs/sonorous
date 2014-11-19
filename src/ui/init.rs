@@ -19,10 +19,10 @@ pub const SCREENH: uint = 600;
 /// if `exclusive` is set, or a full-sized screen (`SCREENW` by `SCREENH` pixels) otherwise.
 /// `fullscreen` is ignored when `exclusive` is set.
 pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
-    if !sdl::init([sdl::InitVideo]) {
+    if !sdl::init([sdl::InitFlag::Video][]) {
         die!("SDL Initialization Failure: {}", sdl::get_error());
     }
-    sdl_image::init([sdl_image::InitJPG, sdl_image::InitPNG]);
+    sdl_image::init([sdl_image::InitFlag::JPG, sdl_image::InitFlag::PNG][]);
 
     let (width, height, fullscreen) = if exclusive {
         (BGAW, BGAH, false)
@@ -43,19 +43,19 @@ pub fn init_video(exclusive: bool, fullscreen: bool) -> Screen {
 
 /// Initializes SDL audio subsystem and SDL_mixer.
 pub fn init_audio() {
-    if !sdl::init([sdl::InitAudio]) {
+    if !sdl::init([sdl::InitFlag::Audio][]) {
         die!("SDL Initialization Failure: {}", sdl::get_error());
     }
-    //sdl_mixer::init([sdl_mixer::InitOGG, sdl_mixer::InitMP3]); // TODO
+    //sdl_mixer::init([sdl_mixer::InitFlag::OGG, sdl_mixer::InitFlag::MP3][]); // TODO
     if sdl_mixer::open(SAMPLERATE, sdl::audio::S16_AUDIO_FORMAT,
-                       sdl::audio::Stereo, 2048).is_err() {
+                       sdl::audio::Channels::Stereo, 2048).is_err() {
         die!("SDL Mixer Initialization Failure");
     }
 }
 
 /// Initializes a joystick with given index.
 pub fn init_joystick(joyidx: uint) -> sdl::joy::Joystick {
-    if !sdl::init([sdl::InitJoystick]) {
+    if !sdl::init([sdl::InitFlag::Joystick][]) {
         die!("SDL Initialization Failure: {}", sdl::get_error());
     }
     unsafe {

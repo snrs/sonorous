@@ -17,11 +17,11 @@ define_hooks! {
 
         block "opts.autoplay" => opts.is_autoplay() && body(parent, "");
         block "opts.modifier" => match opts.modf {
-            Some(options::MirrorModf)    => { body(parent, "mirror"); }
-            Some(options::ShuffleModf)   => { body(parent, "shuffle"); }
-            Some(options::ShuffleExModf) => { body(parent, "shuffle-ex"); }
-            Some(options::RandomModf)    => { body(parent, "random"); }
-            Some(options::RandomExModf)  => { body(parent, "random-ex"); }
+            Some(options::Modifier::Mirror)    => { body(parent, "mirror"); }
+            Some(options::Modifier::Shuffle)   => { body(parent, "shuffle"); }
+            Some(options::Modifier::ShuffleEx) => { body(parent, "shuffle-ex"); }
+            Some(options::Modifier::Random)    => { body(parent, "random"); }
+            Some(options::Modifier::RandomEx)  => { body(parent, "random-ex"); }
             None => {}
         };
         block "opts.hasbga" => opts.has_bga() && body(parent, "");
@@ -73,7 +73,7 @@ define_hooks! {
                 body(&parent.add_text("meta.comment", s[]), ""));
         block "meta.level" => meta.level.is_some() && body(parent, "");
         block "meta.levelsystem" => match meta.level.as_ref().map(|lv| lv.system) {
-            Some(metadata::LevelSystemBms) => { body(parent, "bms"); }
+            Some(metadata::LevelSystem::Bms) => { body(parent, "bms"); }
             None => {}
         };
         block "meta.difficulty" => match meta.difficulty {
@@ -98,10 +98,10 @@ define_hooks! {
         };
 
         block "meta.playmode" => match meta.mode {
-            bms::SinglePlay => { body(parent, "single"); }
-            bms::CouplePlay => { body(parent, "couple"); }
-            bms::DoublePlay => { body(parent, "double"); }
-            bms::BattlePlay => { body(parent, "battle"); }
+            bms::PlayMode::Single => { body(parent, "single"); }
+            bms::PlayMode::Couple => { body(parent, "couple"); }
+            bms::PlayMode::Double => { body(parent, "double"); }
+            bms::PlayMode::Battle => { body(parent, "battle"); }
         };
     }
 

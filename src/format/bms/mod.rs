@@ -86,21 +86,21 @@ pub const DEFAULT_BPM: BPM = BPM(130.0);
 #[deriving(PartialEq,Eq,Clone)]
 pub enum PlayMode {
     /// Single Play (SP), where only channels #1x are used for the game play.
-    SinglePlay = 1,
+    Single = 1,
     /// Couple Play, where channels #1x and #2x renders to the different panels. They are originally
     /// meant to be played by different players with separate gauges and scores, but this mode of
     /// game play is increasingly unsupported by modern implementations. Sonorous has only a limited
     /// support for Couple Play.
-    CouplePlay = 2,
+    Couple = 2,
     /// Double Play (DP), where both channels #1x and #2x renders to a single wide panel. The chart
     /// is still meant to be played by one person.
-    DoublePlay = 3,
+    Double = 3,
     /// Battle Play, where channels #1x are copied to channels #2x and both renders to
     /// the different panels. This was a temporary measure for the two-player game mode and
     /// has been completely replaced by automatic support for two-player mode (or a lack thereof)
     /// in modern implementations. Sonorous does not support Battle Play, but it does parse and
     /// treats Battle Play as Single Play.
-    BattlePlay = 4,
+    Battle = 4,
 }
 
 /// Loaded BMS metadata and resources.

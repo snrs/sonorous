@@ -21,7 +21,7 @@ pub struct Level {
 #[deriving(PartialEq, Eq, FromPrimitive, Clone)]
 pub enum LevelSystem {
     // FIXME this is a temporary, ambiguous rating system used by BMS
-    LevelSystemBms = 1,
+    Bms = 1,
 }
 
 /// Difficulty group specified by the author.

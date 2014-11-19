@@ -144,8 +144,8 @@ impl MD5State {
             *block.unsafe_ref(n as uint)
         }
 
-        macro_rules! set(($n:expr) => (unsafe {set(ptr, self.block, $n)}))
-        macro_rules! get(($n:expr) => (unsafe {get(ptr, self.block, $n)}))
+        macro_rules! set(($n:expr) => (unsafe {set(ptr, self.block[mut], $n)}))
+        macro_rules! get(($n:expr) => (unsafe {get(ptr, self.block[mut], $n)}))
 
         let mut a = self.a;
         let mut b = self.b;
@@ -332,7 +332,7 @@ impl MD5 {
 
             bytes::copy_memory(self.buffer[mut used..], data[..available]);
             data = data[available..];
-            self.state.body(self.buffer);
+            self.state.body(self.buffer[]);
         }
 
         if data.len() >= 64 {
@@ -341,7 +341,7 @@ impl MD5 {
             data = data[size_..];
         }
 
-        bytes::copy_memory(self.buffer, data);
+        bytes::copy_memory(self.buffer[mut], data);
     }
 
     /// Returns a finished 16-byte digest.
@@ -355,7 +355,7 @@ impl MD5 {
         let available = 64 - used;
         if available < 8 {
             ctx.buffer[mut used..].set_memory(0);
-            ctx.state.body(ctx.buffer);
+            ctx.state.body(ctx.buffer[]);
             used = 0;
         }
 
@@ -371,7 +371,7 @@ impl MD5 {
         ctx.buffer[62] = (ctx.hi >> 16) as u8;
         ctx.buffer[63] = (ctx.hi >> 24) as u8;
 
-        ctx.state.body(ctx.buffer);
+        ctx.state.body(ctx.buffer[]);
 
         MD5Hash([ctx.state.a as u8,
                  (ctx.state.a >> 8) as u8,

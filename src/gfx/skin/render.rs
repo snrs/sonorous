@@ -21,25 +21,17 @@ use sdl_image;
 use gfx::color::{Color, Gradient, RGB, to_rgba};
 use gfx::gl::Texture2D;
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
-use gfx::bmfont::{NCOLUMNS, NROWS, FontDrawingUtils, LeftAligned};
+use gfx::bmfont::{NCOLUMNS, NROWS, FontDrawingUtils, Alignment};
 use gfx::screen::{Screen, ShadedFontDrawing, ScreenDraw, ScreenTexturedDraw};
-use gfx::skin::scalar::{Scalar, ImageScalar, TextureSource, PathSource, ImageClip, ColorScalar};
-use gfx::skin::ast::{Expr, ENum, EScalar, ENeg, EAdd, ESub, EMul, EDiv, Pos, Rect};
-use gfx::skin::ast::{Gen, HookGen, TextGen, TextLenGen};
-use gfx::skin::ast::{Block, CondBlock, MultiBlock};
-use gfx::skin::ast::{ScalarFormat, NoFormat, NumFormat, MsFormat, HmsFormat};
-use gfx::skin::ast::{TextSource, ScalarText, StaticText, TextBlock, TextConcat};
-use gfx::skin::ast::{ColorSource, ScalarColor, StaticColor, ColorBlock};
-use gfx::skin::ast::{GradientSource, FlatColorGradient, ColorGradient, GradientBlock};
-use gfx::skin::ast::{Node, Nothing, Debug, ColoredLine, ColoredRect, TexturedRect,
-                     Text, Group, Clip, NodeBlock};
-use gfx::skin::ast::{Skin};
+use gfx::skin::scalar::{Scalar, ImageSource, ImageClip};
+use gfx::skin::ast::{Expr, Pos, Rect, Gen, Block};
+use gfx::skin::ast::{ScalarFormat, TextSource, ColorSource, GradientSource, Node, Skin};
 use gfx::skin::hook::Hook;
 
 /// The currently active draw call.
 enum ActiveDraw<'a> {
     /// No draw call active.
-    ToBeDrawn,
+    None,
     /// Shaded drawing with `GL_LINES` primitive.
     ShadedLines(ShadedDrawing),
     /// Shaded drawing with `GL_TRIANGLES` primitive.
@@ -104,14 +96,14 @@ impl<'a> State<'a> {
         let initclip = ClipRect { dx: 0.0, dy: 0.0,
                                   w: screen.width as f32, h: screen.height as f32 };
         State { renderer: RefCell::new(renderer), screen: RefCell::new(screen),
-                draw: RefCell::new(ToBeDrawn), clip: Cell::new(initclip) }
+                draw: RefCell::new(ActiveDraw::None), clip: Cell::new(initclip) }
     }
 
     /// Evaluates an expression.
     fn expr(&self, hook: &Hook, e: &Expr, reference: f32) -> f32 {
         match *e {
-            ENum(ref v) => v.to_num(&reference),
-            EScalar(ref id) => match hook.scalar_hook(id.as_slice()) {
+            Expr::Num(ref v) => v.to_num(&reference),
+            Expr::Scalar(ref id) => match hook.scalar_hook(id.as_slice()) {
                 Some(ref scalar) => match scalar.to_f32() {
                     Some(v) => v,
                     None => {
@@ -125,14 +117,14 @@ impl<'a> State<'a> {
                     f32::NAN
                 },
             },
-            ENeg(box ref e_) => -self.expr(hook, e_, reference),
-            EAdd(box ref lhs, box ref rhs) =>
+            Expr::Neg(box ref e_) => -self.expr(hook, e_, reference),
+            Expr::Add(box ref lhs, box ref rhs) =>
                 self.expr(hook, lhs, reference) + self.expr(hook, rhs, reference),
-            ESub(box ref lhs, box ref rhs) =>
+            Expr::Sub(box ref lhs, box ref rhs) =>
                 self.expr(hook, lhs, reference) - self.expr(hook, rhs, reference),
-            EMul(box ref lhs, box ref rhs) =>
+            Expr::Mul(box ref lhs, box ref rhs) =>
                 self.expr(hook, lhs, reference) * self.expr(hook, rhs, reference),
-            EDiv(box ref lhs, box ref rhs) =>
+            Expr::Div(box ref lhs, box ref rhs) =>
                 self.expr(hook, lhs, reference) / self.expr(hook, rhs, reference),
         }
     }
@@ -152,8 +144,8 @@ impl<'a> State<'a> {
     /// Evaluates a color source.
     fn color_source(&self, hook: &Hook, color: &ColorSource) -> Option<Color> {
         match *color {
-            ScalarColor(ref id) => match hook.scalar_hook(id.as_slice()) {
-                Some(ColorScalar(color)) => Some(color),
+            ColorSource::Scalar(ref id) => match hook.scalar_hook(id.as_slice()) {
+                Some(Scalar::Color(color)) => Some(color),
                 Some(ref scalar) => {
                     warn!("skin: `{id}` is not a color scalar hook ({scalar}).",
                           id = id.as_slice(), scalar = *scalar);
@@ -164,8 +156,8 @@ impl<'a> State<'a> {
                     None
                 },
             },
-            StaticColor(color) => Some(color),
-            ColorBlock(ref block) => {
+            ColorSource::Static(color) => Some(color),
+            ColorSource::Block(ref block) => {
                 let mut ret = None;
                 self.block(hook, block, |hook_, color_| {
                     ret = self.color_source(hook_, &**color_);
@@ -179,19 +171,19 @@ impl<'a> State<'a> {
     /// Evaluates a gradient source.
     fn gradient_source(&self, hook: &Hook, gradient: &GradientSource) -> Option<Gradient> {
         match *gradient {
-            FlatColorGradient(ref color) => {
+            GradientSource::FlatColor(ref color) => {
                 match self.color_source(hook, color) {
                     Some(color) => Some(Gradient { zero: color, one: color }),
                     None => None,
                 }
             }
-            ColorGradient(ref zero, ref one) => {
+            GradientSource::Color(ref zero, ref one) => {
                 match (self.color_source(hook, zero), self.color_source(hook, one)) {
                     (Some(zero), Some(one)) => Some(Gradient { zero: zero, one: one }),
                     (_, _) => None,
                 }
             }
-            GradientBlock(ref block) => {
+            GradientSource::Block(ref block) => {
                 let mut ret = None;
                 self.block(hook, block, |hook_, gradient_| {
                     ret = self.gradient_source(hook_, &**gradient_);
@@ -215,8 +207,8 @@ impl<'a> State<'a> {
     /// (defaults to an empty string), and can return `false` to stop the iteration.
     fn gen(&self, hook: &Hook, gen: &Gen, body: |&Hook, &str| -> bool) -> bool {
         match *gen {
-            HookGen(ref id) => hook.block_hook(id.as_slice(), hook, body),
-            TextGen(ref id) => match hook.scalar_hook(id.as_slice()) {
+            Gen::Hook(ref id) => hook.block_hook(id.as_slice(), hook, body),
+            Gen::Text(ref id) => match hook.scalar_hook(id.as_slice()) {
                 Some(scalar) => {
                     let text = scalar.into_maybe_owned();
                     body(hook, text.as_slice());
@@ -224,7 +216,7 @@ impl<'a> State<'a> {
                 },
                 None => false
             },
-            TextLenGen(ref id) => match hook.scalar_hook(id.as_slice()) {
+            Gen::TextLen(ref id) => match hook.scalar_hook(id.as_slice()) {
                 Some(scalar) => {
                     let text = scalar.into_maybe_owned();
                     if !text.is_empty() {
@@ -244,7 +236,7 @@ impl<'a> State<'a> {
     /// (defaults to an empty string), and can return `false` to stop the iteration.
     fn block<T>(&self, hook: &Hook, block: &Block<T>, body: |&Hook, &T| -> bool) {
         match *block {
-            CondBlock { ref gen, ref then, ref else_ } => {
+            Block::Cond { ref gen, ref then, ref else_ } => {
                 let mut called = false;
                 self.gen(hook, gen, |hook_, _alt| {
                     called = true;
@@ -260,11 +252,11 @@ impl<'a> State<'a> {
                     }
                 }
             }
-            MultiBlock { ref gen, ref map, ref default, ref else_ } => {
+            Block::Multi { ref gen, ref map, ref default, ref else_ } => {
                 let mut called = false;
                 self.gen(hook, gen, |hook_, alt| {
                     called = true;
-                    match map.find_equiv(alt) {
+                    match map.get(alt) {
                         Some(then) => body(hook_, then),
                         None => match *default {
                             Some(ref default) => body(hook_, default),
@@ -336,13 +328,13 @@ impl<'a> State<'a> {
         }
 
         match *fmt {
-            NoFormat => write!(out, "{}", scalar),
-            NumFormat { sign, minwidth, maxwidth, precision, multiplier } => {
+            ScalarFormat::None => write!(out, "{}", scalar),
+            ScalarFormat::Num { sign, minwidth, maxwidth, precision, multiplier } => {
                 let v = match to_f64(scalar) { Some(v) => v, None => return Ok(()) };
                 let v = v * multiplier as f64;
                 fill_and_clip(out, sign, minwidth, maxwidth, precision, v)
             },
-            MsFormat { sign, minwidth, maxwidth, precision, multiplier } => {
+            ScalarFormat::Ms { sign, minwidth, maxwidth, precision, multiplier } => {
                 let v = match to_f64(scalar) { Some(v) => v, None => return Ok(()) };
                 let v = v * multiplier as f64;
                 let (min, sec) = num::div_rem(v, 60.0);
@@ -350,7 +342,7 @@ impl<'a> State<'a> {
                 let (sec10, sec1) = num::div_rem(sec.abs(), 10.0);
                 write!(out, ":{:01.0}{:.*}", sec10, precision as uint, sec1)
             },
-            HmsFormat { sign, minwidth, maxwidth, precision, multiplier } => {
+            ScalarFormat::Hms { sign, minwidth, maxwidth, precision, multiplier } => {
                 let v = match to_f64(scalar) { Some(v) => v, None => return Ok(()) };
                 let v = v * multiplier as f64;
                 let (min, sec) = num::div_rem(v, 60.0);
@@ -366,7 +358,7 @@ impl<'a> State<'a> {
     fn text_source<'a>(&self, hook: &'a Hook, text: &'a TextSource,
                        out: &mut Writer) -> IoResult<()> {
         match *text {
-            ScalarText(ref id, ref format) => match hook.scalar_hook(id.as_slice()) {
+            TextSource::Scalar(ref id, ref format) => match hook.scalar_hook(id.as_slice()) {
                 Some(scalar) => self.scalar_format(scalar, format, out),
                 _ => {
                     warn!("skin: `{id}` is not a scalar hook, will use an empty string",
@@ -374,8 +366,8 @@ impl<'a> State<'a> {
                     Ok(())
                 },
             },
-            StaticText(ref text) => write!(out, "{}", *text),
-            TextBlock(ref block) => {
+            TextSource::Static(ref text) => write!(out, "{}", *text),
+            TextSource::Block(ref block) => {
                 let mut ret = Ok(());
                 self.block(hook, block, |hook_, text_| {
                     match self.text_source(hook_, &**text_, out) {
@@ -385,7 +377,7 @@ impl<'a> State<'a> {
                 });
                 ret
             },
-            TextConcat(ref nodes) => {
+            TextSource::Concat(ref nodes) => {
                 for node in nodes.iter() {
                     try!(self.text_source(hook, node, out));
                 }
@@ -418,11 +410,13 @@ impl<'a> State<'a> {
 
         let mut scalar = hook.scalar_hook(id);
         if scalar.is_none() {
-            scalar = renderer.skin.scalars.find_equiv(id).map(|v| v.clone());
+            scalar = renderer.skin.scalars.get(id).map(|v| v.clone());
         }
         match scalar {
-            Some(ImageScalar(TextureSource(tex), ref clip)) => callback(Some((tex, clip))),
-            Some(ImageScalar(PathSource(ref path), ref clip)) => {
+            Some(Scalar::Image(ImageSource::Texture(tex), ref clip)) => {
+                callback(Some((tex, clip)))
+            },
+            Some(Scalar::Image(ImageSource::Path(ref path), ref clip)) => {
                 let tex = match renderer.imagecache.entry(path.clone()) {
                     hash_map::Occupied(tex) => tex.into_mut(),
                     hash_map::Vacant(entry) => {
@@ -449,10 +443,10 @@ impl<'a> State<'a> {
     /// Commits the current draw call to given screen.
     fn commit_to(&self, draw: ActiveDraw, screen: &mut Screen) {
         match draw {
-            ToBeDrawn => {}
-            ShadedLines(d) => { d.draw_to(screen); }
-            Shaded(d) => { d.draw_to(screen); }
-            Textured(d, tex) => { d.draw_texture_to(screen, tex.deref()); }
+            ActiveDraw::None => {}
+            ActiveDraw::ShadedLines(d) => { d.draw_to(screen); }
+            ActiveDraw::Shaded(d) => { d.draw_to(screen); }
+            ActiveDraw::Textured(d, tex) => { d.draw_texture_to(screen, tex.deref()); }
         }
     }
 
@@ -482,22 +476,22 @@ impl<'a> State<'a> {
     /// Commits any remaining active draw call.
     fn finish(&self) {
         self.draw_or_commit(
-            |draw| match draw { &ToBeDrawn => Some(()), _ => None },
-            |_screen| ToBeDrawn);
+            |draw| match draw { &ActiveDraw::None => Some(()), _ => None },
+            |_screen| ActiveDraw::None);
     }
 
     /// Forces a `ShadedLines` draw call and calls a callback with the associated drawing.
     fn shaded_lines<T>(&self, f: |&mut ShadedDrawing| -> T) -> T {
         self.draw_or_commit(
-            |draw| match draw { &ShadedLines(ref mut d) => Some(f(d)), _ => None },
-            |_screen| ShadedLines(ShadedDrawing::new(gl::LINES)))
+            |draw| match draw { &ActiveDraw::ShadedLines(ref mut d) => Some(f(d)), _ => None },
+            |_screen| ActiveDraw::ShadedLines(ShadedDrawing::new(gl::LINES)))
     }
 
     /// Forces a `Shaded` draw call and calls a callback with the associated drawing.
     fn shaded<T>(&self, f: |&mut ShadedFontDrawing| -> T) -> T {
         self.draw_or_commit(
-            |draw| match draw { &Shaded(ref mut d) => Some(f(d)), _ => None },
-            |screen| Shaded(ShadedFontDrawing::new(gl::TRIANGLES, screen.font.clone())))
+            |draw| match draw { &ActiveDraw::Shaded(ref mut d) => Some(f(d)), _ => None },
+            |screen| ActiveDraw::Shaded(ShadedFontDrawing::new(gl::TRIANGLES, screen.font.clone())))
     }
 
     /// Forces a `Textured` draw call with given texture
@@ -506,14 +500,15 @@ impl<'a> State<'a> {
         self.draw_or_commit(
             |draw| match draw {
                 // keep the current drawing only when the texture is exactly identical.
-                &Textured(ref mut d, ref tex_) if tex.deref() as *const Texture2D ==
-                                                  tex_.deref() as *const Texture2D => Some(f(d)),
+                &ActiveDraw::Textured(ref mut d, ref tex_)
+                        if tex.deref() as *const Texture2D == tex_.deref() as *const Texture2D
+                    => Some(f(d)),
                 _ => None,
             },
             |_screen| {
                 let tex = tex.clone();
                 let d = TexturedDrawing::new(gl::TRIANGLES, tex.deref());
-                Textured(d, tex)
+                ActiveDraw::Textured(d, tex)
             })
     }
 
@@ -522,15 +517,15 @@ impl<'a> State<'a> {
     fn nodes(&self, hook: &Hook, nodes: &[Node]) -> bool {
         for node in nodes.iter() {
             match *node {
-                Nothing => {}
+                Node::Nothing => {}
 
-                Debug(ref msg) => {
+                Node::Debug(ref msg) => {
                     let clip = self.clip.get();
                     debug!("skin debug: dx={} dy={} w={} y={} msg={}",
                            clip.dx, clip.dy, clip.w, clip.h, *msg);
                 }
 
-                ColoredLine { ref from, ref to, ref color, opacity } => {
+                Node::ColoredLine { ref from, ref to, ref color, opacity } => {
                     let (x1, y1) = self.pos(hook, from);
                     let (x2, y2) = self.pos(hook, to);
                     let color = self.color_source(hook, color).unwrap_or(RGB(255, 255, 255));
@@ -538,14 +533,14 @@ impl<'a> State<'a> {
                     self.shaded_lines(|d| d.line_rgba(x1, y1, x2, y2, rgba, rgba));
                 }
 
-                ColoredRect { ref at, ref color, opacity } => {
+                Node::ColoredRect { ref at, ref color, opacity } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
                     let color = self.color_source(hook, color).unwrap_or(RGB(255, 255, 255));
                     let rgba = self.rgba(color, opacity);
                     self.shaded(|d| d.rect_rgba(x1, y1, x2, y2, rgba, rgba, rgba, rgba));
                 }
 
-                TexturedRect { ref tex, ref at, ref colormod, opacity, ref clip } => {
+                Node::TexturedRect { ref tex, ref at, ref colormod, opacity, ref clip } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
                     let colormod = self.color_source(hook, colormod).unwrap_or(RGB(255, 255, 255));
                     let rgba = self.rgba(colormod, opacity);
@@ -571,7 +566,8 @@ impl<'a> State<'a> {
                     });
                 }
 
-                Text { ref at, size, anchor: (ax,ay), ref color, ref zerocolor, ref text } => {
+                Node::Text { ref at, size, anchor: (ax,ay),
+                             ref color, ref zerocolor, ref text } => {
                     let (x, y) = self.pos(hook, at);
 
                     let text = self.text(hook, text);
@@ -602,21 +598,21 @@ impl<'a> State<'a> {
                         let left0 = left + zoom * (zeroes * NCOLUMNS) as f32;
                         let top = y - h * ay;
                         if zeroes > 0 {
-                            d.string(left, top, zoom, LeftAligned,
+                            d.string(left, top, zoom, Alignment::Left,
                                      text.as_slice()[..zeroes], gradient0);
                         }
-                        d.string(left0, top, zoom, LeftAligned,
+                        d.string(left0, top, zoom, Alignment::Left,
                                  text.as_slice()[zeroes..], gradient);
                     });
                 }
 
-                Group(ref nodes) => {
+                Node::Group(ref nodes) => {
                     let savedclip = self.clip.get();
                     self.nodes(hook, nodes[]);
                     self.clip.set(savedclip);
                 }
 
-                Clip { ref at } => {
+                Node::Clip { ref at } => {
                     let ((x1, y1), (x2, y2)) = self.rect(hook, at);
                     let newclip = ClipRect { dx: x1, dy: y1, w: x2 - x1, h: y2 - y1 };
                     self.clip.set(newclip);
@@ -626,7 +622,7 @@ impl<'a> State<'a> {
                     }
                 }
 
-                NodeBlock(ref block) => {
+                Node::Block(ref block) => {
                     let mut keepgoing = true;
                     self.block(hook, block, |hook_, nodes_| {
                         keepgoing = self.nodes(hook_, nodes_[]);

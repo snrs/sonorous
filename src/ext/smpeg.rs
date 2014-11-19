@@ -13,7 +13,8 @@ use std::ptr::null_mut;
 use std::mem::transmute;
 use std::string::raw::from_buf;
 use sdl::video::Surface;
-pub use self::ll::{SMPEGstatus, SMPEG_ERROR, SMPEG_STOPPED, SMPEG_PLAYING};
+pub use self::ll::SMPEGstatus;
+pub use self::ll::SMPEGstatus::{SMPEG_ERROR, SMPEG_STOPPED, SMPEG_PLAYING};
 
 pub mod ll {
     #![allow(non_camel_case_types)]

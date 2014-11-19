@@ -16,8 +16,8 @@ use std::default::Default;
 
 /// A vector that can hold either `&'r [T]` or `Vec<T>`.
 pub enum MaybeOwnedVec<'r, T:'r> {
-    OwnedVec(Vec<T>),
-    VecSlice(&'r [T]),
+    Owned(Vec<T>),
+    Slice(&'r [T]),
 }
 
 impl<'r,T> MaybeOwnedVec<'r,T> {
@@ -25,8 +25,8 @@ impl<'r,T> MaybeOwnedVec<'r,T> {
     #[inline]
     pub fn is_owned(&self) -> bool {
         match *self {
-            OwnedVec(..) => true,
-            VecSlice(..) => false,
+            MaybeOwnedVec::Owned(..) => true,
+            MaybeOwnedVec::Slice(..) => false,
         }
     }
 
@@ -34,8 +34,8 @@ impl<'r,T> MaybeOwnedVec<'r,T> {
     #[inline]
     pub fn is_slice(&self) -> bool {
         match *self {
-            OwnedVec(..) => false,
-            VecSlice(..) => true,
+            MaybeOwnedVec::Owned(..) => false,
+            MaybeOwnedVec::Slice(..) => true,
         }
     }
 
@@ -52,20 +52,20 @@ pub trait IntoMaybeOwnedVec<'r,T> {
 
 impl<T> IntoMaybeOwnedVec<'static,T> for Vec<T> {
     #[inline]
-    fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'static,T> { OwnedVec(self) }
+    fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'static,T> { MaybeOwnedVec::Owned(self) }
 }
 
 impl<'r,T> IntoMaybeOwnedVec<'r,T> for &'r [T] {
     #[inline]
-    fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'r,T> { VecSlice(self) }
+    fn into_maybe_owned_vec(self) -> MaybeOwnedVec<'r,T> { MaybeOwnedVec::Slice(self) }
 }
 
 impl<'r,T> AsSlice<T> for MaybeOwnedVec<'r,T> {
     #[inline]
     fn as_slice<'r>(&'r self) -> &'r [T] {
         match *self {
-            OwnedVec(ref v) => v[],
-            VecSlice(v) => v,
+            MaybeOwnedVec::Owned(ref v) => v[],
+            MaybeOwnedVec::Slice(v) => v,
         }
     }
 }
@@ -109,15 +109,15 @@ impl<'r,T:Clone> Clone for MaybeOwnedVec<'r,T> {
     #[inline]
     fn clone(&self) -> MaybeOwnedVec<'r,T> {
         match *self {
-            OwnedVec(ref v) => OwnedVec(v.clone()),
-            VecSlice(v) => VecSlice(v),
+            MaybeOwnedVec::Owned(ref v) => MaybeOwnedVec::Owned(v.clone()),
+            MaybeOwnedVec::Slice(v) => MaybeOwnedVec::Slice(v),
         }
     }
 }
 
 impl<T> Default for MaybeOwnedVec<'static,T> {
     #[inline]
-    fn default() -> MaybeOwnedVec<'static,T> { VecSlice(&[]) }
+    fn default() -> MaybeOwnedVec<'static,T> { MaybeOwnedVec::Slice(&[]) }
 }
 
 impl<'r,T:hash::Hash> hash::Hash for MaybeOwnedVec<'r,T> {

@@ -46,11 +46,11 @@ pub struct Font {
 /// An alignment mode of `Font::print_string`.
 pub enum Alignment {
     /// Coordinates specify the top-left corner of the bounding box.
-    LeftAligned,
+    Left,
     /// Coordinates specify the top-center point of the bounding box.
-    Centered,
+    Center,
     /// Coordinates specify the top-right corner of the bounding box.
-    RightAligned
+    Right
 }
 
 impl Font {
@@ -222,7 +222,7 @@ impl Font {
             polygons
         }
 
-        let glyphs = decompress(dwords, indices);
+        let glyphs = decompress(dwords[], indices);
         assert!(glyphs.len() == 3072);
 
         let mut polygons = Vec::new();
@@ -334,9 +334,9 @@ impl FontDrawingUtils for ShadedDrawing {
     fn string<ColorT:Blend>(&mut self, font: &Font, x: f32, y: f32, zoom: f32,
                             align: Alignment, s: &str, color: ColorT) {
         let mut x = match align {
-            LeftAligned  => x,
-            Centered     => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom) / 2.0,
-            RightAligned => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom),
+            Alignment::Left   => x,
+            Alignment::Center => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom) / 2.0,
+            Alignment::Right  => x - s.char_len() as f32 * (NCOLUMNS as f32 * zoom),
         };
         for c in s.chars() {
             self.char(font, x, y, zoom, c, color.clone());

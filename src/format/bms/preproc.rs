@@ -12,39 +12,39 @@ use format::bms::diag::BmsMessage;
 
 /// Represents one line of BMS command that may affect the control flow.
 #[deriving(PartialEq,Clone)]
-pub enum BmsFlowCommand {
-    BmsRandom(int),                             // #RANDOM
-    BmsSetRandom(int),                          // #SETRANDOM
-    BmsEndRandom,                               // #ENDRANDOM
-    BmsIf(int),                                 // #IF
-    BmsElseIf(int),                             // #ELSEIF
-    BmsElse,                                    // #ELSE
-    BmsEndIf,                                   // #ENDIF
-    BmsSwitch(int),                             // #SWITCH
-    BmsSetSwitch(int),                          // #SETSWITCH
-    BmsEndSw,                                   // #ENDSW
-    BmsCase(int),                               // #CASE
-    BmsSkip,                                    // #SKIP
-    BmsDef,                                     // #DEF
+pub enum BmsFlow {
+    RANDOM(int),                                // #RANDOM
+    SETRANDOM(int),                             // #SETRANDOM
+    ENDRANDOM,                                  // #ENDRANDOM
+    IF(int),                                    // #IF
+    ELSEIF(int),                                // #ELSEIF
+    ELSE,                                       // #ELSE
+    ENDIF,                                      // #ENDIF
+    SWITCH(int),                                // #SWITCH
+    SETSWITCH(int),                             // #SETSWITCH
+    ENDSW,                                      // #ENDSW
+    CASE(int),                                  // #CASE
+    SKIP,                                       // #SKIP
+    DEF,                                        // #DEF
 }
 
-impl fmt::Show for BmsFlowCommand {
+impl fmt::Show for BmsFlow {
     /// Returns a reconstructed line for given BMS flow command.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            BmsRandom(val) => write!(f, "#RANDOM {}", val),
-            BmsSetRandom(val) => write!(f, "#SETRANDOM {}", val),
-            BmsEndRandom => write!(f, "#ENDRANDOM"),
-            BmsIf(val) => write!(f, "#IF {}", val),
-            BmsElseIf(val) => write!(f, "#ELSEIF {}", val),
-            BmsElse => write!(f, "#ELSE"),
-            BmsEndIf => write!(f, "#ENDIF"),
-            BmsSwitch(val) => write!(f, "#SWITCH {}", val),
-            BmsSetSwitch(val) => write!(f, "#SETSWITCH {}", val),
-            BmsEndSw => write!(f, "#ENDSW"),
-            BmsCase(val) => write!(f, "#CASE {}", val),
-            BmsSkip => write!(f, "#SKIP"),
-            BmsDef => write!(f, "#DEF"),
+            BmsFlow::RANDOM(val) => write!(f, "#RANDOM {}", val),
+            BmsFlow::SETRANDOM(val) => write!(f, "#SETRANDOM {}", val),
+            BmsFlow::ENDRANDOM => write!(f, "#ENDRANDOM"),
+            BmsFlow::IF(val) => write!(f, "#IF {}", val),
+            BmsFlow::ELSEIF(val) => write!(f, "#ELSEIF {}", val),
+            BmsFlow::ELSE => write!(f, "#ELSE"),
+            BmsFlow::ENDIF => write!(f, "#ENDIF"),
+            BmsFlow::SWITCH(val) => write!(f, "#SWITCH {}", val),
+            BmsFlow::SETSWITCH(val) => write!(f, "#SETSWITCH {}", val),
+            BmsFlow::ENDSW => write!(f, "#ENDSW"),
+            BmsFlow::CASE(val) => write!(f, "#CASE {}", val),
+            BmsFlow::SKIP => write!(f, "#SKIP"),
+            BmsFlow::DEF => write!(f, "#DEF"),
         }
     }
 }
@@ -67,7 +67,10 @@ impl BlockState {
     /// Returns true if lines should be ignored in the current block given that the parent
     /// block was active.
     fn inactive(self) -> bool {
-        match self { Outside | Process => false, Ignore | NoFurther => true }
+        match self {
+            BlockState::Outside | BlockState::Process => false,
+            BlockState::Ignore | BlockState::NoFurther => true
+        }
     }
 }
 
@@ -104,7 +107,7 @@ pub struct Preprocessor<'r, T, R:'r> {
 impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
     /// Creates a new preprocessor with given RNG.
     pub fn new(r: &'r mut R) -> Preprocessor<'r,T,R> {
-        let blocks = vec![Block { val: None, state: Outside, skip: false }];
+        let blocks = vec![Block { val: None, state: BlockState::Outside, skip: false }];
         Preprocessor { blocks: blocks, r: r }
     }
 
@@ -126,13 +129,13 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
     /// Adds the flow command into the preprocessor.
     /// `messages` will have zero or more messages inserted.
     /// `result` will have zero or more preprocessed commands (or any appropriate data) inserted.
-    pub fn feed_flow(&mut self, _lineno: Option<uint>, flow: &BmsFlowCommand,
+    pub fn feed_flow(&mut self, _lineno: Option<uint>, flow: &BmsFlow,
                      messages: &mut Vec<BmsMessage>, _result: &mut Vec<T>) {
         let inactive = self.inactive();
         match *flow {
-            BmsRandom(val) | BmsSetRandom(val) => {
+            BmsFlow::RANDOM(val) | BmsFlow::SETRANDOM(val) => {
                 let val = if val <= 0 {None} else {Some(val)};
-                let setrandom = match *flow { BmsSetRandom(..) => true, _ => false };
+                let setrandom = match *flow { BmsFlow::SETRANDOM(..) => true, _ => false };
 
                 // do not generate a random value if the entire block is skipped (but it
                 // still marks the start of block)
@@ -145,35 +148,41 @@ impl<'r,T:Send+Clone,R:Rng> Preprocessor<'r,T,R> {
                         None
                     }
                 });
-                self.blocks.push(Block { val: generated, state: Outside, skip: inactive });
+                self.blocks.push(Block { val: generated, state: BlockState::Outside,
+                                         skip: inactive });
             }
-            BmsEndRandom => {
+            BmsFlow::ENDRANDOM => {
                 if self.blocks.len() > 1 { self.blocks.pop(); }
             }
-            BmsIf(val) | BmsElseIf(val) => {
+            BmsFlow::IF(val) | BmsFlow::ELSEIF(val) => {
                 let val = if val <= 0 {None} else {Some(val)};
-                let haspriorelse = match *flow { BmsElseIf(..) => true, _ => false };
+                let haspriorelse = match *flow { BmsFlow::ELSEIF(..) => true, _ => false };
 
                 let last = self.blocks.last_mut().unwrap();
                 last.state =
-                    if (!haspriorelse && !last.state.inactive()) || last.state == Ignore {
-                        if val.is_none() || val != last.val {Ignore} else {Process}
+                    if (!haspriorelse && !last.state.inactive()) ||
+                            last.state == BlockState::Ignore {
+                        if val.is_none() || val != last.val {BlockState::Ignore}
+                        else {BlockState::Process}
                     } else {
-                        NoFurther
+                        BlockState::NoFurther
                     };
             }
-            BmsElse => {
+            BmsFlow::ELSE => {
                 let last = self.blocks.last_mut().unwrap();
-                last.state = if last.state == Ignore {Process} else {NoFurther};
+                last.state = if last.state == BlockState::Ignore {BlockState::Process}
+                             else {BlockState::NoFurther};
             }
-            BmsEndIf => {
-                for &idx in self.blocks.iter().rposition(|&i| i.state != Outside).iter() {
+            BmsFlow::ENDIF => {
+                for &idx in self.blocks.iter()
+                                       .rposition(|&i| i.state != BlockState::Outside).iter() {
                     if idx > 0 { self.blocks.truncate(idx + 1); }
                 }
 
-                self.blocks.last_mut().unwrap().state = Outside;
+                self.blocks.last_mut().unwrap().state = BlockState::Outside;
             }
-            BmsSwitch(..) | BmsSetSwitch(..) | BmsEndSw | BmsCase(..) | BmsSkip | BmsDef => {
+            BmsFlow::SWITCH(..) | BmsFlow::SETSWITCH(..) | BmsFlow::ENDSW |
+            BmsFlow::CASE(..) | BmsFlow::SKIP | BmsFlow::DEF => {
                 messages.push(diag::BmsHasUnimplementedFlow);
             }
         }

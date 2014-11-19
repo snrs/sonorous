@@ -17,43 +17,43 @@ use engine::cache::MetadataCache;
 #[deriving(PartialEq,Eq,Clone)]
 pub enum Mode {
     /// Normal game play. The graphical display and input is enabled.
-    PlayMode,
+    Play,
     /// Automatic game play. The graphical display is enabled but the input is mostly ignored
     /// except for the play speed change.
-    AutoPlayMode,
+    AutoPlay,
     /// Exclusive (headless) mode. The graphical display is reduced to the BGA or absent at all
-    /// (when `NoBga` is also set).
-    ExclusiveMode
+    /// (when `Bga::None` is also set).
+    Exclusive
 }
 
 /// Modifiers that affect the game data.
 #[deriving(PartialEq,Eq,Clone)]
-pub enum Modf {
+pub enum Modifier {
     /// Swaps all "key" (i.e. `KeyKind::counts_as_key` returns true) lanes in the reverse order.
     /// See `player::apply_mirror_modf` for the detailed algorithm.
-    MirrorModf,
+    Mirror,
     /// Swaps all "key" lanes in the random order. See `player::apply_shuffle_modf` for
     /// the detailed algorithm.
-    ShuffleModf,
+    Shuffle,
     /// Swaps all lanes in the random order.
-    ShuffleExModf,
+    ShuffleEx,
     /// Swaps all "key" lanes in the random order, where the order is determined per object.
     /// See `player::apply_random_modf` for the detailed algorithm.
-    RandomModf,
+    Random,
     /// Swaps all lanes in the random order, where the order is determined per object.
-    RandomExModf
+    RandomEx
 }
 
 /// Specifies how the BGA is displayed.
 #[deriving(PartialEq,Eq,Clone)]
 pub enum Bga {
     /// Both the BGA image and movie is displayed.
-    BgaAndMovie,
+    WithMovie,
     /// The BGA is displayed but the movie is not loaded.
-    BgaButNoMovie,
-    /// The BGA is not displayed. When used with `ExclusiveMode` it also disables the graphical
-    /// display entirely.
-    NoBga
+    WithoutMovie,
+    /// The BGA is not displayed. When used with `PlayMode::Exclusive` it also disables
+    /// the graphical display entirely.
+    None
 }
 
 /// Global options set from the command line and environment variables.
@@ -62,7 +62,7 @@ pub struct Options {
     /// Game play mode.
     pub mode: Mode,
     /// Modifiers that affect the game data.
-    pub modf: Option<Modf>,
+    pub modf: Option<Modifier>,
     /// Specifies how the BGA is displayed.
     pub bga: Bga,
     /// True if the metadata (either overlaid in the loading screen or printed separately
@@ -99,17 +99,17 @@ pub struct Options {
 
 impl Options {
     /// Returns true if the exclusive mode is enabled. This enables a text-based interface.
-    pub fn is_exclusive(&self) -> bool { self.mode == ExclusiveMode }
+    pub fn is_exclusive(&self) -> bool { self.mode == Mode::Exclusive }
 
     /// Returns true if the input is ignored. Escape key or speed-changing keys are still
     /// available as long as the graphical screen is enabled.
-    pub fn is_autoplay(&self) -> bool { self.mode != PlayMode }
+    pub fn is_autoplay(&self) -> bool { self.mode != Mode::Play }
 
     /// Returns true if the BGA is displayed.
-    pub fn has_bga(&self) -> bool { self.bga != NoBga }
+    pub fn has_bga(&self) -> bool { self.bga != Bga::None }
 
     /// Returns true if the BGA movie is enabled.
-    pub fn has_movie(&self) -> bool { self.bga == BgaAndMovie }
+    pub fn has_movie(&self) -> bool { self.bga == Bga::WithMovie }
 
     /// Returns true if the graphical screen is enabled.
     pub fn has_screen(&self) -> bool { !self.is_exclusive() || self.has_bga() }
@@ -176,9 +176,9 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
     let selforcwd = os::self_exe_path().unwrap_or(Path::new("."));
 
     let mut bmspath = None;
-    let mut mode = PlayMode;
+    let mut mode = Mode::Play;
     let mut modf = None;
-    let mut bga = BgaAndMovie;
+    let mut bga = Bga::WithMovie;
     let mut showinfo = true;
     let mut fullscreen = true;
     let mut joystick = None;
@@ -187,12 +187,16 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
     let mut rightkeys = None;
     let mut playspeed = 1.0;
     let mut encoding = None;
-    let mut skinroot = selforcwd.join_many(["res", "skin"]);
+    let mut skinroot = selforcwd.join_many(["res", "skin"][]);
     let mut dataroot = selforcwd.clone();
     let mut metadatacache = None;
     let mut debug_dumpbmscommandfull = false;
     let mut debug_dumpbmscommand = false;
     let mut debug_dumptimeline = false;
+
+    macro_rules! error(
+        ($($e:tt)*) => (return ParsingResult::Error(format!($($e)*)))
+    )
 
     let mut i = 0;
     while i < nargs {
@@ -212,7 +216,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                 if arg.starts_with("--") {
                     match longargs.get(&arg) {
                         Some(&c) => c.to_string(),
-                        None => { return Error(format!("Invalid option: {}", arg)); }
+                        None => error!("Invalid option: {}", arg)
                     }
                 } else {
                     arg[1..].to_string()
@@ -234,7 +238,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                             if i < nargs {
                                 args[i][]
                             } else {
-                                return Error(format!("No argument to the option -{}", $opt));
+                                error!("No argument to the option -{}", $opt);
                             }
                         };
                     inside = false;
@@ -242,18 +246,18 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                 }));
 
                 match c {
-                    'h' => { return ShowUsage; }
-                    'V' => { return ShowVersion; }
-                    'v' => { mode = AutoPlayMode; }
-                    'x' => { mode = ExclusiveMode; }
-                    'X' => { mode = ExclusiveMode; bga = NoBga; }
+                    'h' => { return ParsingResult::ShowUsage; }
+                    'V' => { return ParsingResult::ShowVersion; }
+                    'v' => { mode = Mode::AutoPlay; }
+                    'x' => { mode = Mode::Exclusive; }
+                    'X' => { mode = Mode::Exclusive; bga = Bga::None; }
                     'w' => { fullscreen = false; }
                     'q' => { showinfo = false; }
-                    'm' => { modf = Some(MirrorModf); }
-                    's' => { modf = Some(ShuffleModf); }
-                    'S' => { modf = Some(ShuffleExModf); }
-                    'r' => { modf = Some(RandomModf); }
-                    'R' => { modf = Some(RandomExModf); }
+                    'm' => { modf = Some(Modifier::Mirror); }
+                    's' => { modf = Some(Modifier::Shuffle); }
+                    'S' => { modf = Some(Modifier::ShuffleEx); }
+                    'r' => { modf = Some(Modifier::Random); }
+                    'R' => { modf = Some(Modifier::RandomEx); }
                     'k' => { preset = Some(fetch_arg!('k').to_string()); }
                     'K' => { leftkeys = Some(fetch_arg!('K').to_string());
                              rightkeys = Some(fetch_arg!('K').to_string()); }
@@ -264,15 +268,15 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                                             else if speed > 99.0 {99.0}
                                             else {speed};
                             }
-                            _ => { return Error(format!("Invalid argument to option -a")); }
+                            _ => error!("Invalid argument to option -a")
                         }
                     }
-                    'B' => { bga = NoBga; }
-                    'M' => { bga = BgaButNoMovie; }
+                    'B' => { bga = Bga::None; }
+                    'M' => { bga = Bga::WithoutMovie; }
                     'j' => {
                         match from_str::<uint>(fetch_arg!('j')) {
                             Some(n) => { joystick = Some(n); }
-                            _ => { return Error(format!("Invalid argument to option -j")); }
+                            _ => error!("Invalid argument to option -j")
                         }
                     }
                     'E' => {
@@ -280,7 +284,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                         // since `Encoding`s are not `Send`able we keep only the encoding name
                         match encoding_from_whatwg_label(arg) {
                             Some(..) => { encoding = Some(arg.to_string()); }
-                            None => { return Error(format!("Invalid encoding name: {}", arg)); }
+                            None => error!("Invalid encoding name: {}", arg)
                         }
                     }
                     'D' => {
@@ -290,25 +294,25 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                                 metadatacache = Some(path.join("metadata.db"));
                                 dataroot = path;
                             }
-                            None => { return Error(format!("Invalid database path: {}", arg)); }
+                            None => error!("Invalid database path: {}", arg)
                         }
                     }
                     'Y' => {
                         let arg = fetch_arg!('Y');
                         match Path::new_opt(arg[]) {
                             Some(path) => { skinroot = path; }
-                            None => { return Error(format!("Invalid skin path: {}", arg)); }
+                            None => error!("Invalid skin path: {}", arg)
                         }
                     }
                     'Z' => match fetch_arg!('Z') {
                         "dump-bmscommand-full" => { debug_dumpbmscommandfull = true; }
                         "dump-bmscommand" => { debug_dumpbmscommand = true; }
                         "dump-timeline" => { debug_dumptimeline = true; }
-                        arg => { return Error(format!("Unknown debugging option: -Z {}", arg)); }
+                        arg => error!("Unknown debugging option: -Z {}", arg)
                     },
                     ' ' => {} // for ignored long options
                     '1'...'9' => { playspeed = char::to_digit(c, 10).unwrap() as f64; }
-                    _ => { return Error(format!("Invalid option: -{}", c)); }
+                    _ => error!("Invalid option: -{}", c)
                 }
                 if !inside { break; }
             }
@@ -322,8 +326,8 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
     }
 
     match bmspath {
-        None => ShowUsage,
-        Some(bmspath) => PathAndOptions(bmspath, Options {
+        None => ParsingResult::ShowUsage,
+        Some(bmspath) => ParsingResult::PathAndOptions(bmspath, Options {
             mode: mode,
             modf: modf,
             bga: bga,

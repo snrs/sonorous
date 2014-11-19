@@ -12,7 +12,7 @@ use std::mem;
 
 use gfx::color::{Color, to_rgba};
 use gfx::gl::{Texture2D, VertexBuffer};
-use gfx::gl::{Shader, VertexShader, FragmentShader};
+use gfx::gl::{Shader, ShaderType};
 use gfx::gl::{Program, UniformLoc, AttribLoc};
 use opengles::gl2 as gl;
 use opengles::gl2::{GLenum, GLint, GLuint, GLsizei};
@@ -54,8 +54,8 @@ impl ProgramForShades {
             }
         );
 
-        let vertex_shader = try!(Shader::from_str(VertexShader, vertex_code));
-        let fragment_shader = try!(Shader::from_str(FragmentShader, fragment_code));
+        let vertex_shader = try!(Shader::from_str(ShaderType::Vertex, vertex_code));
+        let fragment_shader = try!(Shader::from_str(ShaderType::Fragment, fragment_code));
         let program = try!(Program::new(vertex_shader, fragment_shader));
 
         let vertex_position = try!(program.attrib_location("vertex_position_in"));
@@ -127,8 +127,8 @@ impl ProgramForTextures {
             }
         );
 
-        let vertex_shader = try!(Shader::from_str(VertexShader, vertex_code));
-        let fragment_shader = try!(Shader::from_str(FragmentShader, fragment_code));
+        let vertex_shader = try!(Shader::from_str(ShaderType::Vertex, vertex_code));
+        let fragment_shader = try!(Shader::from_str(ShaderType::Fragment, fragment_code));
         let program = try!(Program::new(vertex_shader, fragment_shader));
 
         let vertex_position = try!(program.attrib_location("vertex_position_in"));
@@ -238,14 +238,14 @@ impl ShadedDrawingTraits for ShadedDrawing {
 
     fn line_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
                  (r1, g1, b1, a1): (u8,u8,u8,u8), (r2, g2, b2, a2): (u8,u8,u8,u8)) {
-        self.vertices.push_all([(x1, y1, r1, g1, b1, a1), (x2, y2, r2, g2, b2, a2)]);
+        self.vertices.push_all([(x1, y1, r1, g1, b1, a1), (x2, y2, r2, g2, b2, a2)][]);
     }
 
     fn triangle_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x3: f32, y3: f32,
                      (r1, g1, b1, a1): (u8,u8,u8,u8), (r2, g2, b2, a2): (u8,u8,u8,u8),
                      (r3, g3, b3, a3): (u8,u8,u8,u8)) {
         self.vertices.push_all([(x1, y1, r1, g1, b1, a1), (x2, y2, r2, g2, b2, a2),
-                                (x3, y3, r3, g3, b3, a3)]);
+                                (x3, y3, r3, g3, b3, a3)][]);
     }
 
     fn rect_rgba(&mut self, x1: f32, y1: f32, x2: f32, y2: f32,
@@ -254,10 +254,10 @@ impl ShadedDrawingTraits for ShadedDrawing {
         if self.prim == gl::LINES || self.prim == gl::TRIANGLES {
             self.vertices.push_all([(x1, y1, r11, g11, b11, a11), (x1, y2, r12, g12, b12, a12),
                                     (x2, y2, r22, g22, b22, a22), (x1, y1, r11, g11, b11, a11),
-                                    (x2, y2, r22, g22, b22, a22), (x2, y1, r21, g21, b21, a21)]);
+                                    (x2, y2, r22, g22, b22, a22), (x2, y1, r21, g21, b21, a21)][]);
         } else {
             self.vertices.push_all([(x1, y1, r11, g11, b11, a11), (x1, y2, r12, g12, b12, a12),
-                                    (x2, y2, r22, g22, b22, a22), (x2, y1, r21, g21, b21, a21)]);
+                                    (x2, y2, r22, g22, b22, a22), (x2, y1, r21, g21, b21, a21)][]);
         }
     }
 
@@ -372,10 +372,10 @@ impl TexturedDrawingTraits for TexturedDrawing {
         if self.prim == gl::LINES || self.prim == gl::TRIANGLES {
             self.vertices.push_all([(x1, y1, s1, t1, r, g, b, a), (x1, y2, s1, t2, r, g, b, a),
                                     (x2, y2, s2, t2, r, g, b, a), (x1, y1, s1, t1, r, g, b, a),
-                                    (x2, y2, s2, t2, r, g, b, a), (x2, y1, s2, t1, r, g, b, a)]);
+                                    (x2, y2, s2, t2, r, g, b, a), (x2, y1, s2, t1, r, g, b, a)][]);
         } else {
             self.vertices.push_all([(x1, y1, s1, t1, r, g, b, a), (x1, y2, s1, t2, r, g, b, a),
-                                    (x2, y2, s2, t2, r, g, b, a), (x2, y1, s2, t1, r, g, b, a)]);
+                                    (x2, y2, s2, t2, r, g, b, a), (x2, y1, s2, t1, r, g, b, a)][]);
         }
     }
 

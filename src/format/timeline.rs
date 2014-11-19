@@ -107,8 +107,7 @@ impl<S:fmt::Show,I:fmt::Show> Timeline<S,I> {
 /// A timeline builder.
 pub mod builder {
     use std::f64;
-    use format::obj::{Lane, NLANES, Obj, ObjLoc, BPM};
-    use format::obj::{Layer1, Layer2, Layer3, PoorBGA};
+    use format::obj::{Lane, NLANES, Obj, ObjLoc, BPM, BGALayer};
     use format::obj::{ObjData, Deleted, Visible, Invisible, LNStart, LNDone, Bomb};
     use format::obj::{BGM, SetBGA, SetBPM, Stop, StopEnd, SetMeasureFactor, End, MeasureBar};
     use format::obj::{ObjQueryOps, ObjConvOps};
@@ -262,10 +261,10 @@ pub mod builder {
         // object-like effects (except for BGMs) are simpler, any conflicting objects are removed.
         sanitize(objs,
                  |obj| match *obj {
-                           SetBGA(Layer1,_) => Some(0),
-                           SetBGA(Layer2,_) => Some(1),
-                           SetBGA(Layer3,_) => Some(2),
-                           SetBGA(PoorBGA,_) => Some(3),
+                           SetBGA(BGALayer::Layer1,_) => Some(0),
+                           SetBGA(BGALayer::Layer2,_) => Some(1),
+                           SetBGA(BGALayer::Layer3,_) => Some(2),
+                           SetBGA(BGALayer::PoorBGA,_) => Some(3),
                            SetBPM(..) => Some(4),
                            Stop(..) => Some(5),
                            _ => None,

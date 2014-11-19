@@ -3,25 +3,25 @@ name = "sonorous"
 version = "0.1.0"
 dependencies = [
  "cson 0.1.0 (git+https://github.com/lifthrasiir/cson-rust.git)",
- "encoding 0.2.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "encoding 0.2.1 (git+https://github.com/lifthrasiir/rust-encoding.git)",
  "encoding-index-japanese 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
  "encoding-index-korean 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
  "opengles 0.1.0 (git+https://github.com/lifthrasiir/rust-opengles-angle.git)",
- "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
- "sdl_image 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
- "sdl_mixer 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
+ "sdl 0.3.5 (git+https://github.com/lifthrasiir/rust-sdl.git)",
+ "sdl_image 0.3.5 (git+https://github.com/lifthrasiir/rust-sdl.git)",
+ "sdl_mixer 0.3.5 (git+https://github.com/lifthrasiir/rust-sdl.git)",
  "sqlite3 0.1.0 (git+https://github.com/lifthrasiir/rustsqlite.git)",
 ]
 
 [[package]]
 name = "cson"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/cson-rust.git#13c1fa3469d0d93f1c6dd99344ef654ef10e1075"
+source = "git+https://github.com/lifthrasiir/cson-rust.git#a84a0f3760cbd773182d4d4b7462cdd30abe12fc"
 
 [[package]]
 name = "encoding"
-version = "0.2.0"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#d67c864d8dfeb16a00656e9472133b0e2206781f"
+version = "0.2.1"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#6a5a95950572590485cbbf64509036b252339205"
 dependencies = [
  "encoding-index-japanese 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
  "encoding-index-korean 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
@@ -33,7 +33,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-japanese"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#d67c864d8dfeb16a00656e9472133b0e2206781f"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#6a5a95950572590485cbbf64509036b252339205"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -41,7 +41,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-korean"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#d67c864d8dfeb16a00656e9472133b0e2206781f"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#6a5a95950572590485cbbf64509036b252339205"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -49,7 +49,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-simpchinese"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#d67c864d8dfeb16a00656e9472133b0e2206781f"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#6a5a95950572590485cbbf64509036b252339205"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -57,7 +57,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-singlebyte"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#d67c864d8dfeb16a00656e9472133b0e2206781f"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#6a5a95950572590485cbbf64509036b252339205"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -65,7 +65,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-tradchinese"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#d67c864d8dfeb16a00656e9472133b0e2206781f"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#6a5a95950572590485cbbf64509036b252339205"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -73,7 +73,7 @@ dependencies = [
 [[package]]
 name = "encoding_index_tests"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#d67c864d8dfeb16a00656e9472133b0e2206781f"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#6a5a95950572590485cbbf64509036b252339205"
 
 [[package]]
 name = "opengles"
@@ -82,27 +82,27 @@ source = "git+https://github.com/lifthrasiir/rust-opengles-angle.git#92240a7a31c
 
 [[package]]
 name = "sdl"
-version = "0.3.4"
-source = "git+https://github.com/lifthrasiir/rust-sdl.git#b76956b16ae64c2c3df1813f98333bbc06cf6989"
+version = "0.3.5"
+source = "git+https://github.com/lifthrasiir/rust-sdl.git#6de122352a32fc81a6a6b7eb404bdb0b5fe4db8a"
 
 [[package]]
 name = "sdl_image"
-version = "0.3.4"
-source = "git+https://github.com/lifthrasiir/rust-sdl.git#b76956b16ae64c2c3df1813f98333bbc06cf6989"
+version = "0.3.5"
+source = "git+https://github.com/lifthrasiir/rust-sdl.git#6de122352a32fc81a6a6b7eb404bdb0b5fe4db8a"
 dependencies = [
- "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
+ "sdl 0.3.5 (git+https://github.com/lifthrasiir/rust-sdl.git)",
 ]
 
 [[package]]
 name = "sdl_mixer"
-version = "0.3.4"
-source = "git+https://github.com/lifthrasiir/rust-sdl.git#b76956b16ae64c2c3df1813f98333bbc06cf6989"
+version = "0.3.5"
+source = "git+https://github.com/lifthrasiir/rust-sdl.git#6de122352a32fc81a6a6b7eb404bdb0b5fe4db8a"
 dependencies = [
- "sdl 0.3.4 (git+https://github.com/lifthrasiir/rust-sdl.git)",
+ "sdl 0.3.5 (git+https://github.com/lifthrasiir/rust-sdl.git)",
 ]
 
 [[package]]
 name = "sqlite3"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/rustsqlite.git#0a7b5b42c8c231c1b0575fe0fdb7aa22ff4a244b"
+source = "git+https://github.com/lifthrasiir/rustsqlite.git#ecb33aa9bf8d558774bdc0ff85863108a9ecfb0f"
 

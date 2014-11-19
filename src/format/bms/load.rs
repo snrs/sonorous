@@ -7,17 +7,17 @@
 use std::{iter, cmp};
 use std::rand::Rng;
 
-use format::obj::{NLANES, Lane, BPM, Seconds, GaugeDamage, InstantDeath};
-use format::obj::{BGARef, ImageBGA, SlicedImageBGA, Layer1, Layer2, Layer3, PoorBGA};
+use format::obj::{NLANES, Lane, BPM, Duration, Damage, BGARef, BGALayer};
 use format::obj::{ObjQueryOps, ObjConvOps};
 use format::obj::{Visible, Invisible, LNStart, LNDone, Bomb};
 use format::obj::{BGM, SetBGA, SetBPM, Stop, SetMeasureFactor, MeasureBar};
-use format::metadata::{Level, LevelSystemBms, Difficulty, Meta};
+use format::metadata::{Level, LevelSystem, Difficulty, Meta};
 use format::bms::{parse, diag};
+use format::bms::parse::{Parsed, BmsCommand};
 use format::bms::types::{Key, MAXKEY};
 use format::bms::diag::BmsMessage;
 use format::bms::{ImageRef, SoundRef, DEFAULT_BPM, BmsMeta, Bms};
-use format::bms::{SinglePlay, CouplePlay, DoublePlay, BattlePlay};
+use format::bms::PlayMode;
 
 /// Loader options for BMS format.
 pub struct LoaderOptions {
@@ -70,7 +70,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     let mut stagefile = None;
     let mut banner = None;
     let mut basepath = None;
-    let mut mode = SinglePlay;
+    let mut mode = PlayMode::Single;
     let mut level = None;
     let mut difficulty = None;
     let mut rank = 2;
@@ -92,7 +92,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // A table of BPMs. Maps to BMS #BPMxx command.
     let mut bpmtab = Vec::from_elem(MAXKEY as uint, DEFAULT_BPM);
     // A table of the length of scroll stoppers. Maps to BMS #STOP/#STP commands.
-    let mut stoptab = Vec::from_elem(MAXKEY as uint, Seconds(0.0));
+    let mut stoptab = Vec::from_elem(MAXKEY as uint, Duration::Seconds(0.0));
 
     // Allows LNs to be specified as a consecutive row of same or non-00 alphanumeric keys (MGQ
     // type, #LNTYPE 2). The default is to specify LNs as two endpoints (RDM type, #LNTYPE 1).
@@ -104,12 +104,12 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
     for parsed in parse::PreprocessingParser::new(f, r, &opts.parser).iter() {
         let (lineno, cmd) = match parsed {
-            parse::Command(lineno, cmd) => (lineno, cmd),
-            parse::Message(lineno, msg) => {
+            Parsed::Command(lineno, cmd) => (lineno, cmd),
+            Parsed::Message(lineno, msg) => {
                 diag!(msg at lineno);
                 continue;
             }
-            parse::Encoding(encname, confidence) => {
+            Parsed::Encoding(encname, confidence) => {
                 encoding = (encname, confidence);
                 if confidence <= 1.0 && !("ascii".equiv(&encname) || "utf-8".equiv(&encname)) {
                     diag!(diag::BmsUsesLegacyEncoding);
@@ -119,31 +119,31 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
         };
 
         match cmd {
-            parse::BmsTitle(s) => {
+            BmsCommand::TITLE(s) => {
                 let s = s.into_string();
                 if s.is_empty() { diag!(diag::BmsHasEmptyTITLE at lineno); }
                 if title.is_some() { diag!(diag::BmsHasMultipleTITLEs at lineno); }
                 title = Some(s);
             }
-            parse::BmsSubtitle(s) => {
+            BmsCommand::SUBTITLE(s) => {
                 subtitles.push(s.into_string());
             }
-            parse::BmsGenre(s) => {
+            BmsCommand::GENRE(s) => {
                 let s = s.into_string();
                 if s.is_empty() { diag!(diag::BmsHasEmptyGENRE at lineno); }
                 if genre.is_some() { diag!(diag::BmsHasMultipleGENREs at lineno); }
                 genre = Some(s);
             }
-            parse::BmsArtist(s) => {
+            BmsCommand::ARTIST(s) => {
                 let s = s.into_string();
                 if s.is_empty() { diag!(diag::BmsHasEmptyARTIST at lineno); }
                 if artist.is_some() { diag!(diag::BmsHasMultipleARTISTs at lineno); }
                 artist = Some(s);
             }
-            parse::BmsSubartist(s) => {
+            BmsCommand::SUBARTIST(s) => {
                 subartists.push(s.into_string());
             }
-            parse::BmsComment(s) => {
+            BmsCommand::COMMENT(s) => {
                 let mut s_ = s.as_slice().trim();
                 if s_.starts_with("\"") && s_.ends_with("\"") { // strip quotes
                     s_ = s_[1..s_.len()-1];
@@ -151,14 +151,14 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 comments.push(s_.to_string());
             }
 
-            parse::BmsStageFile(s) => {
+            BmsCommand::STAGEFILE(s) => {
                 stagefile = Some(s.into_string());
             }
-            parse::BmsBanner(s) => {
+            BmsCommand::BANNER(s) => {
                 banner = Some(s.into_string());
             }
 
-            parse::BmsBPM(bpm) => {
+            BmsCommand::BPM(bpm) => {
                 if *bpm < 0.0 {
                     diag!(diag::BmsHasNegativeInitBPM at lineno);
                 } else if *bpm == 0.0 {
@@ -167,36 +167,39 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                     builder.set_initbpm(bpm);
                 }
             }
-            parse::BmsExBPM(Key(i), bpm) => {
+            BmsCommand::EXBPM(Key(i), bpm) => {
                 if *bpm <= 0.0 {
                     diag!(diag::BmsHasNonpositiveBPM at lineno);
                 }
                 bpmtab[mut][i as uint] = bpm;
             }
 
-            parse::BmsPlayer(1) => { mode = SinglePlay; }
-            parse::BmsPlayer(2) => { mode = CouplePlay; diag!(diag::BmsUsesCouplePlay at lineno); }
-            parse::BmsPlayer(3) => { mode = DoublePlay; }
-            parse::BmsPlayer(4) => { mode = BattlePlay; diag!(diag::BmsUsesBattlePlay at lineno); }
-            parse::BmsPlayer(_) => { diag!(diag::BmsHasInvalidPLAYER at lineno); }
+            BmsCommand::PLAYER(1) => { mode = PlayMode::Single; }
+            BmsCommand::PLAYER(2) => { mode = PlayMode::Couple;
+                                     diag!(diag::BmsUsesCouplePlay at lineno); }
+            BmsCommand::PLAYER(3) => { mode = PlayMode::Double; }
+            BmsCommand::PLAYER(4) => { mode = PlayMode::Battle;
+                                     diag!(diag::BmsUsesBattlePlay at lineno); }
+            BmsCommand::PLAYER(_) => { diag!(diag::BmsHasInvalidPLAYER at lineno); }
 
-            parse::BmsPlayLevel(v) => {
+            BmsCommand::PLAYLEVEL(v) => {
                 if v < 0 { diag!(diag::BmsHasNegativePLAYLEVEL at lineno); }
-                level = Some(Level { value: v, system: LevelSystemBms });
+                level = Some(Level { value: v, system: LevelSystem::Bms });
             }
-            parse::BmsDifficulty(v) => {
+            BmsCommand::DIFFICULTY(v) => {
                 if v < 1 || v > 5 { diag!(diag::BmsHasDIFFICULTYOutOfRange at lineno); }
                 difficulty = Some(Difficulty(v));
             }
-            parse::BmsRank(v) => {
+            BmsCommand::RANK(v) => {
                 rank = v;
             }
 
-            parse::BmsLNType(1) => { consecutiveln = false; }
-            parse::BmsLNType(2) => { consecutiveln = true; diag!(diag::BmsUsesLNTYPE2 at lineno); }
-            parse::BmsLNType(_) => { diag!(diag::BmsHasInvalidLNTYPE at lineno); }
+            BmsCommand::LNTYPE(1) => { consecutiveln = false; }
+            BmsCommand::LNTYPE(2) => { consecutiveln = true;
+                                       diag!(diag::BmsUsesLNTYPE2 at lineno); }
+            BmsCommand::LNTYPE(_) => { diag!(diag::BmsHasInvalidLNTYPE at lineno); }
 
-            parse::BmsLNObj(key) => {
+            BmsCommand::LNOBJ(key) => {
                 if lnobj.is_some() { diag!(diag::BmsHasMultipleLNOBJs at lineno); }
                 if key == Key(0) {
                     diag!(diag::BmsHasZeroLNOBJ at lineno);
@@ -205,24 +208,24 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 }
             }
 
-            parse::BmsWAV(Key(i), s) => {
+            BmsCommand::WAV(Key(i), s) => {
                 sndpath[mut][i as uint] = Some(s.into_string());
             }
-            parse::BmsBMP(Key(i), s) => {
+            BmsCommand::BMP(Key(i), s) => {
                 imgpath[mut][i as uint] = Some(s.into_string());
             }
-            parse::BmsBGA(Key(i), Key(j), slice) => {
+            BmsCommand::BGA(Key(i), Key(j), slice) => {
                 imgslices[mut][i as uint] = Some((ImageRef(Key(j)), slice));
             }
 
-            parse::BmsStop(Key(i), dur) => {
+            BmsCommand::STOP(Key(i), dur) => {
                 if dur.sign() < 0 {
                     diag!(diag::BmsHasNegativeSTOPDuration at lineno);
                 } else {
                     stoptab[mut][i as uint] = dur;
                 }
             }
-            parse::BmsStp(pos, dur) => {
+            BmsCommand::STP(pos, dur) => {
                 if dur.sign() < 0 {
                     diag!(diag::BmsHasNegativeSTPDuration at lineno);
                 } else {
@@ -230,14 +233,14 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 }
             }
 
-            parse::BmsPathWAV(s) => {
+            BmsCommand::PATHWAV(s) => {
                 // TODO this logic assumes that #PATH_WAV is always interpreted as a native path,
                 // which the C version doesn't assume. this difference barely makes the practical
                 // issue though (#PATH_WAV is not expected to be used in the wild).
                 basepath = Some(Path::new(s.as_slice()));
             }
 
-            parse::BmsShorten(measure, factor) => {
+            BmsCommand::Shorten(measure, factor) => {
                 if factor > 0.0 {
                     if shortens.len() <= measure {
                         let ncopies = measure - shortens.len() + 1;
@@ -246,12 +249,12 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                     shortens[mut][measure] = factor;
                 }
             }
-            parse::BmsData(measure, chan, data) => {
+            BmsCommand::Data(measure, chan, data) => {
                 bmsline.push(BmsLine { measure: measure, chan: chan,
                                        data: data.into_string(), lineno: lineno })
             }
 
-            parse::BmsFlow(_) => { panic!("unexpected"); }
+            BmsCommand::Flow(_) => { panic!("unexpected"); }
             _ => {}
         }
     }
@@ -295,8 +298,8 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
     // and corresponding `ImageSlice`, if possible.
     let imgref_to_bgaref = |iref: ImageRef| -> BGARef<ImageRef> {
         match imgslices[**iref as uint] {
-            Some((iref, ref slice)) => SlicedImageBGA(iref.clone(), box slice.clone()),
-            None => ImageBGA(iref),
+            Some((iref, ref slice)) => BGARef::SlicedImage(iref.clone(), box slice.clone()),
+            None => BGARef::Image(iref),
         }
     };
 
@@ -318,16 +321,16 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 }
 
                 // channel #04: BGA layer 1
-                4 => { builder.add(t, SetBGA(Layer1, imgref_to_bgaref(ImageRef(v)))); }
+                4 => { builder.add(t, SetBGA(BGALayer::Layer1, imgref_to_bgaref(ImageRef(v)))); }
 
                 // channel #06: POOR BGA
                 6 => {
-                    builder.add(t, SetBGA(PoorBGA, imgref_to_bgaref(ImageRef(v))));
+                    builder.add(t, SetBGA(BGALayer::PoorBGA, imgref_to_bgaref(ImageRef(v))));
                     poorbgafix = false; // we don't add artificial BGA
                 }
 
                 // channel #07: BGA layer 2
-                7 => { builder.add(t, SetBGA(Layer2, imgref_to_bgaref(ImageRef(v)))); }
+                7 => { builder.add(t, SetBGA(BGALayer::Layer2, imgref_to_bgaref(ImageRef(v)))); }
 
                 // channel #08: BPM defined by #BPMxx
                 8 => { builder.add(t, SetBPM(bpmtab[*v as uint])); }
@@ -336,7 +339,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 9 => { builder.add(t, Stop(stoptab[*v as uint])); }
 
                 // channel #0A: BGA layer 3
-                10 => { builder.add(t, SetBGA(Layer3, imgref_to_bgaref(ImageRef(v)))); }
+                10 => { builder.add(t, SetBGA(BGALayer::Layer3, imgref_to_bgaref(ImageRef(v)))); }
 
                 // channels #1x/2x: visible object, possibly LNs when #LNOBJ is in active
                 36/*1*36*/...107/*3*36-1*/ => {
@@ -415,8 +418,8 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
                 468/*0xD*36*/...539/*0xF*36-1*/ => {
                     let lane = chan.to_lane();
                     let damage = match v {
-                        Key(v @ 1...200) => Some(GaugeDamage(v as f64 / 200.0)),
-                        Key(1295) => Some(InstantDeath), // XXX 1295=MAXKEY-1
+                        Key(v @ 1...200) => Some(Damage::Gauge(v as f64 / 200.0)),
+                        Key(1295) => Some(Damage::InstantDeath), // XXX 1295=MAXKEY-1
                         _ => None
                     };
                     for &damage in damage.iter() {
@@ -456,7 +459,7 @@ pub fn load_bms<'r,R:Rng>(f: &mut Reader, r: &mut R, opts: &LoaderOptions,
 
     // insert an artificial `SetBGA` object at 0.0 if required
     if poorbgafix {
-        builder.add(0.0, SetBGA(PoorBGA, imgref_to_bgaref(ImageRef(Key(0)))));
+        builder.add(0.0, SetBGA(BGALayer::PoorBGA, imgref_to_bgaref(ImageRef(Key(0)))));
     }
 
     // fix the unterminated longnote

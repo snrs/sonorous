@@ -5,7 +5,7 @@
 //! Character encoding detection for BMS format.
 
 use std::cmp;
-use encoding::{Encoding, EncodingRef, DecodeStrict, DecodeReplace};
+use encoding::{Encoding, EncodingRef, DecoderTrap};
 use encoding::all::{ASCII, UTF_8, WINDOWS_949, WINDOWS_31J};
 
 use util::chardet::{Classifier, CharClassKo, CharClassJa, convert_raw_confidence};
@@ -50,7 +50,7 @@ static LOG_PROBS_JA: &'static [i32] = &[
 pub fn decode_stream(f: &mut Reader, encoding: EncodingRef) -> String {
     // TODO use incremental decoding when available
     let s = f.read_to_end().ok().unwrap_or_else(|| Vec::new());
-    encoding.decode(s[], DecodeReplace).unwrap()
+    encoding.decode(s[], DecoderTrap::Replace).unwrap()
 }
 
 /// Tries to guess the encoding of the stream and reads it accordingly.
@@ -65,25 +65,26 @@ pub fn guess_decode_stream(f: &mut Reader) -> (String, EncodingRef, f64) {
 
     // check for BOM (Sonorous proposal #1)
     if s.len() >= 3 && [0xef, 0xbb, 0xbf].equiv(&s[..3]) {
-        return (UTF_8.decode(s[], DecodeReplace).unwrap(), UTF_8 as EncodingRef, 1.0);
+        return (UTF_8.decode(s[], DecoderTrap::Replace).unwrap(), UTF_8 as EncodingRef, 1.0);
     }
 
     // check for UTF-8 first line (Sonorous proposal #2)
     let first1k = s[..cmp::min(s.len(), 1024)];
     let first1keol = first1k.iter().position(|&c| c == 0x0a).unwrap_or(first1k.len());
     let firstline = first1k[..first1keol];
-    if firstline.iter().any(|&c| c >= 0x80) && UTF_8.decode(firstline, DecodeStrict).is_ok() {
-        return (UTF_8.decode(s[], DecodeReplace).unwrap(), UTF_8 as EncodingRef, 1.0);
+    if firstline.iter().any(|&c| c >= 0x80) &&
+            UTF_8.decode(firstline, DecoderTrap::Strict).is_ok() {
+        return (UTF_8.decode(s[], DecoderTrap::Replace).unwrap(), UTF_8 as EncodingRef, 1.0);
     }
 
     // ASCII: do we have to decode at all?
     if s.iter().all(|&c| c < 0x80) {
-        return (ASCII.decode(s[], DecodeReplace).unwrap(), ASCII as EncodingRef, 1.0);
+        return (ASCII.decode(s[], DecoderTrap::Replace).unwrap(), ASCII as EncodingRef, 1.0);
     }
 
     // Windows-949/31J: guess
-    let ko = WINDOWS_949.decode(s[], DecodeReplace).unwrap();
-    let ja = WINDOWS_31J.decode(s[], DecodeReplace).unwrap();
+    let ko = WINDOWS_949.decode(s[], DecoderTrap::Replace).unwrap();
+    let ja = WINDOWS_31J.decode(s[], DecoderTrap::Replace).unwrap();
     let koconfidence = Classifier::new(CharClassKo, LOG_PROBS_KO).raw_confidence(ko[]);
     let jaconfidence = Classifier::new(CharClassJa, LOG_PROBS_JA).raw_confidence(ja[]);
     let (s, encoding, confidence) =

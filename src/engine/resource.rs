@@ -47,19 +47,19 @@ pub trait SearchContextAdditions {
 }
 
 impl SearchContextAdditions for SearchContext {
-    /// Resolves the relative path for the use by `LoadedSoundResource::new`.
+    /// Resolves the relative path for the use by `LoadedSoundlike::new`.
     fn resolve_relative_path_for_sound(&mut self, path: &str,
                                        basedir: &Path) -> Result<Path,String> {
         resolve_relative_path_result(self, basedir, path, SOUND_EXTS)
     }
 
-    /// Resolves the relative path for the use by `LoadedImageResource::new`.
+    /// Resolves the relative path for the use by `LoadedImagelike::new`.
     fn resolve_relative_path_for_image(&mut self, path: &str,
                                        basedir: &Path) -> Result<Path,String> {
         use std::ascii::AsciiExt;
         // preserve extensions for the movie files
         if path.to_ascii_lower()[].ends_with(".mpg") {
-            resolve_relative_path_result(self, basedir, path, [])
+            resolve_relative_path_result(self, basedir, path, [][])
         } else {
             resolve_relative_path_result(self, basedir, path, IMAGE_EXTS)
         }
@@ -68,27 +68,27 @@ impl SearchContextAdditions for SearchContext {
 
 /// Sound resource associated to `SoundRef`. It contains the actual SDL_mixer chunk that can be
 /// readily played.
-pub enum SoundResource {
+pub enum Soundlike {
     /// No sound resource is associated, or error occurred while loading.
-    NoSound,
+    None,
     /// Sound resource is associated.
     Sound(Chunk)
 }
 
-impl SoundResource {
+impl Soundlike {
     /// Returns the associated chunk if any.
     pub fn chunk<'r>(&'r self) -> Option<&'r Chunk> {
         match *self {
-            NoSound => None,
-            Sound(ref chunk) => Some(chunk)
+            Soundlike::None => None,
+            Soundlike::Sound(ref chunk) => Some(chunk)
         }
     }
 
     /// Returns the associated chunk if any.
     pub fn chunk_mut<'r>(&'r mut self) -> Option<&'r mut Chunk> {
         match *self {
-            NoSound => None,
-            Sound(ref mut chunk) => Some(chunk)
+            Soundlike::None => None,
+            Soundlike::Sound(ref mut chunk) => Some(chunk)
         }
     }
 
@@ -97,8 +97,8 @@ impl SoundResource {
     /// return 0.0 if no sound is present.
     pub fn duration(&self) -> f64 {
         match *self {
-            NoSound => 0.0,
-            Sound(ref chunk) => {
+            Soundlike::None => 0.0,
+            Soundlike::Sound(ref chunk) => {
                 let chunk = chunk.to_ll_chunk();
                 (unsafe {(*chunk).alen} as f64) / (BYTESPERSEC as f64)
             }
@@ -106,39 +106,39 @@ impl SoundResource {
     }
 }
 
-/// Same as `SoundResource` but no managed pointer. This version of sound resource can be
+/// Same as `Soundlike` but no managed pointer. This version of sound resource can be
 /// transferred across tasks and thus used for the worker model.
 //
-// Rust: the very existence of this enum and `LoadedImageResource` is due to the problem in
+// Rust: the very existence of this enum and `LoadedImagelike` is due to the problem in
 //       cross-task owned pointer containing a managed pointer. (#8983)
-pub enum LoadedSoundResource {
-    NoLoadedSound,
-    LoadedSound(Chunk)
+pub enum LoadedSoundlike {
+    None,
+    Sound(Chunk)
 }
 
-impl LoadedSoundResource {
+impl LoadedSoundlike {
     /// Loads a sound resource.
-    pub fn new(path: &Path) -> Result<LoadedSoundResource,String> {
+    pub fn new(path: &Path) -> Result<LoadedSoundlike,String> {
         let res = try!(Chunk::from_wav(path));
-        Ok(LoadedSound(res))
+        Ok(LoadedSoundlike::Sound(res))
     }
 
-    /// Creates a `SoundResource` instance. There is no turning back.
-    pub fn wrap(self) -> SoundResource {
+    /// Creates a `Soundlike` instance. There is no turning back.
+    pub fn wrap(self) -> Soundlike {
         match self {
-            NoLoadedSound => NoSound,
-            LoadedSound(chunk) => Sound(chunk)
+            LoadedSoundlike::None => Soundlike::None,
+            LoadedSoundlike::Sound(chunk) => Soundlike::Sound(chunk)
         }
     }
 }
 
 /// Image resource associated to `ImageRef`. It can be either a static image or a movie, and
 /// both contains an SDL surface that can be blitted to the screen.
-pub enum ImageResource {
+pub enum Imagelike {
     /// No image resource is associated, or error occurred while loading.
-    NoImage,
+    None,
     /// A static image is associated. The surface may have a transparency which is already
-    /// handled by `LoadedImageResource::new`.
+    /// handled by `LoadedImagelike::new`.
     Image(PreparedSurface),
     /// A movie is associated. A playback starts when `start_movie` method is called, and stops
     /// when `stop_animating` is called. An associated surface is updated from the separate thread
@@ -146,20 +146,20 @@ pub enum ImageResource {
     Movie(PreparedSurface, MPEG)
 }
 
-impl ImageResource {
+impl Imagelike {
     /// Returns an associated surface if any.
     pub fn surface<'r>(&'r self) -> Option<&'r PreparedSurface> {
         match *self {
-            NoImage => None,
-            Image(ref surface) | Movie(ref surface,_) => Some(surface)
+            Imagelike::None => None,
+            Imagelike::Image(ref surface) | Imagelike::Movie(ref surface,_) => Some(surface)
         }
     }
 
     /// Stops the animation/movie playback if possible.
     pub fn stop_animating(&self) {
         match *self {
-            NoImage | Image(_) => {}
-            Movie(_,ref mpeg) => { mpeg.stop(); }
+            Imagelike::None | Imagelike::Image(_) => {}
+            Imagelike::Movie(_,ref mpeg) => { mpeg.stop(); }
         }
     }
 
@@ -167,23 +167,23 @@ impl ImageResource {
     /// if possible.
     pub fn start_animating(&self) {
         match *self {
-            NoImage | Image(_) => {}
-            Movie(_,ref mpeg) => { mpeg.rewind(); mpeg.play(); }
+            Imagelike::None | Imagelike::Image(_) => {}
+            Imagelike::Movie(_,ref mpeg) => { mpeg.rewind(); mpeg.play(); }
         }
     }
 }
 
-/// Same as `ImageResource` but no managed pointer. This version of image resource can be
+/// Same as `Imagelike` but no managed pointer. This version of image resource can be
 /// transferred across tasks and thus used for the worker model.
-pub enum LoadedImageResource {
-    NoLoadedImage,
-    LoadedImage(PreparedSurface),
-    LoadedMovie(PreparedSurface, MPEG)
+pub enum LoadedImagelike {
+    None,
+    Image(PreparedSurface),
+    Movie(PreparedSurface, MPEG)
 }
 
-impl LoadedImageResource {
+impl LoadedImagelike {
     /// Loads an image resource.
-    pub fn new(path: &Path, load_movie: bool) -> Result<LoadedImageResource,String> {
+    pub fn new(path: &Path, load_movie: bool) -> Result<LoadedImagelike,String> {
         use std::ascii::AsciiExt;
 
         /// Converts a surface to the native display format, while preserving a transparency or
@@ -191,11 +191,11 @@ impl LoadedImageResource {
         fn to_display_format(surface: Surface) -> Result<PreparedSurface,String> {
             let surface = if unsafe {(*(*surface.raw).format).Amask} != 0 {
                 let surface = try!(surface.display_format_alpha());
-                surface.set_alpha([video::SrcAlpha, video::RLEAccel], 255);
+                surface.set_alpha([video::SrcAlpha, video::RLEAccel][], 255);
                 surface
             } else {
                 let surface = try!(surface.display_format());
-                surface.set_color_key([video::SrcColorKey, video::RLEAccel], RGB(0,0,0));
+                surface.set_color_key([video::SrcColorKey, video::RLEAccel][], RGB(0,0,0));
                 surface
             };
             match PreparedSurface::from_owned_surface(surface) {
@@ -212,9 +212,9 @@ impl LoadedImageResource {
                 movie.enable_video(true);
                 movie.set_loop(true);
                 movie.set_display(surface.as_surface());
-                Ok(LoadedMovie(surface, movie))
+                Ok(LoadedImagelike::Movie(surface, movie))
             } else {
-                Ok(NoLoadedImage)
+                Ok(LoadedImagelike::None)
             }
         } else {
             let surface = try!(sdl_image::load(path));
@@ -222,17 +222,17 @@ impl LoadedImageResource {
 
             // PreparedSurface may destroy SDL_SRCALPHA, which is still required for alpha blitting.
             // for RGB images, it is effectively no-op as per-surface alpha is fully opaque.
-            prepared.as_surface().set_alpha([video::SrcAlpha, video::RLEAccel], 255);
-            Ok(LoadedImage(prepared))
+            prepared.as_surface().set_alpha([video::SrcAlpha, video::RLEAccel][], 255);
+            Ok(LoadedImagelike::Image(prepared))
         }
     }
 
-    /// Creates an `ImageResource` instance. Again, there is no turning back.
-    pub fn wrap(self) -> ImageResource {
+    /// Creates an `Imagelike` instance. Again, there is no turning back.
+    pub fn wrap(self) -> Imagelike {
         match self {
-            NoLoadedImage => NoImage,
-            LoadedImage(surface) => Image(surface),
-            LoadedMovie(surface, mpeg) => Movie(surface, mpeg)
+            LoadedImagelike::None => Imagelike::None,
+            LoadedImagelike::Image(surface) => Imagelike::Image(surface),
+            LoadedImagelike::Movie(surface, mpeg) => Imagelike::Movie(surface, mpeg)
         }
     }
 }

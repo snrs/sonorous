@@ -13,10 +13,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RWLock, TaskPool};
 
 use sdl::{event, get_ticks};
+use sdl::event::{Event, Key};
 use format::timeline::TimelineInfo;
 use format::metadata::Meta;
 use format::bms;
 use format::bms::Bms;
+use format::bms::diag::Severity;
 use util::filesearch::SearchContext;
 use util::envelope::Envelope;
 use util::md5::MD5Hash;
@@ -27,10 +29,10 @@ use gfx::skin::hook::Hook;
 use gfx::skin::render::Renderer;
 use engine::input::read_keymap;
 use engine::keyspec::{KeySpec, key_spec};
-use engine::resource::{SearchContextAdditions, LoadedImageResource, LoadedImage};
+use engine::resource::{SearchContextAdditions, LoadedImagelike};
 use engine::cache::MetadataCache;
 use engine::player::apply_modf;
-use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PushScene, PopScene, Exit};
+use ui::scene::{Scene, SceneOptions, SceneCommand};
 use ui::options::Options;
 use ui::loading::LoadingScene;
 
@@ -68,18 +70,18 @@ enum Message {
     /// The worker has finished scanning files.
     NoMoreFiles,
     /// The worker has failed to read and/or load the BMS file. Error message follows.
-    BmsFailed(Path, String),
+    LoadFailed(Path, String),
     /// The worker has read the BMS file and calculated its MD5 hash.
-    BmsHashRead(Path, MD5Hash),
+    HashRead(Path, MD5Hash),
     /// The worker has read the cached metadata.
-    BmsCacheLoaded(Path, Meta),
+    CacheLoaded(Path, Meta),
     /// The worker has loaded the BMS file or failed to do so. Since this message can be delayed,
     /// the main task should ignore the message with non-current paths.
-    BmsLoaded(Path, PreprocessedBms, Vec<(Option<uint>,bms::diag::BmsMessage)>),
+    Loaded(Path, PreprocessedBms, Vec<(Option<uint>,bms::diag::BmsMessage)>),
     /// The worker has loaded the banner image (the second `String`) for the BMS file (the first
     /// `Path`). This may be sent after `BmsLoaded` message. Due to the same reason as above
     /// the main task should ignore the message with non-current paths.
-    BmsBannerLoaded(Path, String, Envelope<PreparedSurface>),
+    BannerLoaded(Path, String, Envelope<PreparedSurface>),
 }
 
 /// Preloaded game data.
@@ -107,17 +109,17 @@ impl PreloadedData {
 }
 
 /// The state of preloaded game data.
-pub enum PreloadingState {
+pub enum PreloadState {
     /// The selected entry cannot be used for preloading or the entry does not exist.
-    NothingToPreload,
+    None,
     /// The selected entry should be preloaded after given timestamp (as per `sdl::get_ticks()`).
-    PreloadAfter(uint),
+    WaitUntil(uint),
     /// Preloading is in progress.
-    Preloading,
+    InProgress,
     /// Preloading finished with a success.
-    Preloaded(PreloadedData),
+    Done(PreloadedData),
     /// Preloading finished with a failure. Error message is available.
-    PreloadFailed(String),
+    Failed(String),
 }
 
 /// The scanned entry.
@@ -157,10 +159,10 @@ pub struct SelectingScene {
     /// The index of the selected entry.
     pub offset: uint,
     /// Preloaded game data or preloading state if any.
-    pub preloaded: PreloadingState,
+    pub preloaded: PreloadState,
 
     /// A task pool for various purposes.
-    pool: TaskPool<()>,
+    pool: TaskPool,
     /// A receiver for receiving worker messages.
     receiver: Receiver<Message>,
     /// A shared sender to which workers send messages.
@@ -218,14 +220,14 @@ impl SelectingScene {
             Ok(cache) => cache,
             Err(err) => die!("can't open metadata cache: {}", err),
         };
-        let root = os::make_absolute(root);
+        let root = os::make_absolute(root).unwrap();
         let (sender, receiver) = comm::channel();
-        let pool = TaskPool::new(os::num_cpus(), || proc(_) ());
+        let pool = TaskPool::new(os::num_cpus());
         box SelectingScene {
             screen: screen, opts: opts, skin: RefCell::new(Renderer::new(skin)),
             cache: Arc::new(Mutex::new(cache)),
             root: root, files: Vec::new(), fileindices: HashMap::new(),
-            filesdone: false, scrolloffset: 0, offset: 0, preloaded: NothingToPreload,
+            filesdone: false, scrolloffset: 0, offset: 0, preloaded: PreloadState::None,
             pool: pool, receiver: receiver, sender: sender,
             keepgoing: Arc::new(RWLock::new(true)),
         }
@@ -255,7 +257,7 @@ impl SelectingScene {
                         (Vec::new(), Vec::new())
                     }
                 };
-                sender.send(PushFiles(files));
+                sender.send(Message::PushFiles(files));
                 for dir in dirs.into_iter() {
                     if !recur(cache, dir, sender, keepgoing) { return false; }
                 }
@@ -263,12 +265,12 @@ impl SelectingScene {
             }
 
             if recur(cache.deref(), root.clone(), &sender, &keepgoing) {
-                sender.send(NoMoreFiles);
+                sender.send(Message::NoMoreFiles);
             }
 
             debug!("scanner: done");
         }, proc() {
-            sender_.send(NoMoreFiles);
+            sender_.send(Message::NoMoreFiles);
         });
     }
 
@@ -288,11 +290,11 @@ impl SelectingScene {
                 let basedir = basepath.clone().unwrap_or(Path::new("."));
                 let fullpath =
                     search.resolve_relative_path_for_image(bannerpath[], &basedir);
-                let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
+                let res = fullpath.and_then(|path| LoadedImagelike::new(&path, false));
                 match res {
-                    Ok(LoadedImage(surface)) => {
-                        sender.send(BmsBannerLoaded(bmspath.clone(), bannerpath,
-                                                    Envelope::new(surface)));
+                    Ok(LoadedImagelike::Image(surface)) => {
+                        sender.send(Message::BannerLoaded(bmspath.clone(), bannerpath,
+                                                          Envelope::new(surface)));
                     }
                     _ => {}
                 }
@@ -316,8 +318,8 @@ impl SelectingScene {
                 let banner = preproc.bms.meta.banner.clone();
                 let basepath = preproc.bms.meta.basepath.clone();
                 let meta = preproc.bms.meta.common.clone();
-                sender.send(BmsCacheLoaded(bmspath.clone(), meta.clone()));
-                sender.send(BmsLoaded(bmspath.clone(), preproc, diags));
+                sender.send(Message::CacheLoaded(bmspath.clone(), meta.clone()));
+                sender.send(Message::Loaded(bmspath.clone(), preproc, diags));
 
                 let _ = cache.lock().put_metadata(&hash, meta);
                 if banner.is_some() {
@@ -329,7 +331,7 @@ impl SelectingScene {
             let get_hash_and_reader = |bmspath: &Path| -> Result<(MD5Hash, io::File), String> {
                 // we have read the file so we don't want the parser to read it again.
                 let (hash, f) = try!(cache.lock().get_hash(bmspath).map_err(|e| e.to_string()));
-                sender.send(BmsHashRead(bmspath.clone(), hash));
+                sender.send(Message::HashRead(bmspath.clone(), hash));
                 let f = match f {
                     Some(f) => f,
                     None => try!(io::File::open(bmspath).map_err(|e| e.to_string())),
@@ -339,7 +341,7 @@ impl SelectingScene {
 
             match get_hash_and_reader(&bmspath).and_then(|ret| load_with_reader(&bmspath, ret)) {
                 Ok(()) => {}
-                Err(err) => { sender.send(BmsFailed(bmspath, err)); }
+                Err(err) => { sender.send(Message::LoadFailed(bmspath, err)); }
             }
 
             debug!("preloader: done");
@@ -359,7 +361,7 @@ impl SelectingScene {
             let meta = cache.lock().get_metadata(&hash);
             match meta {
                 Ok(Some(meta)) => {
-                    sender.send(BmsCacheLoaded(bmspath, meta.clone()));
+                    sender.send(Message::CacheLoaded(bmspath, meta.clone()));
                     let _ = cache.lock().put_metadata(&hash, meta);
                     debug!("cached preloader: done");
                 }
@@ -376,7 +378,7 @@ impl SelectingScene {
         let sender = self.sender.clone();
         spawn_worker_task("preloader", self.make_preloading_task(path), proc() {
             // the task failed to send the error message, so the wrapper sends it instead
-            sender.send(BmsFailed(bmspath, format!("unexpected error")));
+            sender.send(Message::LoadFailed(bmspath, format!("unexpected error")));
         });
     }
 
@@ -402,7 +404,7 @@ impl SelectingScene {
         self.filesdone = false;
         self.scrolloffset = 0;
         self.offset = 0;
-        self.preloaded = NothingToPreload;
+        self.preloaded = PreloadState::None;
         self.spawn_scanning_task();
     }
 
@@ -424,9 +426,9 @@ impl SelectingScene {
     pub fn update_offset(&mut self, offset: uint) {
         self.offset = offset;
         if offset < self.files.len() {
-            self.preloaded = PreloadAfter(get_ticks() + PRELOAD_DELAY);
+            self.preloaded = PreloadState::WaitUntil(get_ticks() + PRELOAD_DELAY);
         } else {
-            self.preloaded = NothingToPreload;
+            self.preloaded = PreloadState::None;
         }
 
         if self.scrolloffset > offset {
@@ -441,10 +443,10 @@ impl SelectingScene {
     pub fn create_loading_scene(&mut self) -> Option<Box<Scene+'static>> {
         use std::mem::replace;
 
-        let preloaded = replace(&mut self.preloaded, PreloadAfter(0));
+        let preloaded = replace(&mut self.preloaded, PreloadState::WaitUntil(0));
         let PreprocessedBms { bms, infos, keyspec } =
             match preloaded {
-                Preloaded(data) => data.preproc, // use the preloaded data if possible
+                PreloadState::Done(data) => data.preproc, // use the preloaded data if possible
                 _ => {
                     let path = match self.current() {
                         Some(path) => path,
@@ -480,8 +482,8 @@ impl Scene for SelectingScene {
     fn activate(&mut self) -> SceneCommand {
         *self.keepgoing.write() = true;
         if !self.filesdone { self.refresh(); }
-        event::enable_key_repeat(event::DefaultRepeatDelay, event::DefaultRepeatInterval);
-        Continue
+        event::enable_key_repeat(event::RepeatDelay::Default, event::RepeatInterval::Default);
+        SceneCommand::Continue
     }
 
     fn scene_options(&self) -> SceneOptions { SceneOptions::new().tpslimit(50).fpslimit(20) }
@@ -489,24 +491,24 @@ impl Scene for SelectingScene {
     fn tick(&mut self) -> SceneCommand {
         loop {
             match event::poll_event() {
-                event::KeyEvent(event::EscapeKey,true,_,_) => { return PopScene; }
-                event::QuitEvent => { return Exit; }
-                event::NoEvent => { break; },
+                Event::Key(Key::Escape,true,_,_) => { return SceneCommand::Pop; }
+                Event::Quit => { return SceneCommand::Exit; }
+                Event::None => { break; },
 
                 // navigation
-                event::KeyEvent(event::UpKey,true,_,_) => {
+                Event::Key(Key::Up,true,_,_) => {
                     if self.offset > 0 {
                         let offset = self.offset - 1; // XXX #6268
                         self.update_offset(offset);
                     }
                 }
-                event::KeyEvent(event::DownKey,true,_,_) => {
+                Event::Key(Key::Down,true,_,_) => {
                     if self.offset + 1 < self.files.len() {
                         let offset = self.offset + 1; // XXX #6268
                         self.update_offset(offset);
                     }
                 }
-                event::KeyEvent(event::PageUpKey,true,_,_) => {
+                Event::Key(Key::PageUp,true,_,_) => {
                     if self.offset > (NUMENTRIES-1) - 1 {
                         let offset = self.offset - (NUMENTRIES-1); // XXX #6268
                         self.update_offset(offset);
@@ -514,7 +516,7 @@ impl Scene for SelectingScene {
                         self.update_offset(0);
                     }
                 }
-                event::KeyEvent(event::PageDownKey,true,_,_) => {
+                Event::Key(Key::PageDown,true,_,_) => {
                     let nfiles = self.files.len();
                     if self.offset + (NUMENTRIES-1) < nfiles {
                         let offset = self.offset + (NUMENTRIES-1); // XXX #6268
@@ -523,12 +525,12 @@ impl Scene for SelectingScene {
                         self.update_offset(nfiles - 1);
                     }
                 }
-                event::KeyEvent(event::HomeKey,true,_,_) => {
+                Event::Key(Key::Home,true,_,_) => {
                     if self.offset > 0 {
                         self.update_offset(0);
                     }
                 }
-                event::KeyEvent(event::EndKey,true,_,_) => {
+                Event::Key(Key::End,true,_,_) => {
                     let nfiles = self.files.len();
                     if self.offset + 1 < nfiles {
                         self.update_offset(nfiles - 1);
@@ -536,14 +538,14 @@ impl Scene for SelectingScene {
                 }
 
                 // refresh
-                event::KeyEvent(event::F5Key,true,_,_) => {
+                Event::Key(Key::F5,true,_,_) => {
                     self.refresh();
                 }
 
                 // (auto)play
-                event::KeyEvent(event::ReturnKey,true,_,_) => {
+                Event::Key(Key::Return,true,_,_) => {
                     match self.create_loading_scene() {
-                        Some(scene) => { return PushScene(scene); }
+                        Some(scene) => { return SceneCommand::Push(scene); }
                         None => {}
                     }
                 }
@@ -554,9 +556,9 @@ impl Scene for SelectingScene {
 
         loop {
             match self.receiver.try_recv() {
-                Ok(PushFiles(paths)) => {
+                Ok(Message::PushFiles(paths)) => {
                     if self.files.is_empty() { // immediately preloads the first entry
-                        self.preloaded = PreloadAfter(0);
+                        self.preloaded = PreloadState::WaitUntil(0);
                     }
                     for (path, hash) in paths.into_iter() {
                         let job = match hash {
@@ -567,36 +569,36 @@ impl Scene for SelectingScene {
                         let index = self.files.len();
                         self.fileindices.insert(path.clone(), index);
                         self.files.push(Entry { path: path, hash: hash, meta: None });
-                        self.pool.execute(proc(_) job());
+                        self.pool.execute(proc() job());
                     }
                 }
-                Ok(NoMoreFiles) => {
+                Ok(Message::NoMoreFiles) => {
                     self.filesdone = true;
                 }
-                Ok(BmsFailed(bmspath, err)) => {
+                Ok(Message::LoadFailed(bmspath, err)) => {
                     if !self.is_current(&bmspath) { continue; }
-                    self.preloaded = PreloadFailed(err);
+                    self.preloaded = PreloadState::Failed(err);
                 }
-                Ok(BmsHashRead(bmspath, hash)) => {
+                Ok(Message::HashRead(bmspath, hash)) => {
                     match self.fileindices.get(&bmspath) {
                         Some(&offset) => { self.files[mut][offset].hash = Some(hash); }
                         None => {}
                     }
                 }
-                Ok(BmsCacheLoaded(bmspath, meta)) => {
+                Ok(Message::CacheLoaded(bmspath, meta)) => {
                     match self.fileindices.get(&bmspath) {
                         Some(&offset) => { self.files[mut][offset].meta = Some(meta); }
                         None => {}
                     }
                 }
-                Ok(BmsLoaded(bmspath, preproc, messages)) => {
+                Ok(Message::Loaded(bmspath, preproc, messages)) => {
                     if !self.is_current(&bmspath) { continue; }
-                    self.preloaded = Preloaded(PreloadedData::new(preproc, messages));
+                    self.preloaded = PreloadState::Done(PreloadedData::new(preproc, messages));
                 }
-                Ok(BmsBannerLoaded(bmspath, imgpath, prepared)) => {
+                Ok(Message::BannerLoaded(bmspath, imgpath, prepared)) => {
                     if !self.is_current(&bmspath) { continue; }
                     match self.preloaded {
-                        Preloaded(ref mut data) if data.banner.is_none() => {
+                        PreloadState::Done(ref mut data) if data.banner.is_none() => {
                             let prepared = prepared.unwrap();
                             match Texture2D::from_prepared_surface(&prepared, false, false) {
                                 Ok(tex) => { data.banner = Some(Rc::new(tex)); }
@@ -614,18 +616,21 @@ impl Scene for SelectingScene {
 
         if self.offset < self.files.len() {
             match self.preloaded {
-                PreloadAfter(timeout) if timeout < get_ticks() => {
+                PreloadState::WaitUntil(timeout) if timeout < get_ticks() => {
                     // preload the current entry after some delay
                     self.preloaded = match self.current() {
-                        Some(path) => { self.spawn_preloading_task(path); Preloading },
-                        None => NothingToPreload, // XXX wait what happened?!
+                        Some(path) => {
+                            self.spawn_preloading_task(path);
+                            PreloadState::InProgress
+                        },
+                        None => PreloadState::None, // XXX wait what happened?!
                     };
                 }
                 _ => {}
             }
         }
 
-        Continue
+        SceneCommand::Continue
     }
 
     fn render(&self) {
@@ -637,7 +642,7 @@ impl Scene for SelectingScene {
     }
 
     fn deactivate(&mut self) {
-        event::enable_key_repeat(event::CustomRepeatDelay(0), event::DefaultRepeatInterval);
+        event::enable_key_repeat(event::RepeatDelay::Custom(0), event::RepeatInterval::Default);
         *self.keepgoing.write() = false;
     }
 
@@ -658,9 +663,9 @@ define_hooks! {
         block "msg" => body(parent, msg.ref1().id);
         block "msg.line" => msg.val0().is_some() && body(parent, "");
         block "msg.severity" => match msg.ref1().severity {
-            bms::diag::Note    => { body(parent, "note"); }
-            bms::diag::Warning => { body(parent, "warning"); }
-            bms::diag::Fatal   => { body(parent, "fatal"); }
+            Severity::Note    => { body(parent, "note"); }
+            Severity::Warning => { body(parent, "warning"); }
+            Severity::Fatal   => { body(parent, "fatal"); }
         };
     }
 
@@ -709,10 +714,10 @@ define_hooks! {
             });
         };
         block "preload" => match scene.preloaded {
-            NothingToPreload | PreloadAfter(..) => {}
-            Preloading => { body(parent, "loading"); }
-            Preloaded(ref data) => { body(&parent.delegate(data), "loaded"); }
-            PreloadFailed(ref err) => {
+            PreloadState::None | PreloadState::WaitUntil(..) => {}
+            PreloadState::InProgress => { body(parent, "loading"); }
+            PreloadState::Done(ref data) => { body(&parent.delegate(data), "loaded"); }
+            PreloadState::Failed(ref err) => {
                 body(&parent.add_text("preload.error", err[]), "failed");
             }
         };

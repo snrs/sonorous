@@ -43,7 +43,7 @@ mod from_str_prefix_impls {
     /// which `from_str::<int>` would in general accept without a failure, if any.
     fn scan_int(s: &str) -> Option<uint> {
         match s.slice_shift_char() {
-            (Some('-'), s_) | (Some('+'), s_) => scan_uint(s_).map(|pos| pos + 1u),
+            Some(('-', s_)) | Some(('+', s_)) => scan_uint(s_).map(|pos| pos + 1u),
             _ => scan_uint(s)
         }
     }
@@ -54,13 +54,13 @@ mod from_str_prefix_impls {
         scan_int(s).and_then(|pos| {
             // scan `.` followed by digits if any
             match s[pos..].slice_shift_char() {
-                (Some('.'), s_) => scan_uint(s_).map(|pos2| pos + 1u + pos2),
+                Some(('.', s_)) => scan_uint(s_).map(|pos2| pos + 1u + pos2),
                 _ => Some(pos)
             }
         }).and_then(|pos| {
             // scan `e` or `E` followed by an optional sign and digits if any
             match s[pos..].slice_shift_char() {
-                (Some('e'), s_) | (Some('E'), s_) => scan_int(s_).map(|pos2| pos + 1u + pos2),
+                Some(('e', s_)) | Some(('E', s_)) => scan_int(s_).map(|pos2| pos + 1u + pos2),
                 _ => Some(pos)
             }
         })
@@ -97,10 +97,7 @@ mod from_str_prefix_impls {
 
     impl FromStrPrefix for char {
         fn from_str_prefix<'a>(s: &'a str) -> Option<(char, &'a str)> {
-            match s.slice_shift_char() {
-                (Some(c), s_) => Some((c, s_)),
-                (None, _) => None,
-            }
+            s.slice_shift_char()
         }
     }
 }
@@ -121,8 +118,8 @@ pub fn prefix_shifted<'a, T:ShiftablePrefix>(s: &'a str, prefix: T) -> Option<&'
 impl ShiftablePrefix for char {
     fn prefix_shifted<'r>(&self, s: &'r str) -> Option<&'r str> {
         match s.slice_shift_char() {
-            (Some(c), s_) if c == *self => Some(s_),
-            (_, _) => None,
+            Some((c, s_)) if c == *self => Some(s_),
+            _ => None,
         }
     }
 }

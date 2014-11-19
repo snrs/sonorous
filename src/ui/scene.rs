@@ -43,15 +43,15 @@ pub enum SceneCommand {
     Continue,
     /// Pushes a new `Scene` to the scene stack, making it the active scene. The current scene is
     /// stopped (after calling `deactivate`) until the new scene returns `PopScene` command.
-    PushScene(Box<Scene+'static>),
+    Push(Box<Scene+'static>),
     /// Replaces the current scene with a new `Scene` that will be returned by `consume` method.
     /// The command itself does not have a `Scene` argument since new scene may have to be
     /// constructured out of the existing scene. Therefore the scene should be prepared for
     /// multiple next scenes possible if any.
-    ReplaceScene,
+    Replace,
     /// Pops the current scene from the scene stack. The program exits if it was the only remaining
     /// scene in the stack.
-    PopScene,
+    Pop,
     /// Clears the scene stack, effectively ending the program.
     Exit,
 }
@@ -88,7 +88,7 @@ pub fn run_scene(scene: Box<Scene+'static>) {
     loop {
         let mut result = current.activate();
         match result {
-            Continue => {
+            SceneCommand::Continue => {
                 let opts = current.scene_options();
                 let mintickdelay = opts.tpslimit.map_or(0, |tps| 1000 / tps);
                 let interval = opts.fpslimit.map_or(0, |fps| 1000 / fps);
@@ -97,7 +97,9 @@ pub fn run_scene(scene: Box<Scene+'static>) {
                     let ticklimit = get_ticks() + mintickdelay;
                     result = current.tick();
                     match result {
-                        Continue => { ticker.on_tick(get_ticks(), || { current.render(); }); }
+                        SceneCommand::Continue => {
+                            ticker.on_tick(get_ticks(), || { current.render(); });
+                        }
                         _ => { break; }
                     }
                     let now = get_ticks();
@@ -108,21 +110,21 @@ pub fn run_scene(scene: Box<Scene+'static>) {
             _ => {}
         }
         match result {
-            Continue => {
+            SceneCommand::Continue => {
                 panic!("impossible");
             }
-            PushScene(newscene) => {
+            SceneCommand::Push(newscene) => {
                 stack.push(current);
                 current = newscene;
             }
-            ReplaceScene => {
+            SceneCommand::Replace => {
                 current = current.consume();
             }
-            PopScene => {
+            SceneCommand::Pop => {
                 if stack.is_empty() { break; }
                 current = stack.pop().unwrap();
             }
-            Exit => {
+            SceneCommand::Exit => {
                 break;
             }
         }

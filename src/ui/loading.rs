@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::collections::DList;
 
 use sdl::{event, get_ticks};
+use sdl::event::Event;
 use format::timeline::TimelineInfo;
 use format::bms::{Bms, Key};
 use util::filesearch::SearchContext;
@@ -18,13 +19,12 @@ use gfx::screen::Screen;
 use gfx::skin::render::Renderer;
 use engine::input::KeyMap;
 use engine::keyspec::KeySpec;
-use engine::resource::{SoundResource, LoadedSoundResource, NoSound};
-use engine::resource::{ImageResource, LoadedImageResource, NoImage, LoadedImage};
+use engine::resource::{Soundlike, LoadedSoundlike, Imagelike, LoadedImagelike};
 use engine::resource::{SearchContextAdditions};
 use engine::player::Player;
 use ui::common::{update_line};
 use ui::options::Options;
-use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, ReplaceScene, Exit};
+use ui::scene::{Scene, SceneOptions, SceneCommand};
 use ui::playing::PlayingScene;
 use ui::viewing::{ViewingScene, TextualViewingScene};
 
@@ -61,10 +61,10 @@ pub struct LoadingContext {
     pub basedir: Path,
     /// A loaded OpenGL texture for #STAGEFILE image.
     pub stagefile: Option<Rc<Texture2D>>,
-    /// A list of loaded sound resources. Initially populated with `NoSound`.
-    pub sndres: Vec<SoundResource>,
-    /// A list of loaded image resources. Initially populated with `NoImage`.
-    pub imgres: Vec<ImageResource>,
+    /// A list of loaded sound resources. Initially populated with `Soundlike::None`.
+    pub sndres: Vec<Soundlike>,
+    /// A list of loaded image resources. Initially populated with `Imagelike::None`.
+    pub imgres: Vec<Imagelike>,
 }
 
 impl LoadingContext {
@@ -72,19 +72,19 @@ impl LoadingContext {
     pub fn new(bms: Bms, infos: TimelineInfo, keyspec: KeySpec, keymap: KeyMap,
                opts: Rc<Options>) -> LoadingContext {
         let basedir = bms.meta.basepath.clone().unwrap_or(Path::new("."));
-        let sndres = Vec::from_fn(bms.meta.sndpath.len(), |_| NoSound);
-        let imgres = Vec::from_fn(bms.meta.imgpath.len(), |_| NoImage);
+        let sndres = Vec::from_fn(bms.meta.sndpath.len(), |_| Soundlike::None);
+        let imgres = Vec::from_fn(bms.meta.imgpath.len(), |_| Imagelike::None);
 
         let mut jobs = DList::new();
         if opts.has_bga() { // should go first
-            jobs.push_back(LoadStageFile);
+            jobs.push_back(LoadingJob::LoadStageFile);
         }
         for (i, path) in bms.meta.sndpath.iter().enumerate() {
-            if path.is_some() { jobs.push_back(LoadSound(i)); }
+            if path.is_some() { jobs.push_back(LoadingJob::LoadSound(i)); }
         }
         if opts.has_bga() {
             for (i, path) in bms.meta.imgpath.iter().enumerate() {
-                if path.is_some() { jobs.push_back(LoadImage(i)); }
+                if path.is_some() { jobs.push_back(LoadingJob::LoadImage(i)); }
             }
         }
         let njobs = jobs.len();
@@ -104,10 +104,10 @@ impl LoadingContext {
         };
         let fullpath = self.search.resolve_relative_path_for_image(path[], &self.basedir);
 
-        let res = fullpath.and_then(|path| LoadedImageResource::new(&path, false));
+        let res = fullpath.and_then(|path| LoadedImagelike::new(&path, false));
         let tex_or_err = res.and_then(|res| {
             match res {
-                LoadedImage(surface) => {
+                LoadedImagelike::Image(surface) => {
                     // in principle we don't need this, but some STAGEFILEs mistakenly uses alpha
                     // channel or SDL_image fails to read them so we need to force STAGEFILEs to
                     // ignore alpha channels. (cf. http://bugzilla.libsdl.org/show_bug.cgi?id=1943)
@@ -130,7 +130,7 @@ impl LoadingContext {
         self.lastpath = Some(path.clone());
         let fullpath = self.search.resolve_relative_path_for_sound(path[], &self.basedir);
 
-        match fullpath.and_then(|path| LoadedSoundResource::new(&path)) {
+        match fullpath.and_then(|path| LoadedSoundlike::new(&path)) {
             Ok(res) => {
                 self.sndres[mut][i] = res.wrap();
             }
@@ -147,7 +147,7 @@ impl LoadingContext {
         let fullpath = self.search.resolve_relative_path_for_image(path[], &self.basedir);
 
         let has_movie = self.opts.has_movie();
-        match fullpath.and_then(|path| LoadedImageResource::new(&path, has_movie)) {
+        match fullpath.and_then(|path| LoadedImagelike::new(&path, has_movie)) {
             Ok(res) => {
                 self.imgres[mut][i] = res.wrap();
             }
@@ -160,9 +160,9 @@ impl LoadingContext {
     /// Processes pending jobs. Returns true if there are any processed jobs.
     pub fn process_jobs(&mut self) -> bool {
         match self.jobs.pop_front() {
-            Some(LoadStageFile) => { self.load_stagefile(); true  }
-            Some(LoadSound(i))  => { self.load_sound(i);    true  }
-            Some(LoadImage(i))  => { self.load_image(i);    true  }
+            Some(LoadingJob::LoadStageFile) => { self.load_stagefile(); true  }
+            Some(LoadingJob::LoadSound(i))  => { self.load_sound(i);    true  }
+            Some(LoadingJob::LoadImage(i))  => { self.load_image(i);    true  }
             None                => { self.lastpath = None;  false }
         }
     }
@@ -172,8 +172,8 @@ impl LoadingContext {
         1.0 - (self.jobs.len() as f64) / (self.ntotaljobs as f64)
     }
 
-    /// Returns completely loaded `Player` and `ImageResource`s.
-    pub fn to_player(self) -> (Player,Vec<ImageResource>) {
+    /// Returns completely loaded `Player` and `Imagelike`s.
+    pub fn to_player(self) -> (Player,Vec<Imagelike>) {
         let LoadingContext { opts, bms, infos, keyspec, keymap, jobs, sndres, imgres, .. } = self;
         assert!(jobs.is_empty());
         (Player::new(opts, bms, infos, keyspec, keymap, sndres), imgres)
@@ -209,7 +209,7 @@ impl LoadingScene {
 impl Scene for LoadingScene {
     fn activate(&mut self) -> SceneCommand {
         self.waituntil = get_ticks() + 3000;
-        Continue
+        SceneCommand::Continue
     }
 
     fn scene_options(&self) -> SceneOptions { SceneOptions::new().fpslimit(20) }
@@ -217,17 +217,17 @@ impl Scene for LoadingScene {
     fn tick(&mut self) -> SceneCommand {
         loop {
             match event::poll_event() {
-                event::KeyEvent(event::EscapeKey,_,_,_) => { return PopScene; }
-                event::QuitEvent => { return Exit; }
-                event::NoEvent => { break; },
+                Event::Key(event::Key::Escape,_,_,_) => { return SceneCommand::Pop; }
+                Event::Quit => { return SceneCommand::Exit; }
+                Event::None => { break; },
                 _ => {}
             }
         }
 
         if !self.context.process_jobs() {
-            if get_ticks() > self.waituntil { return ReplaceScene; }
+            if get_ticks() > self.waituntil { return SceneCommand::Replace; }
         }
-        Continue
+        SceneCommand::Continue
     }
 
     fn render(&self) {
@@ -313,13 +313,13 @@ Level {level} | BPM {bpm:.2}{hasbpmchange} | \
                                        .map_or("".to_string(),
                                                |name| " ".to_string() + *name))[]);
         }
-        Continue
+        SceneCommand::Continue
     }
 
     fn scene_options(&self) -> SceneOptions { SceneOptions::new().fpslimit(20) }
 
     fn tick(&mut self) -> SceneCommand {
-        if !self.context.process_jobs() {ReplaceScene} else {Continue}
+        if !self.context.process_jobs() {SceneCommand::Replace} else {SceneCommand::Continue}
     }
 
     fn render(&self) {

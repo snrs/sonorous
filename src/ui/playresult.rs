@@ -8,10 +8,11 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use sdl::event;
+use sdl::event::Event;
 use gfx::screen::Screen;
 use gfx::skin::render::Renderer;
 use engine::player::Player;
-use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, Exit};
+use ui::scene::{Scene, SceneOptions, SceneCommand};
 
 /// Play result scene.
 pub struct PlayResultScene {
@@ -36,21 +37,21 @@ impl PlayResultScene {
 }
 
 impl Scene for PlayResultScene {
-    fn activate(&mut self) -> SceneCommand { Continue }
+    fn activate(&mut self) -> SceneCommand { SceneCommand::Continue }
 
     fn scene_options(&self) -> SceneOptions { SceneOptions::new().tpslimit(20).fpslimit(1) }
 
     fn tick(&mut self) -> SceneCommand {
         loop {
             match event::poll_event() {
-                event::KeyEvent(event::EscapeKey,true,_,_) |
-                event::KeyEvent(event::ReturnKey,true,_,_) => { return PopScene; }
-                event::QuitEvent => { return Exit; }
-                event::NoEvent => { break; }
+                Event::Key(event::Key::Escape,true,_,_) |
+                Event::Key(event::Key::Return,true,_,_) => { return SceneCommand::Pop; }
+                Event::Quit => { return SceneCommand::Exit; }
+                Event::None => { break; }
                 _ => {}
             }
         }
-        Continue
+        SceneCommand::Continue
     }
 
     fn render(&self) {

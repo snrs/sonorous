@@ -9,7 +9,7 @@ use std::str;
 use format::obj::{Lane, NLANES, ObjQueryOps};
 use format::timeline::Timeline;
 use format::timeline::modf::filter_lanes;
-use format::bms::{Bms, Key, DoublePlay, CouplePlay};
+use format::bms::{Bms, Key, PlayMode};
 
 /**
  * Key kinds. They define an appearance of particular lane, but otherwise ignored for the game
@@ -59,8 +59,18 @@ impl KeyKind {
     //
     // Rust: can this method be generated on the fly?
     pub fn all() -> &'static [KeyKind] {
-        static ALL: [KeyKind, ..10] = [WhiteKey, WhiteKeyAlt, BlackKey, Scratch, FootPedal,
-                                       Button1, Button2, Button3, Button4, Button5];
+        static ALL: [KeyKind, ..10] = [
+            KeyKind::WhiteKey,
+            KeyKind::WhiteKeyAlt,
+            KeyKind::BlackKey,
+            KeyKind::Scratch,
+            KeyKind::FootPedal,
+            KeyKind::Button1,
+            KeyKind::Button2,
+            KeyKind::Button3,
+            KeyKind::Button4,
+            KeyKind::Button5,
+        ];
         ALL[]
     }
 
@@ -68,16 +78,16 @@ impl KeyKind {
     /// specification (see also `KeySpec`).
     pub fn from_char(c: char) -> Option<KeyKind> {
         match c {
-            'a' => Some(WhiteKey),
-            'y' => Some(WhiteKeyAlt),
-            'b' => Some(BlackKey),
-            's' => Some(Scratch),
-            'p' => Some(FootPedal),
-            'q' => Some(Button1),
-            'w' => Some(Button2),
-            'e' => Some(Button3),
-            'r' => Some(Button4),
-            't' => Some(Button5),
+            'a' => Some(KeyKind::WhiteKey),
+            'y' => Some(KeyKind::WhiteKeyAlt),
+            'b' => Some(KeyKind::BlackKey),
+            's' => Some(KeyKind::Scratch),
+            'p' => Some(KeyKind::FootPedal),
+            'q' => Some(KeyKind::Button1),
+            'w' => Some(KeyKind::Button2),
+            'e' => Some(KeyKind::Button3),
+            'r' => Some(KeyKind::Button4),
+            't' => Some(KeyKind::Button5),
             _   => None
         }
     }
@@ -86,16 +96,16 @@ impl KeyKind {
     /// (see also `read_keymap`).
     pub fn to_char(self) -> char {
         match self {
-            WhiteKey    => 'a',
-            WhiteKeyAlt => 'y',
-            BlackKey    => 'b',
-            Scratch     => 's',
-            FootPedal   => 'p',
-            Button1     => 'w',
-            Button2     => 'e',
-            Button3     => 'r',
-            Button4     => 't',
-            Button5     => 's'
+            KeyKind::WhiteKey    => 'a',
+            KeyKind::WhiteKeyAlt => 'y',
+            KeyKind::BlackKey    => 'b',
+            KeyKind::Scratch     => 's',
+            KeyKind::FootPedal   => 'p',
+            KeyKind::Button1     => 'w',
+            KeyKind::Button2     => 'e',
+            KeyKind::Button3     => 'r',
+            KeyKind::Button4     => 't',
+            KeyKind::Button5     => 's'
         }
     }
 
@@ -107,7 +117,7 @@ impl KeyKind {
      * scratch but commonly said to have 7 "keys").
      */
     pub fn counts_as_key(self) -> bool {
-        self != Scratch && self != FootPedal
+        self != KeyKind::Scratch && self != KeyKind::FootPedal
     }
 }
 
@@ -221,8 +231,8 @@ pub fn preset_to_key_spec(bms: &Bms, preset: Option<String>) -> Option<(String, 
             let isbme = present[8] || present[9] || present[36+8] || present[36+9];
             let haspedal = present[7] || present[36+7];
             let nkeys = match bms.meta.mode {
-                CouplePlay | DoublePlay => if isbme {"14"} else {"10"},
-                _                       => if isbme {"7" } else {"5" }
+                PlayMode::Couple | PlayMode::Double => if isbme {"14"} else {"10"},
+                _                                   => if isbme {"7" } else {"5" }
             };
             if haspedal {nkeys.to_string() + "/fp"} else {nkeys.to_string()}
         },
@@ -300,7 +310,7 @@ pub fn key_spec(bms: &Bms, preset: Option<String>,
         match parse_and_add(&mut keyspec, rightkeys[]) {
             None => { return Err(format!("Invalid key spec for right hand side: {}", rightkeys)); }
             Some(nkeys) => { // no split panes except for Couple Play
-                if bms.meta.mode != CouplePlay { keyspec.split += nkeys; }
+                if bms.meta.mode != PlayMode::Couple { keyspec.split += nkeys; }
             }
         }
     }

@@ -10,21 +10,19 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use format::obj::{Lane, Visible, LNStart, LNDone, Bomb, MeasureBar};
-use format::obj::{BGALayer, Layer1, Layer2, Layer3, PoorBGA};
-use format::obj::{ObjLoc, ActualPos, ObjQueryOps};
+use format::obj::{BGALayer};
+use format::obj::{ObjLoc, ObjAxis, ObjQueryOps};
 use gfx::color::{Color, Gradient, RGB, RGBA, Blend};
 use gfx::surface::{Surface, SurfaceAreaUtil, SurfacePixelsUtil};
 use gfx::gl::{Texture2D, PreparedSurface};
 use gfx::draw::{ShadedDrawing, ShadedDrawingTraits, TexturedDrawing, TexturedDrawingTraits};
-use gfx::bmfont::{FontDrawingUtils, LeftAligned, Centered};
+use gfx::bmfont::{FontDrawingUtils, Alignment};
 use gfx::screen::Screen;
-use engine::keyspec;
 use engine::keyspec::{KeyKind, KeySpec};
-use engine::resource::{BGAW, BGAH};
-use engine::resource::ImageResource;
-use engine::player::{MISS, MAXGAUGE, Player};
+use engine::resource::{BGAW, BGAH, Imagelike};
+use engine::player::{Grade, MAXGAUGE, Player};
 use ui::init::{SCREENW, SCREENH};
-use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene, ReplaceScene};
+use ui::scene::{Scene, SceneOptions, SceneCommand};
 use ui::viewing::BGACanvas;
 use ui::playresult::PlayResultScene;
 
@@ -46,16 +44,16 @@ impl LaneStyle {
     /// Constructs a new `LaneStyle` object from given key kind and the left or right position.
     pub fn from_kind(kind: KeyKind, pos: uint, right: bool) -> LaneStyle {
         let (spriteleft, spritebombleft, width, color) = match kind {
-            keyspec::WhiteKey    => ( 25,   0, 25, RGB(0x80,0x80,0x80)),
-            keyspec::WhiteKeyAlt => ( 50,   0, 25, RGB(0xf0,0xe0,0x80)),
-            keyspec::BlackKey    => ( 75,   0, 25, RGB(0x80,0x80,0xff)),
-            keyspec::Button1     => (130, 100, 30, RGB(0xe0,0xe0,0xe0)),
-            keyspec::Button2     => (160, 100, 30, RGB(0xff,0xff,0x40)),
-            keyspec::Button3     => (190, 100, 30, RGB(0x80,0xff,0x80)),
-            keyspec::Button4     => (220, 100, 30, RGB(0x80,0x80,0xff)),
-            keyspec::Button5     => (250, 100, 30, RGB(0xff,0x40,0x40)),
-            keyspec::Scratch     => (320, 280, 40, RGB(0xff,0x80,0x80)),
-            keyspec::FootPedal   => (360, 280, 40, RGB(0x80,0xff,0x80)),
+            KeyKind::WhiteKey    => ( 25,   0, 25, RGB(0x80,0x80,0x80)),
+            KeyKind::WhiteKeyAlt => ( 50,   0, 25, RGB(0xf0,0xe0,0x80)),
+            KeyKind::BlackKey    => ( 75,   0, 25, RGB(0x80,0x80,0xff)),
+            KeyKind::Button1     => (130, 100, 30, RGB(0xe0,0xe0,0xe0)),
+            KeyKind::Button2     => (160, 100, 30, RGB(0xff,0xff,0x40)),
+            KeyKind::Button3     => (190, 100, 30, RGB(0x80,0xff,0x80)),
+            KeyKind::Button4     => (220, 100, 30, RGB(0x80,0x80,0xff)),
+            KeyKind::Button5     => (250, 100, 30, RGB(0xff,0x40,0x40)),
+            KeyKind::Scratch     => (320, 280, 40, RGB(0xff,0x80,0x80)),
+            KeyKind::FootPedal   => (360, 280, 40, RGB(0x80,0xff,0x80)),
         };
         let left = if right {pos - width} else {pos};
         LaneStyle { left: left, spriteleft: spriteleft, spritebombleft: spritebombleft,
@@ -249,7 +247,7 @@ pub struct PlayingScene {
     /// Display screen.
     pub screen: Rc<RefCell<Screen>>,
     /// Image resources.
-    pub imgres: Vec<ImageResource>,
+    pub imgres: Vec<Imagelike>,
 
     /// The leftmost X coordinate of the area next to the lanes, that is, the total width of
     /// left-hand-side lanes.
@@ -279,7 +277,7 @@ impl PlayingScene {
     /// screen and pre-loaded image resources. Other resources including pre-loaded sound resources
     /// are included in the `player`.
     pub fn new(player: Player, screen: Rc<RefCell<Screen>>,
-               imgres: Vec<ImageResource>) -> Result<Box<PlayingScene>,String> {
+               imgres: Vec<Imagelike>) -> Result<Box<PlayingScene>,String> {
         let (leftmost, rightmost, styles) = match build_lane_styles(&player.keyspec) {
             Ok(styles) => styles,
             Err(err) => { return Err(err); }
@@ -308,7 +306,7 @@ pub static GRADES: &'static [(&'static str,Gradient)] = &[
 ];
 
 impl Scene for PlayingScene {
-    fn activate(&mut self) -> SceneCommand { Continue }
+    fn activate(&mut self) -> SceneCommand { SceneCommand::Continue }
 
     fn scene_options(&self) -> SceneOptions { SceneOptions::new() }
 
@@ -317,7 +315,7 @@ impl Scene for PlayingScene {
         if self.player.tick() {
             // update display states
             for &(grade,when) in self.player.lastgrade.iter() {
-                if grade == MISS {
+                if grade == Grade::MISS {
                     // switches to the normal BGA after 600ms
                     let minlimit = when + 600;
                     self.poorlimit =
@@ -332,17 +330,17 @@ impl Scene for PlayingScene {
             if self.gradelimit < Some(self.player.now) { self.gradelimit = None; }
             self.bgacanvas.update(&self.player.bga, self.imgres[]);
 
-            Continue
+            SceneCommand::Continue
         } else {
-            if self.player.opts.is_autoplay() { return PopScene; }
+            if self.player.opts.is_autoplay() { return SceneCommand::Pop; }
 
             // check if the song reached the last gradable object (otherwise the game play was
             // terminated by the user)
             let nextgradable = self.player.cur.find_next_of_type(|obj| obj.is_gradable());
-            if nextgradable.is_some() { return PopScene; }
+            if nextgradable.is_some() { return SceneCommand::Pop; }
 
             // otherwise move to the result screen
-            ReplaceScene
+            SceneCommand::Replace
         }
     }
 
@@ -358,8 +356,9 @@ impl Scene for PlayingScene {
 
         // render BGAs (should render before the lanes since lanes can overlap with BGAs)
         if self.player.opts.has_bga() {
-            static POOR_LAYERS: [BGALayer, ..1] = [PoorBGA];
-            static NORM_LAYERS: [BGALayer, ..3] = [Layer1, Layer2, Layer3];
+            static POOR_LAYERS: [BGALayer, ..1] = [BGALayer::PoorBGA];
+            static NORM_LAYERS: [BGALayer, ..3] = [BGALayer::Layer1, BGALayer::Layer2,
+                                                   BGALayer::Layer3];
             let layers = if self.poorlimit.is_some() {POOR_LAYERS[]} else {NORM_LAYERS[]};
             self.bgacanvas.render_to_texture(screen.deref_mut(), layers);
             screen.draw_textured(self.bgacanvas.as_texture(), |d| {
@@ -385,8 +384,8 @@ impl Scene for PlayingScene {
         // hide the topmost and bottommost 5 pixels behind the panels (for avoiding vanishing notes)
         // and move the grading line accordingly. this bias represents the amount of such moves.
         let bias = (6.25 / (H-100.0)) as f64; // H-100:1.25 = 5:bias
-        let bottom = self.player.cur.find(ActualPos, -bias / self.player.playspeed);
-        let top = self.player.cur.find(ActualPos, (1.25 - bias) / self.player.playspeed);
+        let bottom = self.player.cur.find(ObjAxis::ActualPos, -bias / self.player.playspeed);
+        let top = self.player.cur.find(ObjAxis::ActualPos, (1.25 - bias) / self.player.playspeed);
 
         let loc_to_y = |loc: &ObjLoc<f64>| {
             let offset = loc.pos - self.player.cur.loc.pos;
@@ -486,14 +485,14 @@ impl Scene for PlayingScene {
                 let delta = (cmp::max(gradelimit - self.player.now, 400) as f32 - 400.0) / 15.0;
                 let cx = (self.leftmost / 2) as f32; // avoids half-pixels
                 let cy = H / 2.0 - delta; // offseted center
-                d.string(cx, cy - 40.0, 2.0, Centered, gradename, gradecolor);
+                d.string(cx, cy - 40.0, 2.0, Alignment::Center, gradename, gradecolor);
                 if self.player.lastcombo > 1 {
-                    d.string(cx, cy - 12.0, 1.0, Centered,
+                    d.string(cx, cy - 12.0, 1.0, Alignment::Center,
                              format!("{} COMBO", self.player.lastcombo)[],
                              Gradient { zero: RGB(0xff,0xff,0xff), one: RGB(0x80,0x80,0x80) });
                 }
                 if self.player.opts.is_autoplay() {
-                    d.string(cx, cy + 2.0, 1.0, Centered, "(AUTO)",
+                    d.string(cx, cy + 2.0, 1.0, Alignment::Center, "(AUTO)",
                              Gradient { zero: RGB(0xc0,0xc0,0xc0), one: RGB(0x40,0x40,0x40) });
                 }
             }
@@ -511,17 +510,17 @@ impl Scene for PlayingScene {
 
             // render panel text
             let black = RGB(0,0,0);
-            d.string(10.0, 8.0, 1.0, LeftAligned,
+            d.string(10.0, 8.0, 1.0, Alignment::Left,
                      format!("SCORE {:07}", self.player.score)[], black);
             let nominalplayspeed = self.player.nominal_playspeed();
-            d.string(5.0, H-78.0, 2.0, LeftAligned,
+            d.string(5.0, H-78.0, 2.0, Alignment::Left,
                      format!("{:4.1}x", nominalplayspeed)[], black);
-            d.string((self.leftmost-94) as f32, H-35.0, 1.0, LeftAligned,
+            d.string((self.leftmost-94) as f32, H-35.0, 1.0, Alignment::Left,
                      format!("{:02u}:{:02u} / {:02u}:{:02}",
                              elapsed/60, elapsed%60, duration/60, duration%60)[], black);
-            d.string(95.0, H-62.0, 1.0, LeftAligned,
+            d.string(95.0, H-62.0, 1.0, Alignment::Left,
                      format!("@{:9.4}", self.player.cur.loc.vpos)[], black);
-            d.string(95.0, H-78.0, 1.0, LeftAligned,
+            d.string(95.0, H-78.0, 1.0, Alignment::Left,
                      format!("BPM {:6.2}", *self.player.bpm)[], black);
             let timetick = cmp::min(self.leftmost, (self.player.now - self.player.origintime) *
                                                    self.leftmost / durationmsec);

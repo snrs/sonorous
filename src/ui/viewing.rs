@@ -9,19 +9,17 @@ use std::cell::RefCell;
 
 use opengles::gl2 as gl;
 use ext::smpeg::SMPEG_PLAYING;
-use format::obj::{NLAYERS, BGALayer, Layer1, Layer2, Layer3};
-use format::obj::{BGARef, BlankBGA, ImageBGA, SlicedImageBGA};
+use format::obj::{NLAYERS, BGALayer, BGARef};
 use format::bms::ImageRef;
 use gfx::color::RGBA;
 use gfx::surface::SurfaceAreaUtil;
 use gfx::gl::{Texture2D, PreparedSurface, FrameBuffer};
 use gfx::draw::TexturedDrawingTraits;
 use gfx::screen::Screen;
-use engine::resource::{BGAW, BGAH};
-use engine::resource::{ImageResource, NoImage, Image, Movie};
+use engine::resource::{BGAW, BGAH, Imagelike};
 use engine::player::{BGAState, initial_bga_state, Player};
 use ui::common::{Ticker, update_line};
-use ui::scene::{Scene, SceneOptions, SceneCommand, Continue, PopScene};
+use ui::scene::{Scene, SceneOptions, SceneCommand};
 
 trait Uploadable {
     /// Uploads an associated surface to the texture if any.
@@ -30,11 +28,11 @@ trait Uploadable {
     fn should_always_upload(&self) -> bool;
 }
 
-impl Uploadable for ImageResource {
+impl Uploadable for Imagelike {
     fn upload_to_texture(&self, texture: &Texture2D) {
         match *self {
-            NoImage => {}
-            Image(ref surface) | Movie(ref surface,_) => {
+            Imagelike::None => {}
+            Imagelike::Image(ref surface) | Imagelike::Movie(ref surface,_) => {
                 texture.upload_surface(surface, false, false);
             }
         }
@@ -42,8 +40,8 @@ impl Uploadable for ImageResource {
 
     fn should_always_upload(&self) -> bool {
         match *self {
-            NoImage | Image(_) => false,
-            Movie(_,ref mpeg) => mpeg.status() == SMPEG_PLAYING
+            Imagelike::None | Imagelike::Image(_) => false,
+            Imagelike::Movie(_,ref mpeg) => mpeg.status() == SMPEG_PLAYING
         }
     }
 }
@@ -63,20 +61,20 @@ pub struct BGACanvas {
 }
 
 /// Uploads the image pointed by the BGA reference to the texture.
-/// It performs a necessary clipping for `SlicedImageBGA`.
+/// It performs a necessary clipping for `BGARef::SlicedImage`.
 /// `force` should be set to true when the image has to be updated immediately.
-fn upload_bga_ref_to_texture(bgaref: &BGARef<ImageRef>, imgres: &[ImageResource],
+fn upload_bga_ref_to_texture(bgaref: &BGARef<ImageRef>, imgres: &[Imagelike],
                              texture: &Texture2D, scratch: &PreparedSurface, force: bool) {
     match *bgaref {
-        ImageBGA(iref) if force || imgres[**iref as uint].should_always_upload() => {
+        BGARef::Image(iref) if force || imgres[**iref as uint].should_always_upload() => {
             imgres[**iref as uint].upload_to_texture(texture);
         }
-        SlicedImageBGA(iref, ref slice)
+        BGARef::SlicedImage(iref, ref slice)
                 if force || imgres[**iref as uint].should_always_upload() => {
             scratch.as_surface().fill(RGBA(0, 0, 0, 0));
             for surface in imgres[**iref as uint].surface().into_iter() {
                 // this requires SDL_SRCALPHA flags in `surface` (and not `scratch`).
-                // see `LoadedImageResource::new` for relevant codes.
+                // see `LoadedImagelike::new` for relevant codes.
                 scratch.as_surface().blit_area(surface.as_surface(), (slice.sx, slice.sy),
                                                (slice.dx, slice.dy), (slice.w, slice.h));
             }
@@ -88,7 +86,7 @@ fn upload_bga_ref_to_texture(bgaref: &BGARef<ImageRef>, imgres: &[ImageResource]
 
 impl BGACanvas {
     /// Creates an initial canvas state and resources.
-    pub fn new(imgres: &[ImageResource]) -> BGACanvas {
+    pub fn new(imgres: &[Imagelike]) -> BGACanvas {
         let state = initial_bga_state();
 
         let scratch = match PreparedSurface::new(BGAW, BGAH, true) {
@@ -119,7 +117,7 @@ impl BGACanvas {
 
     /// Updates the BGA state. This method prepares given image resources for the next rendering,
     /// notably by starting and stopping the movie playback and uploading textures as needed.
-    pub fn update(&mut self, current: &BGAState, imgres: &[ImageResource]) {
+    pub fn update(&mut self, current: &BGAState, imgres: &[Imagelike]) {
         for layer in range(0, NLAYERS) {
             if self.state[layer] != current[layer] {
                 // TODO this design can't handle the case that a BGA layer is updated to the same
@@ -148,7 +146,7 @@ impl BGACanvas {
             buf.clear();
             for &layer in layers.iter() {
                 match self.state[layer as uint] {
-                    BlankBGA => {}
+                    BGARef::Blank => {}
                     _ => {
                         buf.draw_textured(&self.textures[layer as uint], |d| {
                             d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);
@@ -179,12 +177,12 @@ impl TextualViewingScene {
 }
 
 impl Scene for TextualViewingScene {
-    fn activate(&mut self) -> SceneCommand { Continue }
+    fn activate(&mut self) -> SceneCommand { SceneCommand::Continue }
 
     fn scene_options(&self) -> SceneOptions { SceneOptions::new().fpslimit(20) }
 
     fn tick(&mut self) -> SceneCommand {
-        if self.player.tick() {Continue} else {PopScene}
+        if self.player.tick() {SceneCommand::Continue} else {SceneCommand::Pop}
     }
 
     fn render(&self) {
@@ -216,7 +214,7 @@ pub struct ViewingScene {
     /// Display screen.
     pub screen: Rc<RefCell<Screen>>,
     /// Image resources.
-    pub imgres: Vec<ImageResource>,
+    pub imgres: Vec<Imagelike>,
     /// BGA canvas.
     pub bgacanvas: BGACanvas,
 }
@@ -224,7 +222,7 @@ pub struct ViewingScene {
 impl ViewingScene {
     /// Creates a new BGA-only scene context from the pre-created screen (usually by `init_video`)
     /// and pre-loaded image resources.
-    pub fn new(screen: Rc<RefCell<Screen>>, imgres: Vec<ImageResource>,
+    pub fn new(screen: Rc<RefCell<Screen>>, imgres: Vec<Imagelike>,
                player: Player) -> Box<ViewingScene> {
         let bgacanvas = BGACanvas::new(imgres[]);
         box ViewingScene { parent: TextualViewingScene::new(player),
@@ -248,7 +246,7 @@ impl Scene for ViewingScene {
 
         screen.clear();
 
-        let layers = &[Layer1, Layer2, Layer3];
+        let layers = &[BGALayer::Layer1, BGALayer::Layer2, BGALayer::Layer3];
         self.bgacanvas.render_to_texture(screen.deref_mut(), layers);
         screen.draw_textured(self.bgacanvas.as_texture(), |d| {
             d.rect(0.0, 0.0, BGAW as f32, BGAH as f32);

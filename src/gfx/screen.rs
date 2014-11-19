@@ -189,7 +189,7 @@ impl Screen {
                                   font: Rc::new(Font::new()) };
         screen.set_local_transform([1.0, 0.0, 0.0,
                                     0.0, 1.0, 0.0,
-                                    0.0, 0.0, 1.0]);
+                                    0.0, 0.0, 1.0][]);
         screen.set_viewport(0, 0, width as gl::GLsizei, height as gl::GLsizei);
         screen.set_projection_ortho(0.0, width as f32, 0.0, height as f32);
         Ok(screen)
@@ -231,7 +231,7 @@ impl Screen {
             0.0,          2.0/(t-b),    0.0,          0.0,
             0.0,          0.0,          -2.0/(f-n),   0.0,
             -(r+l)/(r-l), -(t+b)/(t-b), -(f+n)/(f-n), 1.0,
-        ]);
+        ][]);
     }
 
     /// Temporarily saves the current viewport, projection and local transform matrixes

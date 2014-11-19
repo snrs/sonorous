@@ -10,14 +10,12 @@ use std::rand::Rng;
 use encoding::EncodingRef;
 
 use util::lex::FromStrPrefix;
-use format::obj::{BPM, Duration, Seconds, Measures, ImageSlice};
+use format::obj::{BPM, Duration, ImageSlice};
 use format::bms::types::{Key, PartialKey};
 use format::bms::diag;
 use format::bms::diag::BmsMessage;
-use format::bms::preproc::{BmsFlowCommand, Preprocessor};
-pub use format::bms::preproc::{BmsRandom, BmsSetRandom, BmsEndRandom};
-pub use format::bms::preproc::{BmsIf, BmsElseIf, BmsElse, BmsEndIf};
-pub use format::bms::preproc::{BmsSwitch, BmsSetSwitch, BmsEndSw, BmsCase, BmsSkip, BmsDef};
+pub use format::bms::preproc::BmsFlow;
+use format::bms::preproc::Preprocessor;
 use format::bms::encoding::{decode_stream, guess_decode_stream};
 
 /// A tuple of four `u8` values. Mainly used for BMS #ARGB command and its family.
@@ -58,54 +56,54 @@ impl FromStrPrefix for Measure {
 /// Represents one line of BMS file.
 #[deriving(PartialEq,Clone)]
 pub enum BmsCommand<'r> {
-    BmsUnknown(MaybeOwned<'r>),                 // starting with `#` but unknown otherwise
-    BmsTitle(MaybeOwned<'r>),                   // #TITLE
-    BmsSubtitle(MaybeOwned<'r>),                // #SUBTITLE
-    BmsGenre(MaybeOwned<'r>),                   // #GENRE
-    BmsArtist(MaybeOwned<'r>),                  // #ARTIST
-    BmsSubartist(MaybeOwned<'r>),               // #SUBARTIST
-    BmsMaker(MaybeOwned<'r>),                   // #MAKER
-    BmsComment(MaybeOwned<'r>),                 // #COMMENT
-    BmsStageFile(MaybeOwned<'r>),               // #STAGEFILE
-    BmsBanner(MaybeOwned<'r>),                  // #BANNER
-    BmsPathWAV(MaybeOwned<'r>),                 // #PATH_WAV
-    BmsBPM(BPM),                                // #BPM (without a following alphanumeric key)
-    BmsExBPM(Key, BPM),                         // #EXBPM or #BPMxx
-    BmsPlayer(int),                             // #PLAYER
+    Unknown(MaybeOwned<'r>),                // starting with `#` but unknown otherwise
+    TITLE(MaybeOwned<'r>),                  // #TITLE
+    SUBTITLE(MaybeOwned<'r>),               // #SUBTITLE
+    GENRE(MaybeOwned<'r>),                  // #GENRE
+    ARTIST(MaybeOwned<'r>),                 // #ARTIST
+    SUBARTIST(MaybeOwned<'r>),              // #SUBARTIST
+    MAKER(MaybeOwned<'r>),                  // #MAKER
+    COMMENT(MaybeOwned<'r>),                // #COMMENT
+    STAGEFILE(MaybeOwned<'r>),              // #STAGEFILE
+    BANNER(MaybeOwned<'r>),                 // #BANNER
+    PATHWAV(MaybeOwned<'r>),                // #PATH_WAV
+    BPM(BPM),                               // #BPM (without a following alphanumeric key)
+    EXBPM(Key, BPM),                        // #EXBPM or #BPMxx
+    PLAYER(int),                            // #PLAYER
     // Rust: unfortunately `Vec<(Key, MaybeOwned<'r>)>` segfaults. (#14088)
-    BmsLanes(Vec<(Key, String)>),               // #SNRS:LANES (experimental)
-    BmsPlayLevel(int),                          // #PLAYLEVEL
-    BmsDifficulty(int),                         // #DIFFICULTY
-    BmsRank(int),                               // #RANK
-    BmsDefExRank(int),                          // #DEFEXRANK
-    BmsExRank(Key, int),                        // #EXRANK
-    BmsTotal(int),                              // #TOTAL
-    BmsLNType(int),                             // #LNTYPE
-    BmsLNObj(Key),                              // #LNOBJ
-    BmsWAV(Key, MaybeOwned<'r>),                // #WAV
-    BmsWAVCmd(int, Key, int),                   // #WAVCMD
-    BmsExWAV(Key, Option<int>, Option<int>, Option<int>, MaybeOwned<'r>), // #EXWAV
-    BmsVolWAV(int),                             // #VOLWAV
-    BmsMIDIFile(MaybeOwned<'r>),                // #MIDIFILE
-    BmsBMP(Key, MaybeOwned<'r>),                // #BMP
-    BmsExBMP(Key, ARGB, MaybeOwned<'r>),        // #EXBMP
-    BmsBackBMP(MaybeOwned<'r>),                 // #BACKBMP
-    BmsBGA(Key, Key, ImageSlice),               // #BGA or #@BGA
-    BmsPoorBGA(int),                            // #POORBGA
-    BmsSwBGA(Key, int, int, Key, bool, ARGB, MaybeOwned<'r>), // #SWBGA
-    BmsARGB(Key, ARGB),                         // #ARGB
-    BmsCharFile(MaybeOwned<'r>),                // #CHARFILE
-    BmsVideoFile(MaybeOwned<'r>),               // #VIDEOFILE
-    BmsMovie(MaybeOwned<'r>),                   // #MOVIE
-    BmsCanvasSize(int, int),                    // #SNRS:CANVASSIZE (experimental)
-    BmsStop(Key, Duration),                     // #STOP
-    BmsStp(f64, Duration),                      // #STP
-    BmsText(Key, MaybeOwned<'r>),               // #TEXT or #SONG
-    BmsOption(MaybeOwned<'r>),                  // #OPTION
-    BmsChangeOption(Key, MaybeOwned<'r>),       // #CHANGEOPTION
-    BmsShorten(uint, f64),                      // #xxx02
-    BmsData(uint, Key, MaybeOwned<'r>),         // #xxxyy:...
-    BmsFlow(BmsFlowCommand),                    // flow commands (#RANDOM, #IF, #ENDIF etc.)
+    LANES(Vec<(Key, String)>),              // #SNRS:LANES (experimental)
+    PLAYLEVEL(int),                         // #PLAYLEVEL
+    DIFFICULTY(int),                        // #DIFFICULTY
+    RANK(int),                              // #RANK
+    DEFEXRANK(int),                         // #DEFEXRANK
+    EXRANK(Key, int),                       // #EXRANK
+    TOTAL(int),                             // #TOTAL
+    LNTYPE(int),                            // #LNTYPE
+    LNOBJ(Key),                             // #LNOBJ
+    WAV(Key, MaybeOwned<'r>),               // #WAV
+    WAVCMD(int, Key, int),                  // #WAVCMD
+    EXWAV(Key, Option<int>, Option<int>, Option<int>, MaybeOwned<'r>), // #EXWAV
+    VOLWAV(int),                            // #VOLWAV
+    MIDIFILE(MaybeOwned<'r>),               // #MIDIFILE
+    BMP(Key, MaybeOwned<'r>),               // #BMP
+    EXBMP(Key, ARGB, MaybeOwned<'r>),       // #EXBMP
+    BACKBMP(MaybeOwned<'r>),                // #BACKBMP
+    BGA(Key, Key, ImageSlice),              // #BGA or #@BGA
+    POORBGA(int),                           // #POORBGA
+    SWBGA(Key, int, int, Key, bool, ARGB, MaybeOwned<'r>), // #SWBGA
+    ARGB(Key, ARGB),                        // #ARGB
+    CHARFILE(MaybeOwned<'r>),               // #CHARFILE
+    VIDEOFILE(MaybeOwned<'r>),              // #VIDEOFILE
+    MOVIE(MaybeOwned<'r>),                  // #MOVIE
+    CANVASSIZE(int, int),                   // #SNRS:CANVASSIZE (experimental)
+    STOP(Key, Duration),                    // #STOP
+    STP(f64, Duration),                     // #STP
+    TEXT(Key, MaybeOwned<'r>),              // #TEXT or #SONG
+    OPTION(MaybeOwned<'r>),                 // #OPTION
+    CHANGEOPTION(Key, MaybeOwned<'r>),      // #CHANGEOPTION
+    Shorten(uint, f64),                     // #xxx02
+    Data(uint, Key, MaybeOwned<'r>),        // #xxxyy:...
+    Flow(BmsFlow),                          // flow commands (#RANDOM, #IF, #ENDIF etc.)
 }
 
 impl<'r> BmsCommand<'r> {
@@ -115,55 +113,56 @@ impl<'r> BmsCommand<'r> {
             s.into_string().into_maybe_owned()
         }
         match self {
-            BmsUnknown(s) => BmsUnknown(into_send_str(s)),
-            BmsTitle(s) => BmsTitle(into_send_str(s)),
-            BmsSubtitle(s) => BmsSubtitle(into_send_str(s)),
-            BmsGenre(s) => BmsGenre(into_send_str(s)),
-            BmsArtist(s) => BmsArtist(into_send_str(s)),
-            BmsSubartist(s) => BmsSubartist(into_send_str(s)),
-            BmsMaker(s) => BmsMaker(into_send_str(s)),
-            BmsComment(s) => BmsComment(into_send_str(s)),
-            BmsStageFile(s) => BmsStageFile(into_send_str(s)),
-            BmsBanner(s) => BmsBanner(into_send_str(s)),
-            BmsPathWAV(s) => BmsPathWAV(into_send_str(s)),
-            BmsBPM(bpm) => BmsBPM(bpm),
-            BmsExBPM(key, bpm) => BmsExBPM(key, bpm),
-            BmsPlayer(v) => BmsPlayer(v),
-            BmsLanes(lanes) =>
-                BmsLanes(lanes.into_iter().map(|(lane,spec)| (lane,spec.clone())).collect()),
-            BmsPlayLevel(v) => BmsPlayLevel(v),
-            BmsDifficulty(v) => BmsDifficulty(v),
-            BmsRank(v) => BmsRank(v),
-            BmsDefExRank(v) => BmsDefExRank(v),
-            BmsExRank(key, v) => BmsExRank(key, v),
-            BmsTotal(v) => BmsTotal(v),
-            BmsLNType(lntype) => BmsLNType(lntype),
-            BmsLNObj(key) => BmsLNObj(key),
-            BmsWAV(key, s) => BmsWAV(key, into_send_str(s)),
-            BmsWAVCmd(cmd, key, v) => BmsWAVCmd(cmd, key, v),
-            BmsExWAV(key, pan, vol, freq, s) => BmsExWAV(key, pan, vol, freq, into_send_str(s)),
-            BmsVolWAV(v) => BmsVolWAV(v),
-            BmsMIDIFile(s) => BmsMIDIFile(into_send_str(s)),
-            BmsBMP(key, s) => BmsBMP(key, into_send_str(s)),
-            BmsExBMP(key, argb, s) => BmsExBMP(key, argb, into_send_str(s)),
-            BmsBackBMP(s) => BmsBackBMP(into_send_str(s)),
-            BmsBGA(dst, src, slice) => BmsBGA(dst, src, slice),
-            BmsPoorBGA(poorbga) => BmsPoorBGA(poorbga),
-            BmsSwBGA(key, fr, time, line, doloop, argb, pattern) =>
-                BmsSwBGA(key, fr, time, line, doloop, argb, into_send_str(pattern)),
-            BmsARGB(key, argb) => BmsARGB(key, argb),
-            BmsCharFile(s) => BmsCharFile(into_send_str(s)),
-            BmsVideoFile(s) => BmsVideoFile(into_send_str(s)),
-            BmsMovie(s) => BmsMovie(into_send_str(s)),
-            BmsCanvasSize(w, h) => BmsCanvasSize(w, h),
-            BmsStop(key, dur) => BmsStop(key, dur),
-            BmsStp(pos, dur) => BmsStp(pos, dur),
-            BmsText(key, s) => BmsText(key, into_send_str(s)),
-            BmsOption(opt) => BmsOption(into_send_str(opt)),
-            BmsChangeOption(key, opt) => BmsChangeOption(key, into_send_str(opt)),
-            BmsShorten(measure, shorten) => BmsShorten(measure, shorten),
-            BmsData(measure, chan, data) => BmsData(measure, chan, into_send_str(data)),
-            BmsFlow(flow) => BmsFlow(flow),
+            BmsCommand::Unknown(s) => BmsCommand::Unknown(into_send_str(s)),
+            BmsCommand::TITLE(s) => BmsCommand::TITLE(into_send_str(s)),
+            BmsCommand::SUBTITLE(s) => BmsCommand::SUBTITLE(into_send_str(s)),
+            BmsCommand::GENRE(s) => BmsCommand::GENRE(into_send_str(s)),
+            BmsCommand::ARTIST(s) => BmsCommand::ARTIST(into_send_str(s)),
+            BmsCommand::SUBARTIST(s) => BmsCommand::SUBARTIST(into_send_str(s)),
+            BmsCommand::MAKER(s) => BmsCommand::MAKER(into_send_str(s)),
+            BmsCommand::COMMENT(s) => BmsCommand::COMMENT(into_send_str(s)),
+            BmsCommand::STAGEFILE(s) => BmsCommand::STAGEFILE(into_send_str(s)),
+            BmsCommand::BANNER(s) => BmsCommand::BANNER(into_send_str(s)),
+            BmsCommand::PATHWAV(s) => BmsCommand::PATHWAV(into_send_str(s)),
+            BmsCommand::BPM(bpm) => BmsCommand::BPM(bpm),
+            BmsCommand::EXBPM(key, bpm) => BmsCommand::EXBPM(key, bpm),
+            BmsCommand::PLAYER(v) => BmsCommand::PLAYER(v),
+            BmsCommand::LANES(lanes) =>
+                BmsCommand::LANES(lanes.into_iter().map(|(l,spec)| (l,spec.clone())).collect()),
+            BmsCommand::PLAYLEVEL(v) => BmsCommand::PLAYLEVEL(v),
+            BmsCommand::DIFFICULTY(v) => BmsCommand::DIFFICULTY(v),
+            BmsCommand::RANK(v) => BmsCommand::RANK(v),
+            BmsCommand::DEFEXRANK(v) => BmsCommand::DEFEXRANK(v),
+            BmsCommand::EXRANK(key, v) => BmsCommand::EXRANK(key, v),
+            BmsCommand::TOTAL(v) => BmsCommand::TOTAL(v),
+            BmsCommand::LNTYPE(lntype) => BmsCommand::LNTYPE(lntype),
+            BmsCommand::LNOBJ(key) => BmsCommand::LNOBJ(key),
+            BmsCommand::WAV(key, s) => BmsCommand::WAV(key, into_send_str(s)),
+            BmsCommand::WAVCMD(cmd, key, v) => BmsCommand::WAVCMD(cmd, key, v),
+            BmsCommand::EXWAV(key, pan, vol, freq, s) =>
+                BmsCommand::EXWAV(key, pan, vol, freq, into_send_str(s)),
+            BmsCommand::VOLWAV(v) => BmsCommand::VOLWAV(v),
+            BmsCommand::MIDIFILE(s) => BmsCommand::MIDIFILE(into_send_str(s)),
+            BmsCommand::BMP(key, s) => BmsCommand::BMP(key, into_send_str(s)),
+            BmsCommand::EXBMP(key, argb, s) => BmsCommand::EXBMP(key, argb, into_send_str(s)),
+            BmsCommand::BACKBMP(s) => BmsCommand::BACKBMP(into_send_str(s)),
+            BmsCommand::BGA(dst, src, slice) => BmsCommand::BGA(dst, src, slice),
+            BmsCommand::POORBGA(poorbga) => BmsCommand::POORBGA(poorbga),
+            BmsCommand::SWBGA(key, fr, time, line, doloop, argb, pattern) =>
+                BmsCommand::SWBGA(key, fr, time, line, doloop, argb, into_send_str(pattern)),
+            BmsCommand::ARGB(key, argb) => BmsCommand::ARGB(key, argb),
+            BmsCommand::CHARFILE(s) => BmsCommand::CHARFILE(into_send_str(s)),
+            BmsCommand::VIDEOFILE(s) => BmsCommand::VIDEOFILE(into_send_str(s)),
+            BmsCommand::MOVIE(s) => BmsCommand::MOVIE(into_send_str(s)),
+            BmsCommand::CANVASSIZE(w, h) => BmsCommand::CANVASSIZE(w, h),
+            BmsCommand::STOP(key, dur) => BmsCommand::STOP(key, dur),
+            BmsCommand::STP(pos, dur) => BmsCommand::STP(pos, dur),
+            BmsCommand::TEXT(key, s) => BmsCommand::TEXT(key, into_send_str(s)),
+            BmsCommand::OPTION(opt) => BmsCommand::OPTION(into_send_str(opt)),
+            BmsCommand::CHANGEOPTION(key, opt) => BmsCommand::CHANGEOPTION(key, into_send_str(opt)),
+            BmsCommand::Shorten(pos, shorten) => BmsCommand::Shorten(pos, shorten),
+            BmsCommand::Data(pos, chan, data) => BmsCommand::Data(pos, chan, into_send_str(data)),
+            BmsCommand::Flow(flow) => BmsCommand::Flow(flow),
         }
     }
 }
@@ -182,39 +181,39 @@ impl<'r> fmt::Show for BmsCommand<'r> {
         }
 
         match *self {
-            BmsUnknown(ref s) => write!(f, "#{}", *s),
-            BmsTitle(ref s) => write!(f, "#TITLE {}", *s),
-            BmsSubtitle(ref s) => write!(f, "#SUBTITLE {}", *s),
-            BmsGenre(ref s) => write!(f, "#GENRE {}", *s),
-            BmsArtist(ref s) => write!(f, "#ARTIST {}", *s),
-            BmsSubartist(ref s) => write!(f, "#SUBARTIST {}", *s),
-            BmsMaker(ref s) => write!(f, "#MAKER {}", *s),
-            BmsComment(ref s) => write!(f, "#COMMENT {}", *s),
-            BmsStageFile(ref s) => write!(f, "#STAGEFILE {}", *s),
-            BmsBanner(ref s) => write!(f, "#BANNER {}", *s),
-            BmsPathWAV(ref s) => write!(f, "#PATH_WAV {}", *s),
-            BmsBPM(BPM(bpm)) => write!(f, "#BPM {}", bpm),
-            BmsExBPM(key, BPM(bpm)) => write!(f, "#BPM{} {}", key, bpm),
-            BmsPlayer(v) => write!(f, "#PLAYER {}", v),
-            BmsLanes(ref lanes) => {
+            BmsCommand::Unknown(ref s) => write!(f, "#{}", *s),
+            BmsCommand::TITLE(ref s) => write!(f, "#TITLE {}", *s),
+            BmsCommand::SUBTITLE(ref s) => write!(f, "#SUBTITLE {}", *s),
+            BmsCommand::GENRE(ref s) => write!(f, "#GENRE {}", *s),
+            BmsCommand::ARTIST(ref s) => write!(f, "#ARTIST {}", *s),
+            BmsCommand::SUBARTIST(ref s) => write!(f, "#SUBARTIST {}", *s),
+            BmsCommand::MAKER(ref s) => write!(f, "#MAKER {}", *s),
+            BmsCommand::COMMENT(ref s) => write!(f, "#COMMENT {}", *s),
+            BmsCommand::STAGEFILE(ref s) => write!(f, "#STAGEFILE {}", *s),
+            BmsCommand::BANNER(ref s) => write!(f, "#BANNER {}", *s),
+            BmsCommand::PATHWAV(ref s) => write!(f, "#PATH_WAV {}", *s),
+            BmsCommand::BPM(BPM(bpm)) => write!(f, "#BPM {}", bpm),
+            BmsCommand::EXBPM(key, BPM(bpm)) => write!(f, "#BPM{} {}", key, bpm),
+            BmsCommand::PLAYER(v) => write!(f, "#PLAYER {}", v),
+            BmsCommand::LANES(ref lanes) => {
                 try!(write!(f, "#SNRS:LANES"));
                 for &(lane, ref spec) in lanes.iter() {
                     try!(write!(f, " {} {}", lane, *spec));
                 }
                 Ok(())
             },
-            BmsPlayLevel(v) => write!(f, "#PLAYLEVEL {}", v),
-            BmsDifficulty(v) => write!(f, "#DIFFICULTY {}", v),
-            BmsRank(v) => write!(f, "#RANK {}", v),
-            BmsDefExRank(v) => write!(f, "#DEFEXRANK {}", v),
-            BmsExRank(key, v) => write!(f, "#EXRANK {} {}", key, v),
-            BmsTotal(v) => write!(f, "#TOTAL {}", v),
-            BmsLNType(lntype) => write!(f, "#LNTYPE {}", lntype),
-            BmsLNObj(key) => write!(f, "#LNOBJ {}", key),
-            BmsWAV(key, ref s) => write!(f, "#WAV{} {}", key, *s),
-            BmsWAVCmd(cmd, key, v) => write!(f, "#WAVCMD {:02} {}{}", cmd, key, v),
-            BmsExWAV(_key, None, None, None, ref _s) => panic!("unsupported"),
-            BmsExWAV(key, pan, vol, freq, ref s) => {
+            BmsCommand::PLAYLEVEL(v) => write!(f, "#PLAYLEVEL {}", v),
+            BmsCommand::DIFFICULTY(v) => write!(f, "#DIFFICULTY {}", v),
+            BmsCommand::RANK(v) => write!(f, "#RANK {}", v),
+            BmsCommand::DEFEXRANK(v) => write!(f, "#DEFEXRANK {}", v),
+            BmsCommand::EXRANK(key, v) => write!(f, "#EXRANK {} {}", key, v),
+            BmsCommand::TOTAL(v) => write!(f, "#TOTAL {}", v),
+            BmsCommand::LNTYPE(lntype) => write!(f, "#LNTYPE {}", lntype),
+            BmsCommand::LNOBJ(key) => write!(f, "#LNOBJ {}", key),
+            BmsCommand::WAV(key, ref s) => write!(f, "#WAV{} {}", key, *s),
+            BmsCommand::WAVCMD(cmd, key, v) => write!(f, "#WAVCMD {:02} {}{}", cmd, key, v),
+            BmsCommand::EXWAV(_key, None, None, None, ref _s) => panic!("unsupported"),
+            BmsCommand::EXWAV(key, pan, vol, freq, ref s) => {
                 let mut flags = String::new();
                 let mut opts = String::new();
                 if pan.is_some() {
@@ -231,33 +230,36 @@ impl<'r> fmt::Show for BmsCommand<'r> {
                 }
                 write!(f, "#EXWAV{} {}{} {}", key, flags, opts, *s)
             },
-            BmsVolWAV(v) => write!(f, "#VOLWAV {}", v),
-            BmsMIDIFile(ref s) => write!(f, "#MIDIFILE {}", *s),
-            BmsBMP(key, ref s) => write!(f, "#BMP{} {}", key, *s),
-            BmsExBMP(key, argb, ref s) => write!(f, "#EXBMP{} {} {}", key, fmt_argb(argb), *s),
-            BmsBackBMP(ref s) => write!(f, "#BACKBMP {}", *s),
-            BmsBGA(dst, src, ImageSlice { sx, sy, dx, dy, w, h }) =>
+            BmsCommand::VOLWAV(v) => write!(f, "#VOLWAV {}", v),
+            BmsCommand::MIDIFILE(ref s) => write!(f, "#MIDIFILE {}", *s),
+            BmsCommand::BMP(key, ref s) => write!(f, "#BMP{} {}", key, *s),
+            BmsCommand::EXBMP(key, argb, ref s) =>
+                write!(f, "#EXBMP{} {} {}", key, fmt_argb(argb), *s),
+            BmsCommand::BACKBMP(ref s) => write!(f, "#BACKBMP {}", *s),
+            BmsCommand::BGA(dst, src, ImageSlice { sx, sy, dx, dy, w, h }) =>
                 write!(f, "#BGA{} {} {} {} {} {} {} {}",
                        dst, src, sx, sy, sx + w, sy + h, dx, dy),
-            BmsPoorBGA(poorbga) => write!(f, "#POORBGA {}", poorbga),
-            BmsSwBGA(key, fr, time, line, doloop, argb, ref pattern) =>
+            BmsCommand::POORBGA(poorbga) => write!(f, "#POORBGA {}", poorbga),
+            BmsCommand::SWBGA(key, fr, time, line, doloop, argb, ref pattern) =>
                 write!(f, "#SWBGA{} {}:{}:{}:{}:{} {}", key, fr, time, line,
                        if doloop {1u} else {0u}, fmt_argb(argb), *pattern),
-            BmsARGB(key, argb) => write!(f, "#ARGB{} {}", key, fmt_argb(argb)),
-            BmsCharFile(ref s) => write!(f, "#CHARFILE {}", *s),
-            BmsVideoFile(ref s) => write!(f, "#VIDEOFILE {}", *s),
-            BmsMovie(ref s) => write!(f, "#MOVIE {}", *s),
-            BmsCanvasSize(w, h) => write!(f, "#SNRS:CANVASSIZE {} {}", w, h),
-            BmsStop(key, Measures(dur)) => write!(f, "#STOP{} {}", key, (dur * 192.0) as int),
-            BmsStop(..) => panic!("unsupported"),
-            BmsStp(pos, Seconds(dur)) => write!(f, "#STP {:07.3} {}", pos, (dur * 1000.0) as int),
-            BmsStp(..) => panic!("unsupported"),
-            BmsText(key, ref s) => write!(f, "#TEXT{} {}", key, *s),
-            BmsOption(ref opt) => write!(f, "#OPTION {}", *opt),
-            BmsChangeOption(key, ref opt) => write!(f, "#CHANGEOPTION{} {}", key, *opt),
-            BmsShorten(measure, shorten) => write!(f, "#{:03}02:{}", measure, shorten),
-            BmsData(measure, chan, ref data) => write!(f, "#{:03}{}:{}", measure, chan, *data),
-            BmsFlow(ref flowcmd) => flowcmd.fmt(f),
+            BmsCommand::ARGB(key, argb) => write!(f, "#ARGB{} {}", key, fmt_argb(argb)),
+            BmsCommand::CHARFILE(ref s) => write!(f, "#CHARFILE {}", *s),
+            BmsCommand::VIDEOFILE(ref s) => write!(f, "#VIDEOFILE {}", *s),
+            BmsCommand::MOVIE(ref s) => write!(f, "#MOVIE {}", *s),
+            BmsCommand::CANVASSIZE(w, h) => write!(f, "#SNRS:CANVASSIZE {} {}", w, h),
+            BmsCommand::STOP(key, Duration::Measures(dur)) =>
+                write!(f, "#STOP{} {}", key, (dur * 192.0) as int),
+            BmsCommand::STOP(..) => panic!("unsupported"),
+            BmsCommand::STP(pos, Duration::Seconds(dur)) =>
+                write!(f, "#STP {:07.3} {}", pos, (dur * 1000.0) as int),
+            BmsCommand::STP(..) => panic!("unsupported"),
+            BmsCommand::TEXT(key, ref s) => write!(f, "#TEXT{} {}", key, *s),
+            BmsCommand::OPTION(ref opt) => write!(f, "#OPTION {}", *opt),
+            BmsCommand::CHANGEOPTION(key, ref opt) => write!(f, "#CHANGEOPTION{} {}", key, *opt),
+            BmsCommand::Shorten(pos, shorten) => write!(f, "#{:03}02:{}", pos, shorten),
+            BmsCommand::Data(pos, chan, ref data) => write!(f, "#{:03}{}:{}", pos, chan, *data),
+            BmsCommand::Flow(ref flowcmd) => flowcmd.fmt(f),
         }
     }
 }
@@ -276,40 +278,40 @@ pub enum Parsed<'r> {
 impl<'r> Parsed<'r> {
     /// Returns true if the parsed item is a command.
     pub fn is_command(&self) -> bool {
-        match *self { Command(..) => true, _ => false }
+        match *self { Parsed::Command(..) => true, _ => false }
     }
 
     /// Returns true if the parsed item is a message.
     pub fn is_message(&self) -> bool {
-        match *self { Message(..) => true, _ => false }
+        match *self { Parsed::Message(..) => true, _ => false }
     }
 
     /// Returns true if the parsed item is an encoding notification.
     pub fn is_encoding(&self) -> bool {
-        match *self { Encoding(..) => true, _ => false }
+        match *self { Parsed::Encoding(..) => true, _ => false }
     }
 
     /// Extracts a command in the parsed item if any.
     pub fn command<'a>(&'a self) -> Option<(Option<uint>, &'a BmsCommand<'r>)> {
-        match *self { Command(lineno, ref cmd) => Some((lineno, cmd)), _ => None }
+        match *self { Parsed::Command(lineno, ref cmd) => Some((lineno, cmd)), _ => None }
     }
 
     /// Extracts a message in the parsed item if any.
     pub fn message<'a>(&'a self) -> Option<(Option<uint>, &'a BmsMessage)> {
-        match *self { Message(lineno, ref msg) => Some((lineno, msg)), _ => None }
+        match *self { Parsed::Message(lineno, ref msg) => Some((lineno, msg)), _ => None }
     }
 
     /// Extracts an encoding notification in the parsed item if any.
     pub fn encoding<'a>(&'a self) -> Option<(&'static str, f64)> {
-        match *self { Encoding(encname, confidence) => Some((encname, confidence)), _ => None }
+        match *self { Parsed::Encoding(name, confidence) => Some((name, confidence)), _ => None }
     }
 
     /// Converts the parsed item to the sendable form.
     pub fn into_send(self) -> Parsed<'static> {
         match self {
-            Command(lineno, cmd) => Command(lineno, cmd.into_send()),
-            Message(lineno, msg) => Message(lineno, msg),
-            Encoding(encname, confidence) => Encoding(encname, confidence),
+            Parsed::Command(lineno, cmd) => Parsed::Command(lineno, cmd.into_send()),
+            Parsed::Message(lineno, msg) => Parsed::Message(lineno, msg),
+            Parsed::Encoding(encname, confidence) => Parsed::Encoding(encname, confidence),
         }
     }
 }
@@ -382,7 +384,7 @@ impl<'r> Parser<'r> {
     pub fn iter<'a>(&'a self) -> ParsingIterator<'a> {
         let (encname, confidence) = self.encoding;
         ParsingIterator { iter: self.file[].split('\u000a'), lineno: 0, opts: self.opts,
-                          queued: vec![Encoding(encname, confidence)] }
+                          queued: vec![Parsed::Encoding(encname, confidence)] }
     }
 }
 
@@ -405,7 +407,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
 
             macro_rules! diag(
                 ($e:expr) => ({
-                    self.queued.push(Message(Some(self.lineno), $e));
+                    self.queued.push(Parsed::Message(Some(self.lineno), $e));
                 })
             )
 
@@ -422,19 +424,18 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             // skip non-command lines
             let line = line.trim_left_chars(is_whitespace_or_similar);
             if line.is_empty() { continue; }
-            let (ch, line) = line.slice_shift_char();
-            if ch == Some('\uff03') {
-                diag!(diag::BmsHasFullWidthSharp);
-            } else if ch != Some('#') {
-                continue;
-            }
+            let line = match line.slice_shift_char() {
+                Some(('\uff03', line)) => { diag!(diag::BmsHasFullWidthSharp); line },
+                Some(('#', line)) => line,
+                _ => continue
+            };
 
             let upperline = line.to_ascii_upper();
 
             // emits a `BmsCommand` and restarts the loop
             macro_rules! emit(
                 ($e:expr) => ({
-                    self.queued.push(Command(Some(self.lineno), $e));
+                    self.queued.push(Parsed::Command(Some(self.lineno), $e));
                     return self.queued.remove(0);
                 })
             )
@@ -525,7 +526,8 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                         let $v = line[prefix.len()..];
                         let _ = $v; // removes warning
                         $then;
-                        emit!(BmsUnknown($v.into_maybe_owned())); // no more matching possible
+                        // no more matching possible
+                        emit!(BmsCommand::Unknown($v.into_maybe_owned()));
                     }
                 });
                 ($prefix:tt |$k:ident, $v:ident| $then:expr) => ({ // #<command>xx ...
@@ -541,33 +543,34 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                             let _ = $v; // ditto
                             $then;
                         }
-                        emit!(BmsUnknown(line.into_maybe_owned())); // no more matching possible
+                        // no more matching possible
+                        emit!(BmsCommand::Unknown(line.into_maybe_owned()));
                     }
                 })
             )
 
-            if_prefix!("TITLE"     string -> BmsTitle)
-            if_prefix!("SUBTITLE"  string -> BmsSubtitle)
-            if_prefix!("GENRE"     string -> BmsGenre)
+            if_prefix!("TITLE"     string -> BmsCommand::TITLE)
+            if_prefix!("SUBTITLE"  string -> BmsCommand::SUBTITLE)
+            if_prefix!("GENRE"     string -> BmsCommand::GENRE)
             if self.opts.autofix_commands {
-                if_prefix!("GENLE" string -> BmsGenre; diag::BmsHasGENLE)
+                if_prefix!("GENLE" string -> BmsCommand::GENRE; diag::BmsHasGENLE)
             }
-            if_prefix!("ARTIST"    string -> BmsArtist)
-            if_prefix!("SUBARTIST" string -> BmsSubartist)
-            if_prefix!("MAKER"     string -> BmsMaker)
-            if_prefix!("COMMENT"   string -> BmsComment) // quotes are stripped by caller
-            if_prefix!("STAGEFILE" string -> BmsStageFile)
-            if_prefix!("BANNER"    string -> BmsBanner)
-            if_prefix!("PATH_WAV"  string -> BmsPathWAV)
+            if_prefix!("ARTIST"    string -> BmsCommand::ARTIST)
+            if_prefix!("SUBARTIST" string -> BmsCommand::SUBARTIST)
+            if_prefix!("MAKER"     string -> BmsCommand::MAKER)
+            if_prefix!("COMMENT"   string -> BmsCommand::COMMENT) // quotes are stripped by caller
+            if_prefix!("STAGEFILE" string -> BmsCommand::STAGEFILE)
+            if_prefix!("BANNER"    string -> BmsCommand::BANNER)
+            if_prefix!("PATH_WAV"  string -> BmsCommand::PATHWAV)
 
             if_prefix!("BPM" |line| { // #BPM <float> or #BPMxx <float>
                 let mut key = PartialKey::dummy();
                 let mut bpm = 0.0;
                 if lex!(line; PartialKey -> key, ws, f64 -> bpm) {
                     let key = warn_on_partial_key!(key);
-                    emit!(BmsExBPM(key, BPM(bpm)));
+                    emit!(BmsCommand::EXBPM(key, BPM(bpm)));
                 } else if lex!(line; ws, f64 -> bpm) {
-                    emit!(BmsBPM(BPM(bpm)));
+                    emit!(BmsCommand::BPM(BPM(bpm)));
                 }
             })
 
@@ -575,30 +578,30 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 let mut bpm = 0.0;
                 if lex!(line; f64 -> bpm) {
                     diag!(diag::BmsHasEXBPM);
-                    emit!(BmsExBPM(key, BPM(bpm)));
+                    emit!(BmsCommand::EXBPM(key, BPM(bpm)));
                 }
             })
 
-            if_prefix!("PLAYER"     value -> BmsPlayer)
-            if_prefix!("PLAYLEVEL"  value -> BmsPlayLevel)
-            if_prefix!("DIFFICULTY" value -> BmsDifficulty)
-            if_prefix!("RANK"       value -> BmsRank)
-            if_prefix!("DEFEXRANK"  value -> BmsDefExRank)
-            if_prefix!("TOTAL"      value -> BmsTotal)
-            if_prefix!("LNTYPE"     value -> BmsLNType)
+            if_prefix!("PLAYER"     value -> BmsCommand::PLAYER)
+            if_prefix!("PLAYLEVEL"  value -> BmsCommand::PLAYLEVEL)
+            if_prefix!("DIFFICULTY" value -> BmsCommand::DIFFICULTY)
+            if_prefix!("RANK"       value -> BmsCommand::RANK)
+            if_prefix!("DEFEXRANK"  value -> BmsCommand::DEFEXRANK)
+            if_prefix!("TOTAL"      value -> BmsCommand::TOTAL)
+            if_prefix!("LNTYPE"     value -> BmsCommand::LNTYPE)
 
             if_prefix!("LNOBJ" |line| { // #LNOBJ <key>
                 let mut key = PartialKey::dummy();
                 if lex!(line; ws, PartialKey -> key) {
                     let key = warn_on_partial_key!(key);
-                    emit!(BmsLNObj(key));
+                    emit!(BmsCommand::LNOBJ(key));
                 }
             })
 
             if_prefix!("EXRANK" |key, line| { // #EXRANKxx <int>
                 let mut value = 0;
                 if lex!(line; int -> value) {
-                    emit!(BmsExRank(key, value));
+                    emit!(BmsCommand::EXRANK(key, value));
                 }
             })
 
@@ -620,7 +623,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                         }
                     }
                     if okay {
-                        emit!(BmsLanes(lanes));
+                        emit!(BmsCommand::LANES(lanes));
                     }
                 }
             })
@@ -631,13 +634,13 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 let mut value = 0;
                 if lex!(line; ws, int -> cmd, ws, PartialKey -> key, ws, int -> value) {
                     let key = warn_on_partial_key!(key);
-                    emit!(BmsWAVCmd(cmd, key, value));
+                    emit!(BmsCommand::WAVCMD(cmd, key, value));
                 }
             })
 
-            if_prefix!("WAV"  key string -> BmsWAV)
-            if_prefix!("VOLWAV"    value -> BmsVolWAV)
-            if_prefix!("MIDIFILE" string -> BmsMIDIFile)
+            if_prefix!("WAV"  key string -> BmsCommand::WAV)
+            if_prefix!("VOLWAV"    value -> BmsCommand::VOLWAV)
+            if_prefix!("MIDIFILE" string -> BmsCommand::MIDIFILE)
 
             if_prefix!("EXWAV" |key, line| { // #EXWAVxx [pvf] <int>* <string>
                 let mut line = line;
@@ -672,7 +675,8 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                         if okay {
                             let mut text = "";
                             if lex!(line; ws, str -> text, ws*, !) {
-                                emit!(BmsExWAV(key, pan, vol, freq, text.into_maybe_owned()));
+                                emit!(BmsCommand::EXWAV(key, pan, vol, freq,
+                                                        text.into_maybe_owned()));
                             }
                         }
                     }
@@ -680,15 +684,15 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 }
             })
 
-            if_prefix!("BMP" key string -> BmsBMP)
-            if_prefix!("BACKBMP" string -> BmsBackBMP)
-            if_prefix!("POORBGA"  value -> BmsPoorBGA)
+            if_prefix!("BMP" key string -> BmsCommand::BMP)
+            if_prefix!("BACKBMP" string -> BmsCommand::BACKBMP)
+            if_prefix!("POORBGA"  value -> BmsCommand::POORBGA)
 
             if_prefix!("EXBMP" |key, line| { // #EXBMPxx <int8>,<int8>,<int8>,<int8> <string>
                 let mut argb = (0,0,0,0);
                 let mut text = "";
                 if lex!(line; ARGB -> argb, ws, str -> text, ws*, !) {
-                    emit!(BmsExBMP(key, argb, text.into_maybe_owned()));
+                    emit!(BmsCommand::EXBMP(key, argb, text.into_maybe_owned()));
                 }
             })
 
@@ -700,7 +704,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                               int -> x2, ws, int -> y2, ws, int -> dx, ws, int -> dy) {
                     let src = warn_on_partial_key!(src);
                     let slice = ImageSlice { sx: x1, sy: y1, dx: dx, dy: dy, w: x2-x1, h: y2-y1 };
-                    emit!(BmsBGA(dst, src, slice));
+                    emit!(BmsCommand::BGA(dst, src, slice));
                 }
             })
 
@@ -712,7 +716,7 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                               int -> w, ws, int -> h, ws, int -> dx, ws, int -> dy) {
                     let src = warn_on_partial_key!(src);
                     let slice = ImageSlice { sx: sx, sy: sy, dx: dx, dy: dy, w: w, h: h };
-                    emit!(BmsBGA(dst, src, slice));
+                    emit!(BmsCommand::BGA(dst, src, slice));
                 }
             })
 
@@ -729,8 +733,8 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                               lit ':', ws*, ARGB -> argb, ws, str -> pattern, ws*, !) {
                     let linekey = warn_on_partial_key!(linekey);
                     if doloop == 0 || doloop == 1 {
-                        emit!(BmsSwBGA(key, fr, time, linekey, doloop == 1,
-                                       argb, pattern.into_maybe_owned()));
+                        emit!(BmsCommand::SWBGA(key, fr, time, linekey, doloop == 1,
+                                                argb, pattern.into_maybe_owned()));
                     }
                 }
             })
@@ -738,27 +742,27 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
             if_prefix!("ARGB" |key, line| { // #ARGBxx <int8>,<int8>,<int8>,<int8>
                 let mut argb = (0,0,0,0);
                 if lex!(line; ARGB -> argb) {
-                    emit!(BmsARGB(key, argb));
+                    emit!(BmsCommand::ARGB(key, argb));
                 }
             })
 
-            if_prefix!("CHARFILE"  string -> BmsCharFile)
-            if_prefix!("VIDEOFILE" string -> BmsVideoFile)
-            if_prefix!("MOVIE"     string -> BmsMovie)
+            if_prefix!("CHARFILE"  string -> BmsCommand::CHARFILE)
+            if_prefix!("VIDEOFILE" string -> BmsCommand::VIDEOFILE)
+            if_prefix!("MOVIE"     string -> BmsCommand::MOVIE)
 
             if_prefix!("SNRS:CANVASSIZE" |line| { // #SNRS:CANVASSIZE <int> <int>
                 let mut width = 0;
                 let mut height = 0;
                 if lex!(line; ws, int -> width, ws, int -> height) {
-                    emit!(BmsCanvasSize(width, height));
+                    emit!(BmsCommand::CANVASSIZE(width, height));
                 }
             })
 
             if_prefix!("STOP" |key, line| { // #STOPxx <int>
                 let mut duration = 0;
                 if lex!(line; int -> duration) {
-                    let duration = Measures(duration as f64 / 192.0);
-                    emit!(BmsStop(key, duration));
+                    let duration = Duration::Measures(duration as f64 / 192.0);
+                    emit!(BmsCommand::STOP(key, duration));
                 }
             })
 
@@ -770,44 +774,46 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                               int -> duration) && duration > 0 {
                     let Measure(measure) = measure;
                     let pos = measure as f64 + frac as f64 * 0.001;
-                    let duration = Seconds(duration as f64 * 0.001);
-                    emit!(BmsStp(pos, duration));
+                    let duration = Duration::Seconds(duration as f64 * 0.001);
+                    emit!(BmsCommand::STP(pos, duration));
                 }
             })
 
-            if_prefix!("TEXT"         key string -> BmsText)
-            if_prefix!("SONG"         key string -> BmsText; diag::BmsHasSONG)
-            if_prefix!("OPTION"           string -> BmsOption)
-            if_prefix!("CHANGEOPTION" key string -> BmsChangeOption)
+            if_prefix!("TEXT"         key string -> BmsCommand::TEXT)
+            if_prefix!("SONG"         key string -> BmsCommand::TEXT; diag::BmsHasSONG)
+            if_prefix!("OPTION"           string -> BmsCommand::OPTION)
+            if_prefix!("CHANGEOPTION" key string -> BmsCommand::CHANGEOPTION)
 
-            macro_rules! makeBmsFlow(($e:expr) => (|val| BmsFlow($e(val))))
+            macro_rules! makeBmsFlow(($e:expr) => (|val| BmsCommand::Flow($e(val))))
 
             // we parse SWITCH directives first since we need to parse #END as #ENDIF.
-            if_prefix!("SWITCH"    value -> makeBmsFlow!(BmsSwitch))
-            if_prefix!("SETSWITCH" value -> makeBmsFlow!(BmsSetSwitch))
-            if_prefix!("ENDSW"           -> BmsFlow(BmsEndSw))
-            if_prefix!("CASE"      value -> makeBmsFlow!(BmsCase))
-            if_prefix!("SKIP"            -> BmsFlow(BmsSkip))
-            if_prefix!("DEF"             -> BmsFlow(BmsDef))
+            if_prefix!("SWITCH"    value -> makeBmsFlow!(BmsFlow::SWITCH))
+            if_prefix!("SETSWITCH" value -> makeBmsFlow!(BmsFlow::SETSWITCH))
+            if_prefix!("ENDSW"           -> BmsCommand::Flow(BmsFlow::ENDSW))
+            if_prefix!("CASE"      value -> makeBmsFlow!(BmsFlow::CASE))
+            if_prefix!("SKIP"            -> BmsCommand::Flow(BmsFlow::SKIP))
+            if_prefix!("DEF"             -> BmsCommand::Flow(BmsFlow::DEF))
 
-            if_prefix!("RANDOM" (ws) value -> makeBmsFlow!(BmsRandom);
+            if_prefix!("RANDOM" (ws) value -> makeBmsFlow!(BmsFlow::RANDOM);
                                               diag::BmsHasRANDOMWithoutWhitespace)
             if self.opts.autofix_commands {
-                if_prefix!("RONDAM"  value -> makeBmsFlow!(BmsRandom); diag::BmsHasRONDAM)
+                if_prefix!("RONDAM"  value -> makeBmsFlow!(BmsFlow::RANDOM); diag::BmsHasRONDAM)
             }
-            if_prefix!("SETRANDOM"   value -> makeBmsFlow!(BmsSetRandom))
-            if_prefix!("ENDRANDOM"         -> BmsFlow(BmsEndRandom))
+            if_prefix!("SETRANDOM"   value -> makeBmsFlow!(BmsFlow::SETRANDOM))
+            if_prefix!("ENDRANDOM"         -> BmsCommand::Flow(BmsFlow::ENDRANDOM))
             if self.opts.autofix_commands {
-                if_prefix!("IFEND"         -> BmsFlow(BmsEndIf); diag::BmsHasIFEND)
-                if_prefix!("IF" (ws) value -> makeBmsFlow!(BmsIf); diag::BmsHasIFWithoutWhitespace)
+                if_prefix!("IFEND"         -> BmsCommand::Flow(BmsFlow::ENDIF); diag::BmsHasIFEND)
+                if_prefix!("IF" (ws) value -> makeBmsFlow!(BmsFlow::IF);
+                                              diag::BmsHasIFWithoutWhitespace)
             } else {
-                if_prefix!("IF"      value -> makeBmsFlow!(BmsIf))
+                if_prefix!("IF"      value -> makeBmsFlow!(BmsFlow::IF))
             }
-            if_prefix!("ELSEIF"      value -> makeBmsFlow!(BmsElseIf))
-            if_prefix!("ELSE"              -> BmsFlow(BmsElse))
-            if_prefix!("ENDIF"             -> BmsFlow(BmsEndIf))
+            if_prefix!("ELSEIF"      value -> makeBmsFlow!(BmsFlow::ELSEIF))
+            if_prefix!("ELSE"              -> BmsCommand::Flow(BmsFlow::ELSE))
+            if_prefix!("ENDIF"             -> BmsCommand::Flow(BmsFlow::ENDIF))
             if self.opts.autofix_commands {
-                if_prefix!("END"           -> BmsFlow(BmsEndIf); diag::BmsHasENDNotFollowedByIF)
+                if_prefix!("END"           -> BmsCommand::Flow(BmsFlow::ENDIF);
+                                              diag::BmsHasENDNotFollowedByIF)
             }
 
             let mut measure = Measure(0);
@@ -818,14 +824,14 @@ impl<'r> Iterator<Parsed<'r>> for ParsingIterator<'r> {
                 if chan == Key(2) { // #xxx02:<float>
                     let mut shorten = 0.0;
                     if lex!(data; ws*, f64 -> shorten) {
-                        emit!(BmsShorten(measure, shorten));
+                        emit!(BmsCommand::Shorten(measure, shorten));
                     }
                 } else {
-                    emit!(BmsData(measure, chan, data.into_maybe_owned()));
+                    emit!(BmsCommand::Data(measure, chan, data.into_maybe_owned()));
                 }
             }
 
-            emit!(BmsUnknown(line.into_maybe_owned()));
+            emit!(BmsCommand::Unknown(line.into_maybe_owned()));
         }
     }
 }
@@ -887,11 +893,11 @@ impl<'r,R:Rng> Iterator<Parsed<'static>> for PreprocessingParsingIterator<'r,R> 
             }
 
             match self.iter.next() {
-                Some(Command(lineno, cmd)) => {
+                Some(Parsed::Command(lineno, cmd)) => {
                     let mut messages = Vec::new();
                     let mut out = Vec::new();
                     match cmd.into_send() {
-                        BmsFlow(ref flowcmd) => {
+                        BmsCommand::Flow(ref flowcmd) => {
                             self.pp.feed_flow(lineno, flowcmd, &mut messages, &mut out);
                         }
                         cmd => {
@@ -899,8 +905,10 @@ impl<'r,R:Rng> Iterator<Parsed<'static>> for PreprocessingParsingIterator<'r,R> 
                         }
                     }
 
-                    self.queued.extend(messages.into_iter().map(|msg| Message(lineno, msg)));
-                    self.queued.extend(out.into_iter().map(|(line, cmd)| Command(line, cmd)));
+                    self.queued.extend(messages.into_iter()
+                                               .map(|msg| Parsed::Message(lineno, msg)));
+                    self.queued.extend(out.into_iter()
+                                          .map(|(line, cmd)| Parsed::Command(line, cmd)));
                     // now the next iteration will return a queued item if any
                 }
                 Some(parsed) => {
@@ -912,8 +920,10 @@ impl<'r,R:Rng> Iterator<Parsed<'static>> for PreprocessingParsingIterator<'r,R> 
                     let mut messages = Vec::new();
                     let mut out = Vec::new();
                     self.pp.finish(&mut messages, &mut out);
-                    self.queued.extend(messages.into_iter().map(|msg| Message(None, msg)));
-                    self.queued.extend(out.into_iter().map(|(line, cmd)| Command(line, cmd)));
+                    self.queued.extend(messages.into_iter()
+                                               .map(|msg| Parsed::Message(None, msg)));
+                    self.queued.extend(out.into_iter()
+                                          .map(|(line, cmd)| Parsed::Command(line, cmd)));
                 }
             }
         }

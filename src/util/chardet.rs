@@ -311,7 +311,7 @@ impl<CC:CharClass> Classifier<CC> {
 #[cfg(not(no_subprogram))]
 pub fn chardet_train(args: &[String]) -> int {
     use std::io::{stdin, stderr, BufferedReader};
-    use encoding::{Encoding, EncodeStrict, DecodeReplace};
+    use encoding::{Encoding, EncoderTrap, DecoderTrap};
     use encoding::all::{WINDOWS_949, WINDOWS_31J};
 
     if args.len() != 1 {
@@ -346,18 +346,18 @@ pub fn chardet_train(args: &[String]) -> int {
         if (i + 1) % 10000 == 0 {
             let _ = write!(&mut stderr(), "Processing {} out of {} words...\n", i + 1, nwords);
         }
-        match WINDOWS_949.encode(w[], EncodeStrict) {
+        match WINDOWS_949.encode(w[], EncoderTrap::Strict) {
             Ok(w_) => {
-                let w_ = WINDOWS_31J.decode(w_[], DecodeReplace).unwrap();
+                let w_ = WINDOWS_31J.decode(w_[], DecoderTrap::Replace).unwrap();
                 nkowords += 1;
                 kotrainerko.train(w[], true);
                 jatrainerko.train(w_[], false);
             }
             Err(..) => {}
         }
-        match WINDOWS_31J.encode(w[], EncodeStrict) {
+        match WINDOWS_31J.encode(w[], EncoderTrap::Strict) {
             Ok(w_) => {
-                let w_ = WINDOWS_949.decode(w_[], DecodeReplace).unwrap();
+                let w_ = WINDOWS_949.decode(w_[], DecoderTrap::Replace).unwrap();
                 njawords += 1;
                 jatrainerja.train(w[], true);
                 kotrainerja.train(w_[], false);

@@ -12,26 +12,20 @@ use libc;
 
 use sdl::{get_ticks, event};
 use sdl_mixer;
-use format::obj::{NLANES, NLAYERS, Lane, BPM, Damage, GaugeDamage, InstantDeath};
-use format::obj::{BGARef, BlankBGA, ImageBGA};
-use format::obj::{ObjQueryOps, Visible, LNStart, LNDone, Bomb, BGM, SetBGA, SetBPM};
-use format::obj::{VirtualPos, VirtualTime, ActualPos, ActualTime};
+use format::obj::{NLANES, NLAYERS, Lane, BPM, Damage, BGARef};
+use format::obj::{ObjQueryOps, Visible, LNStart, LNDone, Bomb, BGM, SetBGA, SetBPM, ObjAxis};
 use format::timeline::TimelineInfo;
 use format::pointer::TimelinePointerUtil;
 use format::bms::{Key, ImageRef, SoundRef};
 use format::bms::{BmsTimeline, BmsPointer, BmsMeta, Bms};
 use engine::keyspec::KeySpec;
-use engine::input::{Input, KeyInput, JoyAxisInput, JoyButtonInput, QuitInput};
-use engine::input::{LaneInput, SpeedUpInput, SpeedDownInput};
-use engine::input::{InputState, Positive, Neutral, Negative};
-use engine::input::{KeyMap};
-use engine::resource::SoundResource;
-use ui::options::Options;
-use ui::options::{Modf, MirrorModf, RandomModf, RandomExModf, ShuffleModf, ShuffleExModf};
+use engine::input::{Input, VirtualInput, InputState, KeyMap};
+use engine::resource::Soundlike;
+use ui::options::{Options, Modifier};
 
 /// Applies given modifier to given group of lanes in the game data. `begin` and `end` should be
 /// a valid range from 0 to `keyspec.order.len()`, where `end` is exclusive.
-pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modf, r: &mut R,
+pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modifier, r: &mut R,
                                   keyspec: &KeySpec, begin: uint, end: uint) {
     use format::timeline::modf as timeline_modf;
 
@@ -39,21 +33,21 @@ pub fn apply_modf_to_lanes<R:Rng>(timeline: &mut BmsTimeline, modf: Modf, r: &mu
     for i in range(begin, end) {
         let lane = keyspec.order[i];
         let kind = keyspec.kinds[*lane];
-        if modf == ShuffleExModf || modf == RandomExModf ||
+        if modf == Modifier::ShuffleEx || modf == Modifier::RandomEx ||
                 kind.map_or(false, |kind| kind.counts_as_key()) {
             lanes.push(lane);
         }
     }
 
     match modf {
-        MirrorModf => timeline_modf::mirror(timeline, lanes[]),
-        ShuffleModf | ShuffleExModf => timeline_modf::shuffle(timeline, r, lanes[]),
-        RandomModf | RandomExModf => timeline_modf::randomize(timeline, r, lanes[])
+        Modifier::Mirror => timeline_modf::mirror(timeline, lanes[]),
+        Modifier::Shuffle | Modifier::ShuffleEx => timeline_modf::shuffle(timeline, r, lanes[]),
+        Modifier::Random | Modifier::RandomEx => timeline_modf::randomize(timeline, r, lanes[])
     };
 }
 
 /// Applies given modifier to the game data.
-pub fn apply_modf<R:Rng>(bms: &mut Bms, modf: Modf, r: &mut R, keyspec: &KeySpec) {
+pub fn apply_modf<R:Rng>(bms: &mut Bms, modf: Modifier, r: &mut R, keyspec: &KeySpec) {
     apply_modf_to_lanes(&mut bms.timeline, modf, r, keyspec, 0, keyspec.split);
     if keyspec.split < keyspec.order.len() {
         apply_modf_to_lanes(&mut bms.timeline, modf, r, keyspec,
@@ -68,7 +62,7 @@ pub type BGAState = [BGARef<ImageRef>, ..NLAYERS];
 /// Returns the initial BGA state. Note that merely setting a particular layer doesn't start
 /// the movie playback; `poorbgafix` in `parser::parse` function handles it.
 pub fn initial_bga_state() -> BGAState {
-    [BlankBGA, BlankBGA, BlankBGA, ImageBGA(ImageRef(Key(0)))]
+    [BGARef::Blank, BGARef::Blank, BGARef::Blank, BGARef::Image(ImageRef(Key(0)))]
 }
 
 /// Grades. Sonorous performs the time-based grading as long as possible (it can go wrong when
@@ -127,9 +121,9 @@ pub const MAXGAUGE: int = 512;
 pub const SCOREPERNOTE: f64 = 300.0;
 
 /// A damage due to the MISS grading. Only applied when the grading is not due to the bomb.
-const MISS_DAMAGE: Damage = GaugeDamage(0.059);
+const MISS_DAMAGE: Damage = Damage::Gauge(0.059);
 /// A damage due to the BAD grading.
-const BAD_DAMAGE: Damage = GaugeDamage(0.030);
+const BAD_DAMAGE: Damage = Damage::Gauge(0.030);
 
 /// Game play states independent to the display.
 pub struct Player {
@@ -152,7 +146,7 @@ pub struct Player {
     /// graded twice. Its length equals to that of `bms.objs`.
     pub nograding: Vec<bool>,
     /// Sound resources.
-    pub sndres: Vec<SoundResource>,
+    pub sndres: Vec<Soundlike>,
     /// A sound chunk used for beeps. It always plays on the channel #0.
     pub beep: sdl_mixer::Chunk,
     /// Last channels in which the corresponding sound in `sndres` was played.
@@ -270,7 +264,7 @@ impl Player {
     /// Creates a new player object. The player object owns other related structures, including
     /// the options, BMS file, key specification, input mapping and sound resources.
     pub fn new(opts: Rc<Options>, bms: Bms, infos: TimelineInfo, keyspec: KeySpec,
-               keymap: KeyMap, sndres: Vec<SoundResource>) -> Player {
+               keymap: KeyMap, sndres: Vec<Soundlike>) -> Player {
         // we no longer need the full `Bms` structure.
         let Bms { meta, timeline, .. } = bms;
         let timeline = Rc::new(timeline);
@@ -286,7 +280,7 @@ impl Player {
         let nsounds = sndres.len();
 
         // set all pointers to the origin and let the `tick` do the initial calculation
-        let origin = timeline.pointer(VirtualPos, originoffset);
+        let origin = timeline.pointer(ObjAxis::VirtualPos, originoffset);
         let duration = timeline.duration(originoffset, |sref| sndres[**sref as uint].duration());
         let mut player = Player {
             opts: opts, meta: meta, timeline: timeline, infos: infos, duration: duration,
@@ -304,7 +298,7 @@ impl Player {
             gradefactor: gradefactor, lastgrade: None, gradecounts: [0, ..NGRADES],
             lastcombo: 0, bestcombo: 0, score: 0, gauge: initialgauge, survival: survival,
 
-            keymultiplicity: [0, ..NLANES], joystate: [Neutral, ..NLANES],
+            keymultiplicity: [0, ..NLANES], joystate: [InputState::Neutral, ..NLANES],
         };
 
         player.allocate_more_channels(64);
@@ -316,7 +310,7 @@ impl Player {
     /// buttons or axes.
     pub fn key_pressed(&self, lane: Lane) -> bool {
         let Lane(lane) = lane;
-        self.keymultiplicity[lane] > 0 || self.joystate[lane] != Neutral
+        self.keymultiplicity[lane] > 0 || self.joystate[lane] != InputState::Neutral
     }
 
     /// Returns the play speed displayed. Can differ from the actual play speed
@@ -338,11 +332,11 @@ impl Player {
                               (self.infos.nnotes as f64))) as uint;
 
         match grade {
-            MISS | BAD => { self.lastcombo = 0; }
-            GOOD => {}
-            GREAT | COOL => {
+            Grade::MISS | Grade::BAD => { self.lastcombo = 0; }
+            Grade::GOOD => {}
+            Grade::GREAT | Grade::COOL => {
                 // at most 5/512(1%) recover when the combo is topped
-                let weight = if grade == GREAT {2} else {3};
+                let weight = if grade == Grade::GREAT {2} else {3};
                 let cmbbonus = cmp::min(self.lastcombo as int, 100) / 50;
                 self.lastcombo += 1;
                 self.gauge = cmp::min(self.gauge + weight + cmbbonus, MAXGAUGE);
@@ -351,10 +345,10 @@ impl Player {
         self.bestcombo = cmp::max(self.bestcombo, self.lastcombo);
 
         match damage {
-            Some(GaugeDamage(ratio)) => {
+            Some(Damage::Gauge(ratio)) => {
                 self.gauge -= (MAXGAUGE as f64 * ratio) as int; true
             }
-            Some(InstantDeath) => {
+            Some(Damage::InstantDeath) => {
                 self.gauge = cmp::min(self.gauge, 0); false
             }
             None => true
@@ -366,11 +360,11 @@ impl Player {
     /// the actual time difference when `gradefactor` is 1.0.
     pub fn update_grade_from_distance(&mut self, dist: f64) {
         let dist = dist.abs();
-        let (grade, damage) = if      dist <  COOL_CUTOFF {(COOL,None)}
-                              else if dist < GREAT_CUTOFF {(GREAT,None)}
-                              else if dist <  GOOD_CUTOFF {(GOOD,None)}
-                              else if dist <   BAD_CUTOFF {(BAD,Some(BAD_DAMAGE))}
-                              else                        {(MISS,Some(MISS_DAMAGE))};
+        let (grade, damage) = if      dist <  COOL_CUTOFF {(Grade::COOL,None)}
+                              else if dist < GREAT_CUTOFF {(Grade::GREAT,None)}
+                              else if dist <  GOOD_CUTOFF {(Grade::GOOD,None)}
+                              else if dist <   BAD_CUTOFF {(Grade::BAD,Some(BAD_DAMAGE))}
+                              else                        {(Grade::MISS,Some(MISS_DAMAGE))};
         let scoredelta = 1.0 - dist / BAD_CUTOFF;
         let scoredelta = if scoredelta > 0.0 {scoredelta} else {0.0};
         let keepgoing = self.update_grade(grade, scoredelta, damage);
@@ -380,12 +374,12 @@ impl Player {
     /// Same as `update_grade`, but with the predetermined damage value. Always results in MISS
     /// grade. May return true when the damage resulted in the instant death.
     pub fn update_grade_from_damage(&mut self, damage: Damage) -> bool {
-        self.update_grade(MISS, 0.0, Some(damage))
+        self.update_grade(Grade::MISS, 0.0, Some(damage))
     }
 
     /// Same as `update_grade`, but always results in MISS grade with the standard damage value.
     pub fn update_grade_to_miss(&mut self) {
-        let keepgoing = self.update_grade(MISS, 0.0, Some(MISS_DAMAGE));
+        let keepgoing = self.update_grade(Grade::MISS, 0.0, Some(MISS_DAMAGE));
         assert!(keepgoing);
     }
 
@@ -447,7 +441,7 @@ impl Player {
     /// When the virtual input is mapped to multiple actual inputs
     /// it can update the internal state but still return false.
     pub fn is_unpressed(&mut self, lane: Lane, continuous: bool, state: InputState) -> bool {
-        if state == Neutral || (continuous && self.joystate[*lane] != state) {
+        if state == InputState::Neutral || (continuous && self.joystate[*lane] != state) {
             if continuous {
                 self.joystate[*lane] = state;
                 true
@@ -466,7 +460,7 @@ impl Player {
     /// When the virtual input is mapped to multiple actual inputs
     /// it can update the internal state but still return false.
     pub fn is_pressed(&mut self, lane: Lane, continuous: bool, state: InputState) -> bool {
-        if state != Neutral {
+        if state != InputState::Neutral {
             if continuous {
                 self.joystate[*lane] = state;
                 true
@@ -507,7 +501,7 @@ impl Player {
     pub fn process_press(&mut self, lane: Lane) {
         // plays the closest key sound
         let soundable =
-            self.cur.find_closest_of_type(VirtualTime, |obj| {
+            self.cur.find_closest_of_type(ObjAxis::VirtualTime, |obj| {
                 obj.object_lane() == Some(lane) && obj.is_soundable()
             });
         for p in soundable.iter() {
@@ -518,7 +512,7 @@ impl Player {
 
         // tries to grade the closest gradable object in the grading area
         let gradable =
-            self.cur.find_closest_of_type(VirtualTime, |obj| {
+            self.cur.find_closest_of_type(ObjAxis::VirtualTime, |obj| {
                 obj.object_lane() == Some(lane) && obj.is_gradable()
             });
         for p in gradable.iter() {
@@ -558,12 +552,12 @@ impl Player {
                 assert!(*self.bpm < 0.0 && curtime >= reverse.loc.time);
                 let newpos = reverse.loc.pos + self.bpm.sec_to_measure(curtime - reverse.loc.time);
                 let posdiff = newpos - self.cur.loc.pos; // XXX #6268
-                self.cur.seek(ActualPos, posdiff);
+                self.cur.seek(ObjAxis::ActualPos, posdiff);
             }
             None => {
                 // apply object-like effects while advancing `self.cur`
                 let mut cur = self.cur.clone();
-                for p in cur.mut_until(ActualTime, curtime - self.cur.loc.time) {
+                for p in cur.mut_until(ObjAxis::ActualTime, curtime - self.cur.loc.time) {
                     match p.data() {
                         BGM(sref) => {
                             self.play_sound_if_nonzero(sref, true);
@@ -625,9 +619,9 @@ impl Player {
             // and `continuous` (true if the input is not discrete and `Negative` input state
             // matters).
             let (key, state) = match event::poll_event() {
-                event::NoEvent => { break; }
+                event::Event::None => { break; }
                 ev => match Input::from_event(ev) {
-                    Some((QuitInput,_)) => { return false; },
+                    Some((Input::Quit,_)) => { return false; },
                     Some(key_and_state) => key_and_state,
                     None => { continue; }
                 }
@@ -637,28 +631,30 @@ impl Player {
                 None => { continue; }
             };
             let continuous = match key {
-                KeyInput(..) | JoyButtonInput(..) | QuitInput => false,
-                JoyAxisInput(..) => true
+                Input::Key(..) | Input::JoyButton(..) | Input::Quit => false,
+                Input::JoyAxis(..) => true
             };
 
             if opts.is_exclusive() { continue; }
 
             match (vkey, state) {
-                (SpeedDownInput, Positive) | (SpeedDownInput, Negative) => {
+                (VirtualInput::SpeedDown, InputState::Positive) |
+                (VirtualInput::SpeedDown, InputState::Negative) => {
                     let current = self.targetspeed.unwrap_or(self.playspeed);
                     for &newspeed in next_speed_mark(current).iter() {
                         self.targetspeed = Some(newspeed);
                         self.play_beep();
                     }
                 }
-                (SpeedUpInput, Positive) | (SpeedUpInput, Negative) => {
+                (VirtualInput::SpeedUp, InputState::Positive) |
+                (VirtualInput::SpeedUp, InputState::Negative) => {
                     let current = self.targetspeed.unwrap_or(self.playspeed);
                     for &newspeed in previous_speed_mark(current).iter() {
                         self.targetspeed = Some(newspeed);
                         self.play_beep();
                     }
                 }
-                (LaneInput(lane), state) => {
+                (VirtualInput::Lane(lane), state) => {
                     if !opts.is_autoplay() {
                         if self.is_unpressed(lane, continuous, state) {
                             self.process_unpress(lane);

@@ -55,11 +55,11 @@ macro_rules! warn(
 pub fn check_exit(atexit: ||) {
     loop {
         match event::poll_event() {
-            event::KeyEvent(event::EscapeKey,_,_,_) | event::QuitEvent => {
+            event::Event::Key(event::Key::Escape,_,_,_) | event::Event::Quit => {
                 atexit();
                 exit(0);
             },
-            event::NoEvent => { break; },
+            event::Event::None => { break; },
             _ => {}
         }
     }

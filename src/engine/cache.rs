@@ -11,6 +11,7 @@ use util::md5::{MD5, MD5Hash};
 use format::metadata::{Level, Difficulty, Meta};
 
 use sqlite3;
+use sqlite3::{ResultCode, ColumnType, BindArg};
 
 /// Encodes a path (possibly) relative to the root path as a byte vector.
 fn encode_path(root: &Path, path: &Path) -> Vec<u8> {
@@ -77,8 +78,8 @@ fn fail_from_sqlite(db: &sqlite3::Database, code: sqlite3::ResultCode) -> ! {
 /// `try!`-friendly version of `Cursor::step`.
 fn step_cursor(db: &sqlite3::Database, c: &mut sqlite3::Cursor) -> IoResult<bool> {
     match c.step() {
-        sqlite3::SQLITE_ROW => Ok(true),
-        sqlite3::SQLITE_DONE => Ok(false),
+        ResultCode::SQLITE_ROW => Ok(true),
+        ResultCode::SQLITE_DONE => Ok(false),
         code => Err(io_error_from_sqlite(Some(db), code)),
     }
 }
@@ -167,11 +168,11 @@ fn md5_hash_from_slice(h: &[u8]) -> Option<MD5Hash> {
 #[deriving(Show)]
 enum CacheResult<T> {
     /// The cached entry is present and valid with given row ID and (partial) value.
-    CacheValid(i64, T),
+    Valid(i64, T),
     /// The cached entry is present but invalid.
-    CacheInvalid(i64),
+    Invalid(i64),
     /// There is no cached entry.
-    NotCached,
+    None,
 }
 
 impl MetadataCache {
@@ -255,20 +256,20 @@ impl MetadataCache {
         let mut c = try!(self.prepare("
             SELECT id, mtime FROM directories WHERE path = ?;
         "));
-        c.bind_param(1, &sqlite3::Blob(encoded.to_vec()));
+        c.bind_param(1, &BindArg::Blob(encoded.to_vec()));
         if try!(step_cursor(&self.db, &mut c)) {
             // check if the directory has the same mtime
             let dirid = c.get_i64(0);
             let dirmtime = c.get_i64(1);
             match path.stat() {
                 Ok(st) if st.kind == io::TypeDirectory && st.modified as i64 == dirmtime =>
-                    Ok((CacheValid(dirid, ()), Some(Ok(st)))),
+                    Ok((CacheResult::Valid(dirid, ()), Some(Ok(st)))),
 
                 // DO NOT skip the error, this may indicate the required eviction
-                st => Ok((CacheInvalid(dirid), Some(st))),
+                st => Ok((CacheResult::Invalid(dirid), Some(st))),
             }
         } else {
-            Ok((NotCached, None))
+            Ok((CacheResult::None, None))
         }
     }
 
@@ -286,12 +287,12 @@ impl MetadataCache {
         debug!("get_entries: cache result = {}", res);
 
         match res {
-            CacheValid(dirid, ()) => {
+            CacheResult::Valid(dirid, ()) => {
                 // retrieve entries from the cache
                 let mut c = try!(self.prepare("
                     SELECT name, size, hash FROM files WHERE dir = ?;
                 "));
-                c.bind_param(1, &sqlite3::Integer64(dirid));
+                c.bind_param(1, &BindArg::Integer64(dirid));
                 while try!(step_cursor(&self.db, &mut c)) {
                     let path = path.join(c.get_blob(0).unwrap_or("".as_bytes()));
                     let size = c.get_i64(1);
@@ -305,18 +306,18 @@ impl MetadataCache {
                 drop(c);
             }
 
-            CacheInvalid(..) | NotCached => {
+            CacheResult::Invalid(..) | CacheResult::None => {
                 let dirstat: IoResult<FileStat> = dirstat.unwrap_or_else(|| path.stat());
                 debug!("get_entries: dirstat.modified = {}",
                        dirstat.as_ref().ok().map(|st| st.modified));
 
                 // entries for the cached directory, if any, are now invalid.
                 match res {
-                    CacheInvalid(dirid) => {
+                    CacheResult::Invalid(dirid) => {
                         let mut c = try!(self.prepare("
                             DELETE FROM files WHERE dir = ?;
                         "));
-                        c.bind_param(1, &sqlite3::Integer64(dirid));
+                        c.bind_param(1, &BindArg::Integer64(dirid));
                         try!(step_cursor(&self.db, &mut c));
                         drop(c);
                     }
@@ -339,8 +340,8 @@ impl MetadataCache {
                         let mut c = try!(self.prepare("
                             INSERT OR REPLACE INTO directories(path, mtime) VALUES(?, ?);
                         "));
-                        c.bind_param(1, &sqlite3::Blob(encoded));
-                        c.bind_param(2, &sqlite3::Integer64(dirst.modified as i64));
+                        c.bind_param(1, &BindArg::Blob(encoded));
+                        c.bind_param(2, &BindArg::Integer64(dirst.modified as i64));
                         try!(step_cursor(&self.db, &mut c));
                         drop(c);
                         let dirid = self.db.get_last_insert_rowid();
@@ -349,13 +350,13 @@ impl MetadataCache {
                         let mut c = try!(self.prepare("
                             INSERT INTO files(dir, name, size, mtime) VALUES(?, ?, ?, ?);
                         "));
-                        c.bind_param(1, &sqlite3::Integer64(dirid));
+                        c.bind_param(1, &BindArg::Integer64(dirid));
                         for (path, st) in entries.into_iter().zip(entrystats.iter()) {
                             let filename = path.filename().unwrap().to_vec();
                             c.reset();
-                            c.bind_param(2, &sqlite3::Blob(filename));
-                            c.bind_param(3, &sqlite3::Integer64(size_from_filestat(st)));
-                            c.bind_param(4, &sqlite3::Integer64(st.modified as i64));
+                            c.bind_param(2, &BindArg::Blob(filename));
+                            c.bind_param(3, &BindArg::Integer64(size_from_filestat(st)));
+                            c.bind_param(4, &BindArg::Integer64(st.modified as i64));
                             try!(step_cursor(&self.db, &mut c));
                             match st.kind {
                                 io::TypeFile => files.push((path, None)),
@@ -366,12 +367,12 @@ impl MetadataCache {
                         drop(c);
                     }
 
-                    (&Err(..), CacheInvalid(dirid)) => {
+                    (&Err(..), CacheResult::Invalid(dirid)) => {
                         // remove the directory entry if any
                         let mut c = try!(self.prepare("
                             DELETE FROM directories WHERE id = ?;
                         "));
-                        c.bind_param(1, &sqlite3::Integer64(dirid));
+                        c.bind_param(1, &BindArg::Integer64(dirid));
                         try!(step_cursor(&self.db, &mut c));
                         drop(c);
                     }
@@ -405,8 +406,8 @@ impl MetadataCache {
             FROM directories d INNER JOIN files f ON d.id = f.dir
             WHERE d.path = ? AND f.name = ?;
         "));
-        c.bind_param(1, &sqlite3::Blob(encoded_dir.to_vec()));
-        c.bind_param(2, &sqlite3::Blob(name.to_vec()));
+        c.bind_param(1, &BindArg::Blob(encoded_dir.to_vec()));
+        c.bind_param(2, &BindArg::Blob(name.to_vec()));
         if try!(step_cursor(&self.db, &mut c)) {
             // check if the file has the same mtime and size
             let fileid = c.get_i64(0);
@@ -415,15 +416,15 @@ impl MetadataCache {
             let filehash = c.get_blob(3).and_then(md5_hash_from_slice);
 
             match filehash {
-                None => Ok((CacheInvalid(fileid), None)),
+                None => Ok((CacheResult::Invalid(fileid), None)),
                 Some(filehash) => match path.stat() {
                     Ok(st) if st.size as i64 == filesize && st.modified as i64 == filemtime =>
-                        Ok((CacheValid(fileid, filehash), Some(Ok(st)))),
-                    st => Ok((CacheInvalid(fileid), Some(st))),
+                        Ok((CacheResult::Valid(fileid, filehash), Some(Ok(st)))),
+                    st => Ok((CacheResult::Invalid(fileid), Some(st))),
                 }
             }
         } else {
-            Ok((NotCached, None))
+            Ok((CacheResult::None, None))
         }
     }
 
@@ -441,9 +442,9 @@ impl MetadataCache {
         debug!("get_hash: cache result = {}", res);
 
         match res {
-            CacheValid(_fileid, filehash) => Ok((filehash, None)),
+            CacheResult::Valid(_fileid, filehash) => Ok((filehash, None)),
 
-            CacheInvalid(..) | NotCached => {
+            CacheResult::Invalid(..) | CacheResult::None => {
                 let filestat: IoResult<FileStat> = filestat.unwrap_or_else(|| path.stat());
                 debug!("get_hash: filestat.size = {}, filestat.modified = {}",
                        filestat.as_ref().ok().map(|st| st.size),
@@ -453,12 +454,12 @@ impl MetadataCache {
                 let hash = try!(MD5::from_reader(&mut f)).finish();
 
                 match res {
-                    CacheInvalid(fileid) => {
+                    CacheResult::Invalid(fileid) => {
                         let mut c = try!(self.prepare("
                             UPDATE files SET hash = ? WHERE id = ?;
                         "));
-                        c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_vec()));
-                        c.bind_param(2, &sqlite3::Integer64(fileid));
+                        c.bind_param(1, &BindArg::Blob(hash.as_slice().to_vec()));
+                        c.bind_param(2, &BindArg::Integer64(fileid));
                         try!(step_cursor(&self.db, &mut c));
                         drop(c);
                     }
@@ -482,14 +483,14 @@ impl MetadataCache {
             SELECT random_metadata, title, artist, genre, level, levelsystem, difficulty
             FROM timelines WHERE hash = ?;
         "));
-        c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_vec()));
+        c.bind_param(1, &BindArg::Blob(hash.as_slice().to_vec()));
         if try!(step_cursor(&self.db, &mut c)) {
             let random = c.get_i64(0) != 0;
             let title = c.get_text(1).map(|s| s.to_string());
             let artist = c.get_text(2).map(|s| s.to_string());
             let genre = c.get_text(3).map(|s| s.to_string());
             let level = match (c.get_column_type(4), FromPrimitive::from_i64(c.get_i64(5))) {
-                (sqlite3::SQLITE_INTEGER, Some(system)) =>
+                (ColumnType::SQLITE_INTEGER, Some(system)) =>
                     c.get_i64(4).to_int().map(|value| Level { value: value, system: system }),
                 (_, _) => None
             };
@@ -523,15 +524,15 @@ impl MetadataCache {
                            level, levelsystem, difficulty)
             VALUES(?, ?, ?, ?, ?, ?, ?, ?);
         "));
-        c.bind_param(1, &sqlite3::Blob(hash.as_slice().to_vec()));
-        c.bind_param(2, &sqlite3::Integer64(if meta.random {1} else {0}));
-        c.bind_param(3, &meta.title.map_or(sqlite3::Null, sqlite3::Text));
-        c.bind_param(4, &meta.artist.map_or(sqlite3::Null, sqlite3::Text));
-        c.bind_param(5, &meta.genre.map_or(sqlite3::Null, sqlite3::Text));
-        c.bind_param(6, &level.map_or(sqlite3::Null, sqlite3::Integer64));
-        c.bind_param(7, &levelsystem.map_or(sqlite3::Null, sqlite3::Integer64));
-        c.bind_param(8, &meta.difficulty.map_or(sqlite3::Null,
-                                                |Difficulty(v)| sqlite3::Integer64(v as i64)));
+        c.bind_param(1, &BindArg::Blob(hash.as_slice().to_vec()));
+        c.bind_param(2, &BindArg::Integer64(if meta.random {1} else {0}));
+        c.bind_param(3, &meta.title.map_or(BindArg::Null, BindArg::Text));
+        c.bind_param(4, &meta.artist.map_or(BindArg::Null, BindArg::Text));
+        c.bind_param(5, &meta.genre.map_or(BindArg::Null, BindArg::Text));
+        c.bind_param(6, &level.map_or(BindArg::Null, BindArg::Integer64));
+        c.bind_param(7, &levelsystem.map_or(BindArg::Null, BindArg::Integer64));
+        c.bind_param(8, &meta.difficulty.map_or(BindArg::Null,
+                                                |Difficulty(v)| BindArg::Integer64(v as i64)));
         try!(step_cursor(&self.db, &mut c));
         drop(c);
 

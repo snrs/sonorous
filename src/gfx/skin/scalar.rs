@@ -26,17 +26,17 @@ pub enum ImageSource<'a> {
      * The renderer does try not to touch the `Rc` box itself until strictly required,
      * thus it requires the *reference* to the `Rc` box containing the texture.
      */
-    TextureSource(&'a Rc<Texture2D>),
+    Texture(&'a Rc<Texture2D>),
     /// A reference to the image file.
     /// The renderer is free to cache the resulting texture per the path.
-    PathSource(Path),
+    Path(Path),
 }
 
 impl<'a> Clone for ImageSource<'a> {
     fn clone(&self) -> ImageSource<'a> {
         match *self {
-            TextureSource(tex) => TextureSource(tex),
-            PathSource(ref path) => PathSource(path.clone()),
+            ImageSource::Texture(tex) => ImageSource::Texture(tex),
+            ImageSource::Path(ref path) => ImageSource::Path(path.clone()),
         }
     }
 }
@@ -79,29 +79,29 @@ impl ImageClip {
 /// The scalar value.
 pub enum Scalar<'a> {
     /// An owned string. Analogous to `std::str::MaybeOwned`.
-    OwnedStrScalar(String),
+    OwnedStr(String),
     /// A borrowed string slice. Analogous to `std::str::MaybeOwned`.
-    BorrowedStrScalar(&'a str),
+    BorrowedStr(&'a str),
     /// An image reference and the clipping rectangle in pixels.
-    ImageScalar(ImageSource<'a>, ImageClip),
+    Image(ImageSource<'a>, ImageClip),
     /// A signed integer.
-    IntScalar(int),
+    Int(int),
     /// An unsigned integer.
-    UintScalar(uint),
+    Uint(uint),
     /// A 32-bit floating point number.
-    F32Scalar(f32),
+    F32(f32),
     /// A 64-bit floating point number.
-    F64Scalar(f64),
+    F64(f64),
     /// A color.
-    ColorScalar(Color),
+    Color(Color),
 }
 
 impl<'a> Scalar<'a> {
     /// Extracts the string slice if any.
     pub fn as_slice(&'a self) -> Option<&'a str> {
         match *self {
-            OwnedStrScalar(ref s) => Some(s[]),
-            BorrowedStrScalar(s) => Some(s),
+            Scalar::OwnedStr(ref s) => Some(s[]),
+            Scalar::BorrowedStr(s) => Some(s),
             _ => None,
         }
     }
@@ -109,7 +109,7 @@ impl<'a> Scalar<'a> {
     /// Extracts the image reference if any.
     pub fn as_image_source(&'a self) -> Option<&'a ImageSource<'a>> {
         match *self {
-            ImageScalar(ref src, _clip) => Some(src),
+            Scalar::Image(ref src, _clip) => Some(src),
             _ => None,
         }
     }
@@ -132,21 +132,21 @@ impl<'a> IntoScalar<'a> for Scalar<'a> {
 }
 
 impl<'a> IntoScalar<'a> for &'a str {
-    #[inline] fn into_scalar(self) -> Scalar<'a> { BorrowedStrScalar(self) }
+    #[inline] fn into_scalar(self) -> Scalar<'a> { Scalar::BorrowedStr(self) }
 }
 
 impl<'a> AsScalar<'a> for String {
-    #[inline] fn as_scalar(&'a self) -> Scalar<'a> { BorrowedStrScalar(self[]) }
+    #[inline] fn as_scalar(&'a self) -> Scalar<'a> { Scalar::BorrowedStr(self[]) }
 }
 
 impl IntoScalar<'static> for String {
-    #[inline] fn into_scalar(self) -> Scalar<'static> { OwnedStrScalar(self) }
+    #[inline] fn into_scalar(self) -> Scalar<'static> { Scalar::OwnedStr(self) }
 }
 
 impl<'a> AsScalar<'a> for Rc<Texture2D> {
     #[inline]
     fn as_scalar(&'a self) -> Scalar<'a> {
-        ImageScalar(TextureSource(self), ImageClip::new())
+        Scalar::Image(ImageSource::Texture(self), ImageClip::new())
     }
 }
 
@@ -161,28 +161,28 @@ macro_rules! scalar_conv_impls(
     )
 )
 
-scalar_conv_impls!(int   -> |v| IntScalar(v))
-scalar_conv_impls!(i8    -> |v| IntScalar(v as int))
-scalar_conv_impls!(i16   -> |v| IntScalar(v as int))
-scalar_conv_impls!(i64   -> |v| IntScalar(v as int))
-scalar_conv_impls!(i32   -> |v| IntScalar(v as int))
-scalar_conv_impls!(uint  -> |v| UintScalar(v))
-scalar_conv_impls!(u8    -> |v| UintScalar(v as uint))
-scalar_conv_impls!(u16   -> |v| UintScalar(v as uint))
-scalar_conv_impls!(u64   -> |v| UintScalar(v as uint))
-scalar_conv_impls!(u32   -> |v| UintScalar(v as uint))
-scalar_conv_impls!(f32   -> |v| F32Scalar(v))
-scalar_conv_impls!(f64   -> |v| F64Scalar(v))
-scalar_conv_impls!(Color -> |v| ColorScalar(v))
+scalar_conv_impls!(int   -> |v| Scalar::Int(v))
+scalar_conv_impls!(i8    -> |v| Scalar::Int(v as int))
+scalar_conv_impls!(i16   -> |v| Scalar::Int(v as int))
+scalar_conv_impls!(i64   -> |v| Scalar::Int(v as int))
+scalar_conv_impls!(i32   -> |v| Scalar::Int(v as int))
+scalar_conv_impls!(uint  -> |v| Scalar::Uint(v))
+scalar_conv_impls!(u8    -> |v| Scalar::Uint(v as uint))
+scalar_conv_impls!(u16   -> |v| Scalar::Uint(v as uint))
+scalar_conv_impls!(u64   -> |v| Scalar::Uint(v as uint))
+scalar_conv_impls!(u32   -> |v| Scalar::Uint(v as uint))
+scalar_conv_impls!(f32   -> |v| Scalar::F32(v))
+scalar_conv_impls!(f64   -> |v| Scalar::F64(v))
+scalar_conv_impls!(Color -> |v| Scalar::Color(v))
 
 impl<'a> fmt::Show for ImageSource<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            TextureSource(tex) => {
+            ImageSource::Texture(tex) => {
                 let tex = tex.deref();
                 write!(f, "<texture {}x{}>", tex.width, tex.height)
             },
-            PathSource(ref path) => write!(f, "<external {}>", path.display()),
+            ImageSource::Path(ref path) => write!(f, "<external {}>", path.display()),
         }
     }
 }
@@ -190,15 +190,15 @@ impl<'a> fmt::Show for ImageSource<'a> {
 impl<'a> fmt::Show for Scalar<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            OwnedStrScalar(ref s) => s.fmt(f),
-            BorrowedStrScalar(s) => s.fmt(f),
-            ImageScalar(ref src, ref clip) => write!(f, "ImageScalar({}, {})", *src, *clip),
-            IntScalar(v) => v.fmt(f),
-            UintScalar(v) => v.fmt(f),
-            F32Scalar(v) => v.fmt(f),
-            F64Scalar(v) => v.fmt(f),
-            ColorScalar(RGB(r, g, b)) => write!(f, "#{:02x}{:02x}{:02x}", r, g, b),
-            ColorScalar(RGBA(r, g, b, a)) => write!(f, "#{:02x}{:02x}{:02x}{:02x}", r, g, b, a),
+            Scalar::OwnedStr(ref s) => s.fmt(f),
+            Scalar::BorrowedStr(s) => s.fmt(f),
+            Scalar::Image(ref src, ref clip) => write!(f, "Scalar::Image({}, {})", *src, *clip),
+            Scalar::Int(v) => v.fmt(f),
+            Scalar::Uint(v) => v.fmt(f),
+            Scalar::F32(v) => v.fmt(f),
+            Scalar::F64(v) => v.fmt(f),
+            Scalar::Color(RGB(r, g, b)) => write!(f, "#{:02x}{:02x}{:02x}", r, g, b),
+            Scalar::Color(RGBA(r, g, b, a)) => write!(f, "#{:02x}{:02x}{:02x}{:02x}", r, g, b, a),
         }
     }
 }
@@ -206,8 +206,8 @@ impl<'a> fmt::Show for Scalar<'a> {
 impl<'a> IntoMaybeOwned<'a> for Scalar<'a> {
     fn into_maybe_owned(self) -> MaybeOwned<'a> {
         match self {
-            OwnedStrScalar(s) => s.into_maybe_owned(),
-            BorrowedStrScalar(s) => s.into_maybe_owned(),
+            Scalar::OwnedStr(s) => s.into_maybe_owned(),
+            Scalar::BorrowedStr(s) => s.into_maybe_owned(),
             scalar => scalar.to_string().into_maybe_owned(),
         }
     }
@@ -219,14 +219,14 @@ macro_rules! scalar_to_prim_impl(
             $(
                 fn $f(&self) -> Option<$t> {
                     match *self {
-                        OwnedStrScalar(..) => None,
-                        BorrowedStrScalar(..) => None,
-                        ImageScalar(..) => None,
-                        IntScalar(v) => v.$f(),
-                        UintScalar(v) => v.$f(),
-                        F32Scalar(v) => v.$f(),
-                        F64Scalar(v) => v.$f(),
-                        ColorScalar(..) => None,
+                        Scalar::OwnedStr(..) => None,
+                        Scalar::BorrowedStr(..) => None,
+                        Scalar::Image(..) => None,
+                        Scalar::Int(v) => v.$f(),
+                        Scalar::Uint(v) => v.$f(),
+                        Scalar::F32(v) => v.$f(),
+                        Scalar::F64(v) => v.$f(),
+                        Scalar::Color(..) => None,
                     }
                 }
             )*
@@ -243,14 +243,14 @@ scalar_to_prim_impl!(
 impl<'a> Clone for Scalar<'a> {
     fn clone(&self) -> Scalar<'a> {
         match *self {
-            OwnedStrScalar(ref s) => OwnedStrScalar(s.to_string()),
-            BorrowedStrScalar(s) => BorrowedStrScalar(s),
-            ImageScalar(ref src, ref clip) => ImageScalar(src.clone(), clip.clone()),
-            IntScalar(v) => IntScalar(v),
-            UintScalar(v) => UintScalar(v),
-            F32Scalar(v) => F32Scalar(v),
-            F64Scalar(v) => F64Scalar(v),
-            ColorScalar(v) => ColorScalar(v),
+            Scalar::OwnedStr(ref s) => Scalar::OwnedStr(s.to_string()),
+            Scalar::BorrowedStr(s) => Scalar::BorrowedStr(s),
+            Scalar::Image(ref src, ref clip) => Scalar::Image(src.clone(), clip.clone()),
+            Scalar::Int(v) => Scalar::Int(v),
+            Scalar::Uint(v) => Scalar::Uint(v),
+            Scalar::F32(v) => Scalar::F32(v),
+            Scalar::F64(v) => Scalar::F64(v),
+            Scalar::Color(v) => Scalar::Color(v),
         }
     }
 }

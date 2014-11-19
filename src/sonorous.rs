@@ -19,7 +19,7 @@
 #![crate_type = "bin"]
 
 #![no_start]
-#![feature(macro_rules, phase, struct_variant, link_args, unsafe_destructor, slicing_syntax)]
+#![feature(macro_rules, phase, link_args, unsafe_destructor, slicing_syntax)]
 
 #![comment = "Sonorous"]
 #![license = "GPLv2+"]
@@ -132,7 +132,7 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
                        parseropts: &format::bms::parse::ParserOptions,
                        callback: |line: Option<uint>, msg: format::bms::diag::BmsMessage| -> bool) {
     use format::bms::diag::BmsMessage;
-    use format::bms::parse::{BmsUnknown, Parsed, Command, Message, Encoding};
+    use format::bms::parse::{BmsCommand, Parsed};
     use format::bms::parse::{Parser, PreprocessingParser};
 
     let mut f = match std::io::File::open(bmspath) {
@@ -144,10 +144,10 @@ pub fn dump_bmscommand(bmspath: &Path, full: bool,
     //       problem. I don't know why...
     fn print_command<'r>(parsed: Parsed<'r>, callback: |Option<uint>, BmsMessage| -> bool) {
         match parsed {
-            Command(_lineno, BmsUnknown(..)) => {}
-            Command(_lineno, cmd) => { util::console::printoutln(cmd.to_string()[]); }
-            Message(lineno, msg) => { callback(lineno, msg); }
-            Encoding(..) => {}
+            Parsed::Command(_lineno, BmsCommand::Unknown(..)) => {}
+            Parsed::Command(_lineno, cmd) => { util::console::printoutln(cmd.to_string()[]); }
+            Parsed::Message(lineno, msg) => { callback(lineno, msg); }
+            Parsed::Encoding(..) => {}
         }
     }
 
@@ -337,6 +337,7 @@ pub fn subprogram(_args: &[String]) -> ! {
 /// The entry point. Parses the command line options and delegates other things to `play`.
 pub fn main() {
     use ui::options;
+    use ui::options::ParsingResult;
 
     let args = std::os::args();
     let args = args[1..];
@@ -344,10 +345,10 @@ pub fn main() {
         subprogram(args[1..]);
     }
     match options::parse_opts(args, ui::common::get_path_from_dialog) {
-        options::ShowVersion => { println!("{}", version()); }
-        options::ShowUsage => { usage(); }
-        options::PathAndOptions(bmspath, opts) => { play(&bmspath, opts); }
-        options::Error(err) => { die!("{}", err); }
+        ParsingResult::ShowVersion => { println!("{}", version()); }
+        ParsingResult::ShowUsage => { usage(); }
+        ParsingResult::PathAndOptions(bmspath, opts) => { play(&bmspath, opts); }
+        ParsingResult::Error(err) => { die!("{}", err); }
     }
 }
 
