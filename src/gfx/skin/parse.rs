@@ -11,7 +11,7 @@
 use std::{num, mem};
 use std::collections::{TreeMap, HashMap};
 use cson;
-use serialize::json::{Json, ToJson, Null, Boolean, I64, U64, F64, String, List, Object};
+use serialize::json::{Json, ToJson, Null, Boolean, I64, U64, F64, String, Array, Object};
 
 use gfx::color::{Color, RGB, RGBA};
 use gfx::ratio_num::RatioNum;
@@ -35,7 +35,7 @@ impl<T:FromJson> FromJson for Box<T> {
 impl<T:FromJson> FromJson for Vec<T> {
     fn from_json(json: Json) -> Result<Vec<T>,String> {
         match json {
-            List(l) => l.into_iter().map(from_json::<T>).collect(),
+            Array(l) => l.into_iter().map(from_json::<T>).collect(),
             _ => Err(format!("expected a list")),
         }
     }
@@ -90,7 +90,7 @@ macro_rules! fail_with_json(
             Boolean(false) => "false",
             I64(..) | U64(..) | F64(..) => "a number",
             String(..) => "a string",
-            List(..) => "a list",
+            Array(..) => "an array",
             Object(..) => "an object",
         };
         return Err(format!("expected {}, got {}", $me, jsontype));
@@ -199,8 +199,8 @@ impl FromJson for Color {
                 }
             },
 
-            List(l) => match l[] {
-                [List(ref l)] => match l[] {
+            Array(l) => match l[] {
+                [Array(ref l)] => match l[] {
                     // [[r/255, g/255, b/255]]
                     [ref r, ref g, ref b] => match (num(r), num(g), num(b)) {
                         (Some(r), Some(g), Some(b)) =>
@@ -244,7 +244,7 @@ impl FromJson for ColorSource {
     fn from_json(json: Json) -> Result<ColorSource,String> {
         match json {
             // "white", "#fff", [255,255,255] etc.
-            String(..) | List(..) => Ok(ColorSource::Static(try!(from_json(json)))),
+            String(..) | Array(..) => Ok(ColorSource::Static(try!(from_json(json)))),
 
             Object(mut map) => {
                 // {"$": "color"}
@@ -270,7 +270,7 @@ impl FromJson for GradientSource {
             // "white", "#fff" etc.
             String(..) => Ok(GradientSource::FlatColor(ColorSource::Static(try!(from_json(json))))),
 
-            List(mut l) => if l.len() == 2 {
+            Array(mut l) => if l.len() == 2 {
                 // [x, y]
                 let mut it = mem::replace(&mut l, Vec::new()).into_iter();
                 let zero = try!(from_json(it.next().unwrap()));
@@ -278,7 +278,7 @@ impl FromJson for GradientSource {
                 Ok(GradientSource::Color(zero, one))
             } else {
                 // [r, g, b] or [r, g, b, a]
-                Ok(GradientSource::FlatColor(ColorSource::Static(try!(from_json(List(l))))))
+                Ok(GradientSource::FlatColor(ColorSource::Static(try!(from_json(Array(l))))))
             },
 
             Object(mut map) => {
@@ -447,7 +447,7 @@ impl FromJson for Pos {
     fn from_json(mut json: Json) -> Result<Pos,String> {
         match json {
             // [x, y]
-            List(ref mut l) => match l.len() {
+            Array(ref mut l) => match l.len() {
                 2 => {
                     let mut it = mem::replace(l, Vec::new()).into_iter();
                     let x = try!(from_json(it.next().unwrap()));
@@ -473,7 +473,7 @@ impl FromJson for Pos {
 impl FromJson for Rect {
     fn from_json(mut json: Json) -> Result<Rect,String> {
         match json {
-            List(ref mut l) => match l.len() {
+            Array(ref mut l) => match l.len() {
                 // [[px, py], [qx, qy]] (preferred)
                 2 => {
                     let mut it = mem::replace(l, Vec::new()).into_iter();
@@ -655,7 +655,7 @@ impl FromJson for TextSource {
             String(s) => Ok(TextSource::Static(s.into_string())),
 
             // ["concat", "enated ", "text"]
-            List(l) => Ok(TextSource::Concat(try!(from_json(List(l))))),
+            Array(l) => Ok(TextSource::Concat(try!(from_json(Array(l))))),
 
             Object(mut map) => {
                 // {"$": "number"}
@@ -687,7 +687,7 @@ impl FromJson for Node {
             String(_) => Ok(Node::Nothing),
 
             // ["simple group", [{"$clip": [p, q]}], "clipping region will be reset"]
-            List(l) => Ok(Node::Group(try!(from_json(List(l))))),
+            Array(l) => Ok(Node::Group(try!(from_json(Array(l))))),
 
             Object(mut map) => {
                 // {"$debug": "message"}
@@ -786,7 +786,7 @@ impl FromJson for Node {
                                 return Err(format!("unrecognized anchor type `{}` in the text", s));
                             }
                         },
-                        Some(List(l)) => match l[] {
+                        Some(Array(l)) => match l[] {
                             [ref x, ref y] => match (num(x), num(y)) {
                                 (Some(x), Some(y)) => (x as f32, y as f32),
                                 _ => return Err(format!("expected an anchor pair in the list")),

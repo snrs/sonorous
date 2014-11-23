@@ -8,7 +8,7 @@
 
 //! Skin renderer.
 
-use std::{f32, num, str, mem};
+use std::{f32, str, mem};
 use std::num::Float;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -327,6 +327,8 @@ impl<'a> State<'a> {
             }
         }
 
+        fn div_rem<T: Div<T,T> + Rem<T,T>>(a: T, b: T) -> (T, T) { (a / b, a % b) }
+
         match *fmt {
             ScalarFormat::None => write!(out, "{}", scalar),
             ScalarFormat::Num { sign, minwidth, maxwidth, precision, multiplier } => {
@@ -337,18 +339,18 @@ impl<'a> State<'a> {
             ScalarFormat::Ms { sign, minwidth, maxwidth, precision, multiplier } => {
                 let v = match to_f64(scalar) { Some(v) => v, None => return Ok(()) };
                 let v = v * multiplier as f64;
-                let (min, sec) = num::div_rem(v, 60.0);
+                let (min, sec) = div_rem(v, 60.0);
                 try!(fill_and_clip(out, sign, minwidth, maxwidth, 0, min));
-                let (sec10, sec1) = num::div_rem(sec.abs(), 10.0);
+                let (sec10, sec1) = div_rem(sec.abs(), 10.0);
                 write!(out, ":{:01.0}{:.*}", sec10, precision as uint, sec1)
             },
             ScalarFormat::Hms { sign, minwidth, maxwidth, precision, multiplier } => {
                 let v = match to_f64(scalar) { Some(v) => v, None => return Ok(()) };
                 let v = v * multiplier as f64;
-                let (min, sec) = num::div_rem(v, 60.0);
-                let (hour, min) = num::div_rem(min, 60.0);
+                let (min, sec) = div_rem(v, 60.0);
+                let (hour, min) = div_rem(min, 60.0);
                 try!(fill_and_clip(out, sign, minwidth, maxwidth, 0, hour));
-                let (sec10, sec1) = num::div_rem(sec.abs(), 10.0);
+                let (sec10, sec1) = div_rem(sec.abs(), 10.0);
                 write!(out, ":{:02}:{:01.0}{:.*}", min.abs(), sec10, precision as uint, sec1)
             },
         }
@@ -574,7 +576,7 @@ impl<'a> State<'a> {
                     let mut zeroes;
                     if zerocolor.is_some() {
                         zeroes = text.as_slice().find(|c: char| c != '0').unwrap_or(text.len());
-                        if zeroes == text.len() || !text.as_slice().char_at(zeroes).is_digit() {
+                        if zeroes == text.len() || !text.as_slice().char_at(zeroes).is_digit(10) {
                             zeroes -= 1; // keep at least one zero
                         }
                     } else {

@@ -516,7 +516,7 @@ impl Scene for PlayingScene {
             d.string(5.0, H-78.0, 2.0, Alignment::Left,
                      format!("{:4.1}x", nominalplayspeed)[], black);
             d.string((self.leftmost-94) as f32, H-35.0, 1.0, Alignment::Left,
-                     format!("{:02u}:{:02u} / {:02u}:{:02}",
+                     format!("{:02}:{:02} / {:02}:{:02}",
                              elapsed/60, elapsed%60, duration/60, duration%60)[], black);
             d.string(95.0, H-62.0, 1.0, Alignment::Left,
                      format!("@{:9.4}", self.player.cur.loc.vpos)[], black);

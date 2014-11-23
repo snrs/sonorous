@@ -389,7 +389,7 @@ pub fn chardet_train(args: &[String]) -> int {
         print!("static {}: &'static [i32] = &[", varname);
         for (i, &v) in classifier.logprobs.as_slice().iter().enumerate() {
             if i % 10 == 0 { print!("\n   "); }
-            print!(" {:7i},", v);
+            print!(" {:7},", v);
         }
         println!("\n];\n");
     }

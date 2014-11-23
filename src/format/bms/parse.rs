@@ -4,7 +4,7 @@
 
 //! BMS parser.
 
-use std::{str, iter, f64, char, fmt};
+use std::{str, iter, f64, fmt};
 use std::str::MaybeOwned;
 use std::rand::Rng;
 use encoding::EncodingRef;
@@ -337,7 +337,7 @@ impl ParserOptions {
 /// the Zs/Zl/Zp category (also handled in `char::is_whitespace`),
 /// and a portion of the Cf category: U+0085 (NEL), U+FEFF (BOM).
 fn is_whitespace_or_similar(c: char) -> bool {
-    char::is_whitespace(c) || c == '\u0085' || c == '\ufeff'
+    c.is_whitespace() || c == '\u0085' || c == '\ufeff'
 }
 
 /// The main BMS parser.

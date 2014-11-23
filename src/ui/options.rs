@@ -4,7 +4,7 @@
 
 //! Global game options.
 
-use std::{char, io, os};
+use std::{io, os};
 use std::collections::HashMap;
 use encoding::label::encoding_from_whatwg_label;
 
@@ -311,7 +311,7 @@ pub fn parse_opts(args: &[String], get_path: || -> Option<Path>) -> ParsingResul
                         arg => error!("Unknown debugging option: -Z {}", arg)
                     },
                     ' ' => {} // for ignored long options
-                    '1'...'9' => { playspeed = char::to_digit(c, 10).unwrap() as f64; }
+                    '1'...'9' => { playspeed = c.to_digit(10).unwrap() as f64; }
                     _ => error!("Invalid option: -{}", c)
                 }
                 if !inside { break; }

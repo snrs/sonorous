@@ -18,7 +18,6 @@
 #![crate_name = "sonorous"]
 #![crate_type = "bin"]
 
-#![no_start]
 #![feature(macro_rules, phase, link_args, unsafe_destructor, slicing_syntax)]
 
 #![comment = "Sonorous"]
@@ -27,7 +26,6 @@
 #[phase(plugin, link)] extern crate log;
 extern crate libc;
 extern crate serialize;
-extern crate native;
 
 extern crate sdl;
 extern crate sdl_image;
