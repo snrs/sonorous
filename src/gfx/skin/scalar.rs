@@ -10,7 +10,7 @@
 
 use std::fmt;
 use std::rc::Rc;
-use std::str::MaybeOwned;
+use std::str::CowString;
 
 use gfx::color::{Color, RGB, RGBA};
 use gfx::ratio_num::RatioNum;
@@ -78,9 +78,9 @@ impl ImageClip {
 
 /// The scalar value.
 pub enum Scalar<'a> {
-    /// An owned string. Analogous to `std::str::MaybeOwned`.
+    /// An owned string. Analogous to `std::str::CowString`.
     OwnedStr(String),
-    /// A borrowed string slice. Analogous to `std::str::MaybeOwned`.
+    /// A borrowed string slice. Analogous to `std::str::CowString`.
     BorrowedStr(&'a str),
     /// An image reference and the clipping rectangle in pixels.
     Image(ImageSource<'a>, ImageClip),
@@ -203,12 +203,12 @@ impl<'a> fmt::Show for Scalar<'a> {
     }
 }
 
-impl<'a> IntoMaybeOwned<'a> for Scalar<'a> {
-    fn into_maybe_owned(self) -> MaybeOwned<'a> {
+impl<'a> IntoCow<'a, String, str> for Scalar<'a> {
+    fn into_cow(self) -> CowString<'a> {
         match self {
-            Scalar::OwnedStr(s) => s.into_maybe_owned(),
-            Scalar::BorrowedStr(s) => s.into_maybe_owned(),
-            scalar => scalar.to_string().into_maybe_owned(),
+            Scalar::OwnedStr(s) => s.into_cow(),
+            Scalar::BorrowedStr(s) => s.into_cow(),
+            scalar => scalar.to_string().into_cow(),
         }
     }
 }

@@ -11,7 +11,6 @@
 use libc::{c_int, c_float};
 use std::ptr::null_mut;
 use std::mem::transmute;
-use std::string::raw::from_buf;
 use sdl::video::Surface;
 pub use self::ll::SMPEGstatus;
 pub use self::ll::SMPEGstatus::{SMPEG_ERROR, SMPEG_STOPPED, SMPEG_PLAYING};
@@ -185,7 +184,7 @@ impl MPEG {
     pub fn get_error(&self) -> String {
         unsafe {
             let cstr = ll::SMPEG_error(self.raw);
-            from_buf(transmute(&cstr))
+            String::from_raw_buf(transmute(&cstr))
         }
     }
 }

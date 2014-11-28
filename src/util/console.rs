@@ -8,10 +8,11 @@
 
 //! Encoding-aware console I/O.
 
+use std::cell::Cell;
 use std::io::{stdout, stderr};
 use encoding::{Encoding, EncodingRef, Encoder, EncoderTrap, ByteWriter};
 
-local_data_key!(console_encoding_key: EncodingRef)
+thread_local!(static CONSOLE_ENCODING: Cell<Option<EncodingRef>> = Cell::new(None))
 
 /// Returns an encoding usable for console I/O.
 #[cfg(target_os = "windows")]
@@ -34,14 +35,16 @@ fn get_console_encoding() -> EncodingRef {
 /// Returns an encoding usable for console I/O.
 /// The result is cached to the task-local storage.
 pub fn console_encoding() -> EncodingRef {
-    match console_encoding_key.get() {
-        Some(encoding) => *encoding,
-        None => {
-            let encoding = get_console_encoding();
-            console_encoding_key.replace(Some(encoding));
-            encoding
+    CONSOLE_ENCODING.with(|enc| {
+        match enc.get() {
+            Some(encoding) => encoding,
+            None => {
+                let encoding = get_console_encoding();
+                enc.set(Some(encoding));
+                encoding
+            }
         }
-    }
+    })
 }
 
 /// An encoder trap function used for `to_console_encoding`.

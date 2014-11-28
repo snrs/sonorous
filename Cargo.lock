@@ -2,8 +2,8 @@
 name = "sonorous"
 version = "0.1.0"
 dependencies = [
- "cson 0.1.1 (git+https://github.com/lifthrasiir/cson-rust.git)",
- "encoding 0.2.3 (git+https://github.com/lifthrasiir/rust-encoding.git)",
+ "cson 0.1.2 (git+https://github.com/lifthrasiir/cson-rust.git)",
+ "encoding 0.2.4 (git+https://github.com/lifthrasiir/rust-encoding.git)",
  "encoding-index-japanese 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
  "encoding-index-korean 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
  "opengles 0.1.0 (git+https://github.com/lifthrasiir/rust-opengles-angle.git)",
@@ -15,13 +15,13 @@ dependencies = [
 
 [[package]]
 name = "cson"
-version = "0.1.1"
-source = "git+https://github.com/lifthrasiir/cson-rust.git#a12f39a873e9c16fcdee20c95cef6971acc0a81a"
+version = "0.1.2"
+source = "git+https://github.com/lifthrasiir/cson-rust.git#255ab1354009d854bd66248bb9bf73c37c629b24"
 
 [[package]]
 name = "encoding"
-version = "0.2.3"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#15ac0ded3ca592c31ded5b9ff6f9fe2fa4b73fc4"
+version = "0.2.4"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#2742db463d73f8bce713dedebd454ece450b8fef"
 dependencies = [
  "encoding-index-japanese 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
  "encoding-index-korean 1.0.20140915 (git+https://github.com/lifthrasiir/rust-encoding.git)",
@@ -33,7 +33,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-japanese"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#15ac0ded3ca592c31ded5b9ff6f9fe2fa4b73fc4"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#2742db463d73f8bce713dedebd454ece450b8fef"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -41,7 +41,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-korean"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#15ac0ded3ca592c31ded5b9ff6f9fe2fa4b73fc4"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#2742db463d73f8bce713dedebd454ece450b8fef"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -49,7 +49,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-simpchinese"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#15ac0ded3ca592c31ded5b9ff6f9fe2fa4b73fc4"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#2742db463d73f8bce713dedebd454ece450b8fef"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -57,7 +57,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-singlebyte"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#15ac0ded3ca592c31ded5b9ff6f9fe2fa4b73fc4"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#2742db463d73f8bce713dedebd454ece450b8fef"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -65,7 +65,7 @@ dependencies = [
 [[package]]
 name = "encoding-index-tradchinese"
 version = "1.0.20140915"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#15ac0ded3ca592c31ded5b9ff6f9fe2fa4b73fc4"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#2742db463d73f8bce713dedebd454ece450b8fef"
 dependencies = [
  "encoding_index_tests 0.1.0 (git+https://github.com/lifthrasiir/rust-encoding.git)",
 ]
@@ -73,7 +73,7 @@ dependencies = [
 [[package]]
 name = "encoding_index_tests"
 version = "0.1.0"
-source = "git+https://github.com/lifthrasiir/rust-encoding.git#15ac0ded3ca592c31ded5b9ff6f9fe2fa4b73fc4"
+source = "git+https://github.com/lifthrasiir/rust-encoding.git#2742db463d73f8bce713dedebd454ece450b8fef"
 
 [[package]]
 name = "opengles"

@@ -254,9 +254,9 @@ fn create_beep() -> sdl_mixer::Chunk {
         // sawtooth wave at 3150 Hz, quadratic decay after 0.02 seconds.
         |i| { let i = i as i32; (i%28-14) * cmp::min(2000, (12000-i)*(12000-i)/50000) });
     unsafe {
-        slice::raw::buf_as_slice(samples.as_ptr() as *const u8, samples.len() * 4, |samples| {
-            sdl_mixer::Chunk::new(samples.to_vec(), 128)
-        })
+        let ptr = samples.as_ptr() as *const u8;
+        let buf = slice::from_raw_buf(&ptr, samples.len() * 4);
+        sdl_mixer::Chunk::new(buf.to_vec(), 128)
     }
 }
 

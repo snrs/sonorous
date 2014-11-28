@@ -179,9 +179,9 @@ impl MetadataCache {
     /// Opens a metadata cache.
     pub fn open(root: Path, dbpath: &Path) -> IoResult<MetadataCache> {
         // avoid the initial `:`
-        let mut path = dbpath.as_str().unwrap().into_maybe_owned();
+        let mut path = dbpath.as_str().unwrap().into_cow();
         if path.as_slice().starts_with(":") {
-            path = format!(".{}{}", path::SEP, path).into_maybe_owned();
+            path = format!(".{}{}", path::SEP, path).into_cow();
         }
 
         let db = match sqlite3::open(path.as_slice()) {

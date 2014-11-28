@@ -5,7 +5,8 @@
 //! BMS parser.
 
 use std::{str, iter, f64, fmt};
-use std::str::MaybeOwned;
+// ugh, we cannot immediately migrate into CowString as it doesn't implement Clone! (#19359)
+use std::str::{MaybeOwned, IntoMaybeOwned};
 use std::rand::Rng;
 use encoding::EncodingRef;
 
@@ -70,7 +71,7 @@ pub enum BmsCommand<'r> {
     BPM(BPM),                               // #BPM (without a following alphanumeric key)
     EXBPM(Key, BPM),                        // #EXBPM or #BPMxx
     PLAYER(int),                            // #PLAYER
-    // Rust: unfortunately `Vec<(Key, MaybeOwned<'r>)>` segfaults. (#14088)
+    // Rust: unfortunately `Vec<(Key, MaybeOwned<'r>)>` segfaults. (#13853)
     LANES(Vec<(Key, String)>),              // #SNRS:LANES (experimental)
     PLAYLEVEL(int),                         // #PLAYLEVEL
     DIFFICULTY(int),                        // #DIFFICULTY

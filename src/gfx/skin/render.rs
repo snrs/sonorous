@@ -210,7 +210,7 @@ impl<'a> State<'a> {
             Gen::Hook(ref id) => hook.block_hook(id.as_slice(), hook, body),
             Gen::Text(ref id) => match hook.scalar_hook(id.as_slice()) {
                 Some(scalar) => {
-                    let text = scalar.into_maybe_owned();
+                    let text = scalar.into_cow();
                     body(hook, text.as_slice());
                     true
                 },
@@ -218,7 +218,7 @@ impl<'a> State<'a> {
             },
             Gen::TextLen(ref id) => match hook.scalar_hook(id.as_slice()) {
                 Some(scalar) => {
-                    let text = scalar.into_maybe_owned();
+                    let text = scalar.into_cow();
                     if !text.is_empty() {
                         body(hook, text.as_slice().char_len().to_string()[]);
                     }
@@ -388,16 +388,16 @@ impl<'a> State<'a> {
         }
     }
 
-    /// Processes texts (`{"$text": ..., ...}`) and renders it as a `MaybeOwned` string.
-    fn text<'a>(&self, hook: &'a Hook, text: &'a TextSource) -> str::MaybeOwned<'a> {
+    /// Processes texts (`{"$text": ..., ...}`) and renders it as a `CowString` string.
+    fn text<'a>(&self, hook: &'a Hook, text: &'a TextSource) -> str::CowString<'a> {
         let mut out = MemWriter::new();
         match self.text_source(hook, text, &mut out) {
             Ok(()) => {
-                str::from_utf8(out.unwrap()[]).unwrap().to_string().into_maybe_owned()
+                str::from_utf8(out.into_inner()[]).unwrap().to_string().into_cow()
             },
             Err(err) => {
                 warn!("skin: I/O error on text_source({}), will ignore", err);
-                "".into_maybe_owned()
+                "".into_cow()
             }
         }
     }
