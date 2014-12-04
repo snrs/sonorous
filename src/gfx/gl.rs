@@ -270,7 +270,7 @@ fn is_surface_prepared_for_texture(surface: &video::Surface) -> bool {
 /// Converts the surface to the suitable format for OpenGL. In particular, color key is converted
 /// to alpha channel. The original surface is kept as is.
 fn prepare_surface_for_texture(surface: &video::Surface) -> Result<video::Surface,String> {
-    let hasalpha = unsafe { ((*surface.raw).flags & video::SrcColorKey as u32) != 0 ||
+    let hasalpha = unsafe { ((*surface.raw).flags & SurfaceFlag::SrcColorKey as u32) != 0 ||
                             (*(*surface.raw).format).Amask != 0 };
     let newfmt = pixel_format_from_tuple(if hasalpha {RGBA_PIXEL_FORMAT_TUPLE}
                                          else {RGB_PIXEL_FORMAT_TUPLE});

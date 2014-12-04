@@ -4,8 +4,8 @@
 
 //! Caches backed by the external database.
 
-use std::{io, path};
-use std::io::{IoError, OtherIoError, IoResult, FileStat, SeekSet};
+use std::path;
+use std::io::{IoError, OtherIoError, IoResult, FileType, FileStat, SeekSet};
 use std::io::fs::{PathExtensions, File, readdir};
 use util::md5::{MD5, MD5Hash};
 use format::metadata::{Level, Difficulty, Meta};
@@ -148,8 +148,8 @@ const SIZE_FOR_NON_REGULAR: i64 = -2;
 /// Calculates the value for `files.size` from given `stat` result.
 fn size_from_filestat(st: &FileStat) -> i64 {
     match st.kind {
-        io::TypeFile => st.size as i64,
-        io::TypeDirectory => SIZE_FOR_DIRECTORY,
+        FileType::RegularFile => st.size as i64,
+        FileType::Directory => SIZE_FOR_DIRECTORY,
         _ => SIZE_FOR_NON_REGULAR,
     }
 }
@@ -262,7 +262,7 @@ impl MetadataCache {
             let dirid = c.get_i64(0);
             let dirmtime = c.get_i64(1);
             match path.stat() {
-                Ok(st) if st.kind == io::TypeDirectory && st.modified as i64 == dirmtime =>
+                Ok(st) if st.kind == FileType::Directory && st.modified as i64 == dirmtime =>
                     Ok((CacheResult::Valid(dirid, ()), Some(Ok(st)))),
 
                 // DO NOT skip the error, this may indicate the required eviction
@@ -359,8 +359,8 @@ impl MetadataCache {
                             c.bind_param(4, &BindArg::Integer64(st.modified as i64));
                             try!(step_cursor(&self.db, &mut c));
                             match st.kind {
-                                io::TypeFile => files.push((path, None)),
-                                io::TypeDirectory => dirs.push(path),
+                                FileType::RegularFile => files.push((path, None)),
+                                FileType::Directory => dirs.push(path),
                                 _ => {}
                             }
                         }

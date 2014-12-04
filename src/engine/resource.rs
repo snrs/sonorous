@@ -6,8 +6,7 @@
 
 use std::str;
 
-use sdl::video;
-use sdl::video::{Surface, RGB};
+use sdl::video::{Surface, RGB, SurfaceFlag};
 use sdl_image;
 use sdl_mixer::Chunk;
 use ext::smpeg::MPEG;
@@ -191,11 +190,12 @@ impl LoadedImagelike {
         fn to_display_format(surface: Surface) -> Result<PreparedSurface,String> {
             let surface = if unsafe {(*(*surface.raw).format).Amask} != 0 {
                 let surface = try!(surface.display_format_alpha());
-                surface.set_alpha([video::SrcAlpha, video::RLEAccel][], 255);
+                surface.set_alpha([SurfaceFlag::SrcAlpha, SurfaceFlag::RLEAccel][], 255);
                 surface
             } else {
                 let surface = try!(surface.display_format());
-                surface.set_color_key([video::SrcColorKey, video::RLEAccel][], RGB(0,0,0));
+                surface.set_color_key([SurfaceFlag::SrcColorKey, SurfaceFlag::RLEAccel][],
+                                      RGB(0, 0, 0));
                 surface
             };
             match PreparedSurface::from_owned_surface(surface) {
@@ -222,7 +222,7 @@ impl LoadedImagelike {
 
             // PreparedSurface may destroy SDL_SRCALPHA, which is still required for alpha blitting.
             // for RGB images, it is effectively no-op as per-surface alpha is fully opaque.
-            prepared.as_surface().set_alpha([video::SrcAlpha, video::RLEAccel][], 255);
+            prepared.as_surface().set_alpha([SurfaceFlag::SrcAlpha, SurfaceFlag::RLEAccel][], 255);
             Ok(LoadedImagelike::Image(prepared))
         }
     }

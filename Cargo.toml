@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["Kang Seonghoon <public+rust@mearie.org>"]
 build = "make rust-deps"
 
+description = "Sonorous, an experimental music video game"
+homepage = "https://github.com/snrs/sonorous/"
+license = "GPL-2.0+"
+
 [[bin]]
 name = "sonorous"
 

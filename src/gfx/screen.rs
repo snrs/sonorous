@@ -10,6 +10,7 @@
 
 use std::rc::Rc;
 use sdl::video;
+use sdl::video::{SurfaceFlag, VideoFlag};
 use opengles::gl2 as gl;
 
 use gfx::color::Blend;
@@ -156,14 +157,14 @@ impl Screen {
         let mut videoflags;
         if fullscreen {
             surfaceflags = vec![];
-            videoflags = vec![video::Fullscreen];
+            videoflags = vec![VideoFlag::Fullscreen];
         } else {
-            surfaceflags = vec![video::SWSurface];
-            videoflags = vec![video::DoubleBuf];
+            surfaceflags = vec![SurfaceFlag::SWSurface];
+            videoflags = vec![VideoFlag::DoubleBuf];
         }
         if GLState::uses_sdl_ogl_support() {
             // SDL_OPENGL flag cannot be used in Windows as ANGLE should own the screen context.
-            videoflags.push(video::OpenGL);
+            videoflags.push(VideoFlag::OpenGL);
         }
 
         let screen = try!(video::set_video_mode(width as int, height as int, 32,

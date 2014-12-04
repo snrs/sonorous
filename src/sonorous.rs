@@ -20,9 +20,6 @@
 
 #![feature(macro_rules, phase, link_args, unsafe_destructor, slicing_syntax)]
 
-#![comment = "Sonorous"]
-#![license = "GPLv2+"]
-
 #[phase(plugin, link)] extern crate log;
 extern crate libc;
 extern crate serialize;
